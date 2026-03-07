@@ -1,0 +1,246 @@
+{
+  "model_type": "LightGBM",
+  "n_train": 44437,
+  "n_val": 9522,
+  "n_test": 9523,
+  "n_features": 76,
+  "positives_train": 1232,
+  "negatives_train": 43205,
+  "scale_pos_weight": 35.068993506493506,
+  "best_threshold_val_f1": 0.05,
+  "best_val_f1": 0.0,
+  "metrics": {
+    "train_threshold_0_5": {
+      "threshold": 0.5,
+      "roc_auc": 1.0,
+      "average_precision": 1.0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "accuracy": 1.0,
+      "confusion_matrix": [
+        [
+          43205,
+          0
+        ],
+        [
+          0,
+          1232
+        ]
+      ],
+      "precision_at_1pct": 1.0,
+      "recall_at_1pct": 0.36038961038961037,
+      "precision_at_5pct": 0.5547050877982891,
+      "recall_at_5pct": 1.0,
+      "precision_at_10pct": 0.27729011928876884,
+      "recall_at_10pct": 1.0
+    },
+    "val_threshold_0_5": {
+      "threshold": 0.5,
+      "roc_auc": null,
+      "average_precision": null,
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "accuracy": 1.0,
+      "confusion_matrix": [
+        [
+          9522
+        ]
+      ],
+      "precision_at_1pct": 0.0,
+      "recall_at_1pct": 0.0,
+      "precision_at_5pct": 0.0,
+      "recall_at_5pct": 0.0,
+      "precision_at_10pct": 0.0,
+      "recall_at_10pct": 0.0
+    },
+    "test_threshold_0_5": {
+      "threshold": 0.5,
+      "roc_auc": null,
+      "average_precision": null,
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "accuracy": 1.0,
+      "confusion_matrix": [
+        [
+          9523
+        ]
+      ],
+      "precision_at_1pct": 0.0,
+      "recall_at_1pct": 0.0,
+      "precision_at_5pct": 0.0,
+      "recall_at_5pct": 0.0,
+      "precision_at_10pct": 0.0,
+      "recall_at_10pct": 0.0
+    },
+    "train_best_threshold": {
+      "threshold": 0.05,
+      "roc_auc": 1.0,
+      "average_precision": 1.0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "accuracy": 1.0,
+      "confusion_matrix": [
+        [
+          43205,
+          0
+        ],
+        [
+          0,
+          1232
+        ]
+      ],
+      "precision_at_1pct": 1.0,
+      "recall_at_1pct": 0.36038961038961037,
+      "precision_at_5pct": 0.5547050877982891,
+      "recall_at_5pct": 1.0,
+      "precision_at_10pct": 0.27729011928876884,
+      "recall_at_10pct": 1.0
+    },
+    "val_best_threshold": {
+      "threshold": 0.05,
+      "roc_auc": null,
+      "average_precision": null,
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "accuracy": 1.0,
+      "confusion_matrix": [
+        [
+          9522
+        ]
+      ],
+      "precision_at_1pct": 0.0,
+      "recall_at_1pct": 0.0,
+      "precision_at_5pct": 0.0,
+      "recall_at_5pct": 0.0,
+      "precision_at_10pct": 0.0,
+      "recall_at_10pct": 0.0
+    },
+    "test_best_threshold": {
+      "threshold": 0.05,
+      "roc_auc": null,
+      "average_precision": null,
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "accuracy": 1.0,
+      "confusion_matrix": [
+        [
+          9523
+        ]
+      ],
+      "precision_at_1pct": 0.0,
+      "recall_at_1pct": 0.0,
+      "precision_at_5pct": 0.0,
+      "recall_at_5pct": 0.0,
+      "precision_at_10pct": 0.0,
+      "recall_at_10pct": 0.0
+    }
+  },
+  "top_20_features_gain": [
+    {
+      "feature": "vl_latencia_rede_media_trimestre",
+      "importance_gain": 1377500.0192233324,
+      "importance_split": 282
+    },
+    {
+      "feature": "vl_tempo_interacao_medio_trimestre",
+      "importance_gain": 88381.69105306268,
+      "importance_split": 68
+    },
+    {
+      "feature": "diff_tempo_interacao_cliente",
+      "importance_gain": 22246.841486364603,
+      "importance_split": 48
+    },
+    {
+      "feature": "qt_aparelhos_distintos_trimestre",
+      "importance_gain": 207.95012402534485,
+      "importance_split": 2
+    },
+    {
+      "feature": "vl_mediana_pix_trimestre",
+      "importance_gain": 0.0,
+      "importance_split": 0
+    },
+    {
+      "feature": "vl_desvio_padrao_pix_trimestre",
+      "importance_gain": 0.0,
+      "importance_split": 0
+    },
+    {
+      "feature": "qt_intervalo_mediana_trimestre",
+      "importance_gain": 0.0,
+      "importance_split": 0
+    },
+    {
+      "feature": "qt_intervalo_transacao_minuto",
+      "importance_gain": 0.0,
+      "importance_split": 0
+    },
+    {
+      "feature": "qt_intervalo_desvio_padrao_trimestre",
+      "importance_gain": 0.0,
+      "importance_split": 0
+    },
+    {
+      "feature": "vl_pix",
+      "importance_gain": 0.0,
+      "importance_split": 0
+    },
+    {
+      "feature": "qt_total_pix_trimestre",
+      "importance_gain": 0.0,
+      "importance_split": 0
+    },
+    {
+      "feature": "log_vl_pix",
+      "importance_gain": 0.0,
+      "importance_split": 0
+    },
+    {
+      "feature": "qt_tempo_relacionamento_mes",
+      "importance_gain": 0.0,
+      "importance_split": 0
+    },
+    {
+      "feature": "nr_idade",
+      "importance_gain": 0.0,
+      "importance_split": 0
+    },
+    {
+      "feature": "qt_pix_dia_maximo_trimestre",
+      "importance_gain": 0.0,
+      "importance_split": 0
+    },
+    {
+      "feature": "latencia_rede_ms_final",
+      "importance_gain": 0.0,
+      "importance_split": 0
+    },
+    {
+      "feature": "tempo_processamento_host_ms",
+      "importance_gain": 0.0,
+      "importance_split": 0
+    },
+    {
+      "feature": "ratio_valor_mediana",
+      "importance_gain": 0.0,
+      "importance_split": 0
+    },
+    {
+      "feature": "diff_valor_mediana",
+      "importance_gain": 0.0,
+      "importance_split": 0
+    },
+    {
+      "feature": "tempo_interacao_ms_final",
+      "importance_gain": 0.0,
+      "importance_split": 0
+    }
+  ]
+}
