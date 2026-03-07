@@ -1,22 +1,29 @@
 """
-    
-    O que o script faz
-lê:
-/dados/dados_pix_normais.csv
-/dados/dados_fraudes_pix.csv
-/dados/dados_features_mobile.csv
-padroniza os nomes das colunas
-cria is_fraud
-concatena normais + fraudes
-tenta juntar com mobile via:
-cd_pix ↔ end_to_end_id
-cria as features derivadas do MVP
+Feature engineering do MVP a partir das bases exportadas do Big Data.
 
-salva:
-/dados/base_mvp_features.csv
+Lê:
+- /dados/dados_pix_normais.csv
+- /dados/dados_fraudes_pix.csv
+- /dados/dados_features_mobile.csv
+
+Faz:
+- padronização de colunas
+- padronização de tipos
+- deduplicação robusta
+- consolidação normais + fraudes
+- join com mobile por cd_pix <-> end_to_end_id
+- aproveitamento das novas colunas:
+    * cd_cpf_cnpj_recebedor
+    * ds_chave_pix
+    * ds_tipo_chave
+    * session_id
+    * topaz_sync_id
+- criação de features derivadas
+- preservação de 1 linha por transação
+
+Salva:
+- /dados/base_mvp_features.csv
 """
-
-
 
 import os
 import re
@@ -41,7 +48,7 @@ OUTPUT_PATH = os.path.join(DADOS_DIR, "base_mvp_features.csv")
 # =========================================================
 # HELPERS
 # =========================================================
-NULL_STRINGS = {"", "null", "none", "nan", "nat", "missing"}
+NULL_STRINGS = {"", "null", "none", "nan", "nat", "missing", "informação ausente"}
 
 
 def normalize_colname(col: str) -> str:
@@ -187,7 +194,6 @@ def map_topaz_rule(score):
 def normalize_transaction_key(series: pd.Series) -> pd.Series:
     s = series.astype(str).str.strip()
     s = s.replace({"nan": np.nan, "None": np.nan, "": np.nan})
-    # remove espaços extras invisíveis
     s = s.str.replace(r"\s+", "", regex=True)
     return s
 
@@ -238,12 +244,19 @@ def deduplicate_transactions(df: pd.DataFrame) -> pd.DataFrame:
         "topaz_transacao_rejeitada",
         "topaz_transacao_habilitada",
         "is_agendamento_recorrente",
+        "cd_cpf_cnpj_recebedor",
+        "ds_chave_pix",
+        "ds_tipo_chave",
+        "session_id",
+        "topaz_sync_id",
     ]
 
     df["has_mobile_join"] = df["join_status_mobile"].fillna(0).astype(int)
     df["has_latencia_final"] = df["latencia_rede_ms_final"].notna().astype(int)
     df["has_tempo_interacao_final"] = df["tempo_interacao_ms_final"].notna().astype(int)
     df["has_host_time"] = df["tempo_processamento_host_ms"].notna().astype(int)
+    df["has_receiver"] = df["cd_cpf_cnpj_recebedor"].notna().astype(int)
+    df["has_key_type"] = df["ds_tipo_chave"].notna().astype(int)
 
     df = deduplicate_by_key(
         df,
@@ -254,6 +267,8 @@ def deduplicate_transactions(df: pd.DataFrame) -> pd.DataFrame:
             "has_latencia_final",
             "has_tempo_interacao_final",
             "has_host_time",
+            "has_receiver",
+            "has_key_type",
         ]
     )
 
@@ -263,11 +278,36 @@ def deduplicate_transactions(df: pd.DataFrame) -> pd.DataFrame:
             "has_latencia_final",
             "has_tempo_interacao_final",
             "has_host_time",
+            "has_receiver",
+            "has_key_type",
         ],
         errors="ignore"
     )
 
     return df
+
+
+def classify_key_flags(ds_tipo_chave_series):
+    s = ds_tipo_chave_series.astype(str).str.upper()
+    out = pd.DataFrame(index=ds_tipo_chave_series.index)
+    out["pix_key_random_flag"] = (s == "CHAVE ALEATORIA").astype(int)
+    out["pix_key_email_flag"] = (s == "EMAIL").astype(int)
+    out["pix_key_document_flag"] = (s == "DOCUMENTO/TELEFONE").astype(int)
+    out["pix_key_other_flag"] = (s == "OUTROS").astype(int)
+    out["pix_key_missing_flag"] = (s.isin(["NAN", "INFORMAÇÃO AUSENTE"])).astype(int)
+    return out
+
+
+def cumulative_distinct_count(series: pd.Series) -> pd.Series:
+    seen = set()
+    counts = []
+
+    for val in series:
+        if pd.notna(val):
+            seen.add(val)
+        counts.append(len(seen))
+
+    return pd.Series(counts, index=series.index)
 
 
 # =========================================================
@@ -297,6 +337,9 @@ required_pix_cols = [
     "cd_pix",
     "dt_pix",
     "cd_cpf_pagador",
+    "cd_cpf_cnpj_recebedor",
+    "ds_chave_pix",
+    "ds_tipo_chave",
     "vl_pix",
     "qt_total_pix_trimestre",
     "vl_mediana_pix_trimestre",
@@ -305,10 +348,22 @@ required_pix_cols = [
     "qt_intervalo_mediana_trimestre",
     "qt_intervalo_desvio_padrao_trimestre",
     "qt_pix_dia_maximo_trimestre",
+    "device_name",
+    "app_version",
+    "ip_address",
     "latencia_rede_ms",
     "vl_latencia_rede_media_trimestre",
     "tempo_interacao_ms",
     "vl_tempo_interacao_medio_trimestre",
+    "tempo_processamento_host_ms",
+    "metodo_autenticacao",
+    "session_id",
+    "cd_retorno",
+    "topaz_risk_score",
+    "topaz_transacao_rejeitada",
+    "topaz_transacao_habilitada",
+    "is_agendamento_recorrente",
+    "topaz_sync_id",
     "qt_aparelhos_distintos_trimestre",
     "nr_idade",
     "qt_tempo_relacionamento_mes",
@@ -327,6 +382,24 @@ pix_all = pd.concat(
     sort=False
 )
 
+pix_text_cols = [
+    "cd_pix",
+    "cd_cpf_pagador",
+    "cd_cpf_cnpj_recebedor",
+    "ds_chave_pix",
+    "ds_tipo_chave",
+    "device_name",
+    "app_version",
+    "ip_address",
+    "metodo_autenticacao",
+    "session_id",
+    "cd_retorno",
+    "is_agendamento_recorrente",
+    "topaz_sync_id",
+    "source_dataset",
+]
+pix_all = clean_text_columns(pix_all, pix_text_cols)
+
 pix_numeric_cols = [
     "vl_pix",
     "qt_total_pix_trimestre",
@@ -340,17 +413,23 @@ pix_numeric_cols = [
     "vl_latencia_rede_media_trimestre",
     "tempo_interacao_ms",
     "vl_tempo_interacao_medio_trimestre",
+    "tempo_processamento_host_ms",
+    "topaz_risk_score",
+    "topaz_transacao_rejeitada",
+    "topaz_transacao_habilitada",
     "qt_aparelhos_distintos_trimestre",
     "nr_idade",
     "qt_tempo_relacionamento_mes",
     "is_fraud",
 ]
-
 pix_all = safe_to_numeric(pix_all, pix_numeric_cols)
 pix_all = safe_to_datetime(pix_all, ["dt_pix", "dt_carga"])
 
 pix_all["cd_pix"] = normalize_transaction_key(pix_all["cd_pix"])
-pix_all["cd_cpf_pagador"] = pd.to_numeric(pix_all["cd_cpf_pagador"], errors="coerce")
+
+# manter IDs textuais para evitar perda / notação científica
+pix_all["cd_cpf_pagador"] = pix_all["cd_cpf_pagador"].astype("object")
+pix_all["cd_cpf_cnpj_recebedor"] = pix_all["cd_cpf_cnpj_recebedor"].astype("object")
 
 pix_all = replace_sentinels_with_nan(
     pix_all,
@@ -359,17 +438,42 @@ pix_all = replace_sentinels_with_nan(
         "vl_latencia_rede_media_trimestre",
         "tempo_interacao_ms",
         "vl_tempo_interacao_medio_trimestre",
+        "tempo_processamento_host_ms",
+        "topaz_risk_score",
+        "topaz_transacao_rejeitada",
+        "topaz_transacao_habilitada",
     ],
     sentinels=[-1, -1.0]
 )
 
-# zeros que provavelmente representam ausência em campos de interação
 pix_all = replace_zero_with_nan(
     pix_all,
     [
         "vl_tempo_interacao_medio_trimestre",
     ]
 )
+
+print("Deduplicando base PIX consolidada por cd_pix...")
+pix_priority_cols = [
+    "cd_cpf_cnpj_recebedor",
+    "ds_chave_pix",
+    "ds_tipo_chave",
+    "device_name",
+    "app_version",
+    "ip_address",
+    "latencia_rede_ms",
+    "tempo_interacao_ms",
+    "tempo_processamento_host_ms",
+    "metodo_autenticacao",
+    "session_id",
+    "cd_retorno",
+    "topaz_risk_score",
+    "topaz_transacao_rejeitada",
+    "topaz_transacao_habilitada",
+    "is_agendamento_recorrente",
+    "topaz_sync_id",
+]
+pix_all = deduplicate_by_key(pix_all, "cd_pix", pix_priority_cols)
 
 
 # =========================================================
@@ -378,6 +482,7 @@ pix_all = replace_zero_with_nan(
 mobile_required_cols = [
     "end_to_end_id",
     "data_hora_inicio",
+    "data_referencia",
     "nr_conta",
     "valor_transacao",
     "cd_tipo_transacao",
@@ -394,6 +499,7 @@ mobile_required_cols = [
     "topaz_transacao_rejeitada",
     "topaz_transacao_habilitada",
     "is_agendamento_recorrente",
+    "topaz_sync_id",
 ]
 
 for c in mobile_required_cols:
@@ -409,8 +515,9 @@ mobile_text_cols = [
     "metodo_autenticacao",
     "session_id",
     "cd_retorno",
+    "is_agendamento_recorrente",
+    "topaz_sync_id",
 ]
-
 mobile = clean_text_columns(mobile, mobile_text_cols)
 
 mobile_numeric_cols = [
@@ -422,11 +529,9 @@ mobile_numeric_cols = [
     "topaz_risk_score",
     "topaz_transacao_rejeitada",
     "topaz_transacao_habilitada",
-    "is_agendamento_recorrente",
 ]
-
 mobile = safe_to_numeric(mobile, mobile_numeric_cols)
-mobile = safe_to_datetime(mobile, ["data_hora_inicio"])
+mobile = safe_to_datetime(mobile, ["data_hora_inicio", "data_referencia"])
 
 mobile["end_to_end_id"] = normalize_transaction_key(mobile["end_to_end_id"])
 
@@ -447,24 +552,37 @@ mobile = mobile.rename(columns={
     "end_to_end_id": "cd_pix_mobile",
     "latencia_rede_ms": "mobile_latencia_rede_ms",
     "tempo_interacao_ms": "mobile_tempo_interacao_ms",
+    "tempo_processamento_host_ms": "mobile_tempo_processamento_host_ms",
     "valor_transacao": "mobile_valor_transacao",
+    "device_name": "mobile_device_name",
+    "app_version": "mobile_app_version",
+    "ip_address": "mobile_ip_address",
+    "metodo_autenticacao": "mobile_metodo_autenticacao",
+    "session_id": "mobile_session_id",
+    "cd_retorno": "mobile_cd_retorno",
+    "topaz_risk_score": "mobile_topaz_risk_score",
+    "topaz_transacao_rejeitada": "mobile_topaz_transacao_rejeitada",
+    "topaz_transacao_habilitada": "mobile_topaz_transacao_habilitada",
+    "is_agendamento_recorrente": "mobile_is_agendamento_recorrente",
+    "topaz_sync_id": "mobile_topaz_sync_id",
 })
 
-# deduplicar mobile por chave antes do merge
 print("Deduplicando base mobile por end_to_end_id...")
 mobile_priority_cols = [
     "mobile_latencia_rede_ms",
     "mobile_tempo_interacao_ms",
-    "tempo_processamento_host_ms",
-    "device_name",
-    "app_version",
-    "ip_address",
-    "metodo_autenticacao",
-    "cd_retorno",
-    "topaz_risk_score",
-    "topaz_transacao_rejeitada",
-    "topaz_transacao_habilitada",
-    "is_agendamento_recorrente",
+    "mobile_tempo_processamento_host_ms",
+    "mobile_device_name",
+    "mobile_app_version",
+    "mobile_ip_address",
+    "mobile_metodo_autenticacao",
+    "mobile_session_id",
+    "mobile_cd_retorno",
+    "mobile_topaz_risk_score",
+    "mobile_topaz_transacao_rejeitada",
+    "mobile_topaz_transacao_habilitada",
+    "mobile_is_agendamento_recorrente",
+    "mobile_topaz_sync_id",
 ]
 mobile_before = len(mobile)
 mobile = deduplicate_by_key(
@@ -498,13 +616,43 @@ df["event_datetime"] = df["dt_pix"]
 mask_dt = df["event_datetime"].isna()
 df.loc[mask_dt, "event_datetime"] = df.loc[mask_dt, "data_hora_inicio"]
 
-df["latencia_rede_ms_final"] = df["latencia_rede_ms"]
-mask_lat = df["latencia_rede_ms_final"].isna()
-df.loc[mask_lat, "latencia_rede_ms_final"] = df.loc[mask_lat, "mobile_latencia_rede_ms"]
+text_merge_cols = [
+    ("device_name", "device_name", "mobile_device_name"),
+    ("app_version", "app_version", "mobile_app_version"),
+    ("ip_address", "ip_address", "mobile_ip_address"),
+    ("metodo_autenticacao", "metodo_autenticacao", "mobile_metodo_autenticacao"),
+    ("session_id", "session_id", "mobile_session_id"),
+    ("cd_retorno", "cd_retorno", "mobile_cd_retorno"),
+    ("is_agendamento_recorrente", "is_agendamento_recorrente", "mobile_is_agendamento_recorrente"),
+    ("topaz_sync_id", "topaz_sync_id", "mobile_topaz_sync_id"),
+]
 
-df["tempo_interacao_ms_final"] = df["tempo_interacao_ms"]
-mask_tempo = df["tempo_interacao_ms_final"].isna()
-df.loc[mask_tempo, "tempo_interacao_ms_final"] = df.loc[mask_tempo, "mobile_tempo_interacao_ms"]
+numeric_merge_cols = [
+    ("latencia_rede_ms_final", "latencia_rede_ms", "mobile_latencia_rede_ms"),
+    ("tempo_interacao_ms_final", "tempo_interacao_ms", "mobile_tempo_interacao_ms"),
+    ("tempo_processamento_host_ms", "tempo_processamento_host_ms", "mobile_tempo_processamento_host_ms"),
+    ("topaz_risk_score", "topaz_risk_score", "mobile_topaz_risk_score"),
+    ("topaz_transacao_rejeitada", "topaz_transacao_rejeitada", "mobile_topaz_transacao_rejeitada"),
+    ("topaz_transacao_habilitada", "topaz_transacao_habilitada", "mobile_topaz_transacao_habilitada"),
+]
+
+for final_col, pix_col, mob_col in text_merge_cols:
+    df = ensure_column(df, pix_col, np.nan)
+    df = ensure_column(df, mob_col, np.nan)
+
+    left = df[pix_col].astype("object")
+    right = df[mob_col].astype("object")
+
+    df[final_col] = left.combine_first(right)
+
+for final_col, pix_col, mob_col in numeric_merge_cols:
+    df = ensure_column(df, pix_col, np.nan)
+    df = ensure_column(df, mob_col, np.nan)
+
+    left = pd.to_numeric(df[pix_col], errors="coerce")
+    right = pd.to_numeric(df[mob_col], errors="coerce")
+
+    df[final_col] = left.combine_first(right)
 
 
 # =========================================================
@@ -538,6 +686,12 @@ df["latencia_missing_flag"] = df["latencia_rede_ms_final"].isna().astype(int)
 df["tempo_interacao_missing_flag"] = df["tempo_interacao_ms_final"].isna().astype(int)
 df["mobile_join_missing_flag"] = (df["join_status_mobile"] == 0).astype(int)
 
+df["receiver_missing_flag"] = df["cd_cpf_cnpj_recebedor"].isna().astype(int)
+df["pix_key_missing_flag"] = df["ds_chave_pix"].isna().astype(int)
+df["pix_key_type_missing_flag"] = df["ds_tipo_chave"].isna().astype(int)
+df["session_missing_flag"] = df["session_id"].isna().astype(int)
+df["topaz_sync_missing_flag"] = df["topaz_sync_id"].isna().astype(int)
+
 
 # =========================================================
 # DEVICE / APP FEATURES
@@ -545,6 +699,22 @@ df["mobile_join_missing_flag"] = (df["join_status_mobile"] == 0).astype(int)
 df["device_name_normalized"] = df["device_name"].apply(normalize_device_name)
 df["app_version_major"] = df["app_version"].apply(extract_app_version_major)
 df["app_version_minor"] = df["app_version"].apply(extract_app_version_minor)
+
+
+# =========================================================
+# KEY / RECEIVER FEATURES
+# =========================================================
+df["ds_tipo_chave"] = df["ds_tipo_chave"].apply(normalize_text_value)
+df["ds_chave_pix"] = df["ds_chave_pix"].apply(normalize_text_value)
+
+key_flags = classify_key_flags(df["ds_tipo_chave"].fillna("Informação ausente"))
+df = pd.concat([df, key_flags], axis=1)
+
+df["receiver_document_same_as_customer_flag"] = (
+    (df["customer_id"].notna()) &
+    (df["cd_cpf_cnpj_recebedor"].notna()) &
+    (df["customer_id"].astype(str) == df["cd_cpf_cnpj_recebedor"].astype(str))
+).astype(int)
 
 
 # =========================================================
@@ -668,6 +838,26 @@ df["pix_freq_high_flag"] = (
     (df["tx_count_prev_30m"] >= 2)
 ).fillna(False).astype(int)
 
+df["receiver_tx_count_prev"] = (
+    df.groupby(["customer_id", "cd_cpf_cnpj_recebedor"]).cumcount()
+)
+df["first_receiver_flag"] = (df["receiver_tx_count_prev"] == 0).astype(int)
+
+df["key_tx_count_prev"] = (
+    df.groupby(["customer_id", "ds_chave_pix"]).cumcount()
+)
+df["first_key_flag"] = (df["key_tx_count_prev"] == 0).astype(int)
+
+df["distinct_receivers_so_far"] = (
+    df.groupby("customer_id", sort=False)["cd_cpf_cnpj_recebedor"]
+    .transform(cumulative_distinct_count)
+)
+
+df["distinct_keys_so_far"] = (
+    df.groupby("customer_id", sort=False)["ds_chave_pix"]
+    .transform(cumulative_distinct_count)
+)
+
 
 # =========================================================
 # RULE FEATURES
@@ -710,8 +900,24 @@ df["is_new_customer_flag"] = (
     df["qt_tempo_relacionamento_mes"].between(0, 30, inclusive="both")
 ).fillna(False).astype(int)
 
-df["rule_mule_account_score"] = np.nan
-df["rule_random_key_score"] = np.nan
+df["rule_mule_account_score"] = np.select(
+    [
+        df["first_receiver_flag"] == 1,
+        df["receiver_document_same_as_customer_flag"] == 1
+    ],
+    [2, 1],
+    default=0
+)
+
+df["rule_random_key_score"] = np.select(
+    [
+        df["pix_key_random_flag"] == 1,
+        df["pix_key_email_flag"] == 1,
+        df["pix_key_document_flag"] == 1
+    ],
+    [2, 1, 0],
+    default=0
+)
 
 df["rule_night_score"] = np.where(df["is_night"] == 1, 3, 0)
 
@@ -735,6 +941,8 @@ rule_components = [
     "rule_pix_30m_score",
     "rule_age_score",
     "rule_relationship_score",
+    "rule_mule_account_score",
+    "rule_random_key_score",
     "rule_night_score",
     "rule_velocity_score",
     "rule_topaz_score",
@@ -759,6 +967,16 @@ final_cols = [
     "source_dataset",
     "join_status_mobile",
     "is_fraud",
+
+    "cd_cpf_cnpj_recebedor",
+    "ds_chave_pix",
+    "ds_tipo_chave",
+    "receiver_document_same_as_customer_flag",
+    "pix_key_random_flag",
+    "pix_key_email_flag",
+    "pix_key_document_flag",
+    "pix_key_other_flag",
+    "pix_key_missing_flag",
 
     "vl_pix",
     "log_vl_pix",
@@ -799,6 +1017,12 @@ final_cols = [
     "tx_count_prev_30m",
     "burst_30m_flag",
     "pix_freq_high_flag",
+    "receiver_tx_count_prev",
+    "first_receiver_flag",
+    "key_tx_count_prev",
+    "first_key_flag",
+    "distinct_receivers_so_far",
+    "distinct_keys_so_far",
 
     "hour",
     "day_of_week",
@@ -814,11 +1038,13 @@ final_cols = [
     "app_version_minor",
     "ip_address",
     "metodo_autenticacao",
+    "session_id",
     "cd_retorno",
     "topaz_risk_score",
     "topaz_transacao_rejeitada",
     "topaz_transacao_habilitada",
     "is_agendamento_recorrente",
+    "topaz_sync_id",
 
     "device_missing_flag",
     "ip_missing_flag",
@@ -829,6 +1055,11 @@ final_cols = [
     "latencia_missing_flag",
     "tempo_interacao_missing_flag",
     "mobile_join_missing_flag",
+    "receiver_missing_flag",
+    "pix_key_missing_flag",
+    "pix_key_type_missing_flag",
+    "session_missing_flag",
+    "topaz_sync_missing_flag",
 
     "rule_pix_30m_score",
     "rule_ratio_pix_limite_score",
@@ -871,6 +1102,11 @@ print(f"Linhas com join mobile: {int(final_df['join_status_mobile'].sum())}")
 print(f"Fraudes: {int(final_df['is_fraud'].sum())}")
 print(f"Normais: {int((final_df['is_fraud'] == 0).sum())}")
 
+if duplicated_transactions > 0:
+    dup_sample = final_df[final_df["transaction_id"].duplicated(keep=False)].sort_values("transaction_id").head(10)
+    print("\nAmostra de duplicatas remanescentes:")
+    print(dup_sample[["transaction_id", "customer_id", "event_datetime"]])
+
 
 # =========================================================
 # SAVE
@@ -882,5 +1118,3 @@ print(f"Arquivo salvo em: {OUTPUT_PATH}")
 print(f"Shape final: {final_df.shape}")
 print("\nColunas finais:")
 print(final_df.columns.tolist())
-
-
