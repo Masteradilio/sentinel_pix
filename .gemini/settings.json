@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "vscode-mcp": {
+      "httpUrl": "http://localhost:3000/mcp"
+    }
+  },
+  "mcp": {
+    "allowed": ["vscode-mcp"]
+  }
+}
+
