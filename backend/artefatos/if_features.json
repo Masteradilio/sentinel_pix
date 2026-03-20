@@ -1,0 +1,12 @@
+[
+  "vl_pix",
+  "log_vl_pix",
+  "nr_idade",
+  "qt_tempo_relacionamento_mes",
+  "topaz_score_filled",
+  "rule_score_raw",
+  "latencia_rede_ms_final",
+  "latencia_host_ratio",
+  "tempo_processamento_host_ms",
+  "hour"
+]

@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Relatório Executivo — Detecção de Fraude PIX v2.0</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', Tahoma, sans-serif; background: #0e1117; color: #e0e0e0; padding: 30px 50px; line-height: 1.6; }
+        .header { text-align: center; margin-bottom: 40px; border-bottom: 3px solid #00d4aa; padding-bottom: 20px; }
+        .header h1 { color: #00d4aa; font-size: 32px; margin-bottom: 8px; }
+        .header .subtitle { color: #888; font-size: 14px; }
+        .header .version { display: inline-block; background: rgba(0, 212, 170, 0.15); color: #00d4aa; padding: 4px 16px; border-radius: 20px; font-size: 13px; font-weight: bold; margin-top: 8px; }
+        .kpi-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; margin-bottom: 40px; }
+        .kpi { background: #1a1d23; border-radius: 16px; padding: 28px; text-align: center; border: 2px solid #333; transition: border-color 0.3s; }
+        .kpi:hover { border-color: #00d4aa; }
+        .kpi.green { border-color: #00d4aa; }
+        .kpi.red { border-color: #ff6b6b; }
+        .kpi.yellow { border-color: #ffd93d; }
+        .kpi.blue { border-color: #6c5ce7; }
+        .kpi .value { font-size: 48px; font-weight: 800; line-height: 1.1; }
+        .kpi .label { font-size: 14px; color: #888; margin-top: 8px; text-transform: uppercase; letter-spacing: 1px; }
+        .kpi .detail { font-size: 12px; color: #666; margin-top: 6px; }
+        .section { background: #1a1d23; border-radius: 16px; padding: 28px; margin-bottom: 24px; border: 1px solid #2a2d33; }
+        .section h2 { color: #00d4aa; margin-bottom: 20px; font-size: 20px; padding-bottom: 10px; border-bottom: 1px solid #333; }
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+        th { color: #00d4aa; font-size: 12px; text-transform: uppercase; letter-spacing: 1px; padding: 12px 16px; text-align: left; border-bottom: 2px solid #333; }
+        td { padding: 12px 16px; border-bottom: 1px solid #2a2d33; font-size: 14px; }
+        tr:hover { background: rgba(0, 212, 170, 0.05); }
+        .highlight { color: #00d4aa; font-weight: bold; }
+        .danger { color: #ff6b6b; font-weight: bold; }
+        .warning { color: #ffd93d; font-weight: bold; }
+        .info { color: #6c5ce7; font-weight: bold; }
+        .badge { display: inline-block; padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: bold; }
+        .badge-green { background: rgba(0, 212, 170, 0.2); color: #00d4aa; }
+        .badge-red { background: rgba(255, 107, 107, 0.2); color: #ff6b6b; }
+        .badge-yellow { background: rgba(255, 217, 61, 0.2); color: #ffd93d; }
+        .img-container { text-align: center; margin: 20px 0; }
+        .img-container img { max-width: 100%; border-radius: 12px; border: 1px solid #333; }
+        .callout { background: rgba(0, 212, 170, 0.08); border-left: 4px solid #00d4aa; padding: 16px 20px; margin: 16px 0; border-radius: 0 8px 8px 0; }
+        .callout.warning { background: rgba(255, 217, 61, 0.08); border-left-color: #ffd93d; }
+        .callout.danger { background: rgba(255, 107, 107, 0.08); border-left-color: #ff6b6b; }
+        .callout.success { background: rgba(0, 212, 170, 0.12); border-left-color: #00d4aa; }
+        .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+        .score-bar { height: 32px; border-radius: 16px; background: linear-gradient(to right, #00d4aa 0%, #00d4aa 60%, #ffd93d 60%, #ffd93d 85%, #ff6b6b 85%, #ff6b6b 100%); margin: 16px 0; position: relative; }
+        .score-bar .label-left { position: absolute; left: 25%; top: 50%; transform: translate(-50%, -50%); font-size: 12px; font-weight: bold; color: #0e1117; }
+        .score-bar .label-mid { position: absolute; left: 72.5%; top: 50%; transform: translate(-50%, -50%); font-size: 12px; font-weight: bold; color: #0e1117; }
+        .score-bar .label-right { position: absolute; left: 92.5%; top: 50%; transform: translate(-50%, -50%); font-size: 12px; font-weight: bold; color: #0e1117; }
+        .footer { text-align: center; color: #555; font-size: 12px; margin-top: 50px; padding-top: 20px; border-top: 1px solid #333; }
+    </style>
+</head>
+<body>
+
+<div class="header">
+    <h1>🛡️ Sistema de Detecção de Fraude PIX</h1>
+    <h2 style="color: #ccc; font-weight: 400; font-size: 18px; margin-top: 4px;">Relatório Executivo de Performance</h2>
+    <div class="version">Pipeline v2.0 — Score Híbrido Otimizado (0-100)</div>
+    <p class="subtitle" style="margin-top: 12px;">
+        Gerado em 19/03/2026 16:10 |
+        Base de teste: 20,070 transações |
+        69 fraudes (0.34%)
+    </p>
+</div>
+
+<!-- ═══════════ KPIs ═══════════ -->
+<div class="kpi-grid">
+    <div class="kpi green">
+        <div class="value" style="color: #00d4aa;">100.0%</div>
+        <div class="label">Fraudes Detectadas</div>
+        <div class="detail">69 de 69 fraudes capturadas (BLOQUEAR ≥85)</div>
+    </div>
+    <div class="kpi green">
+        <div class="value" style="color: #00d4aa;">0</div>
+        <div class="label">Fraudes Não Detectadas</div>
+        <div class="detail">Nenhuma fraude escapou do sistema ✅</div>
+    </div>
+    <div class="kpi yellow">
+        <div class="value" style="color: #ffd93d;">19</div>
+        <div class="label">Falsos Alarmes</div>
+        <div class="detail">0.09% das tx legítimas sinalizadas (19 revisões extras)</div>
+    </div>
+    <div class="kpi green">
+        <div class="value" style="color: #00d4aa;">78.4%</div>
+        <div class="label">Precisão dos Alarmes</div>
+        <div class="detail">De cada bloqueio, esta % é fraude real</div>
+    </div>
+    <div class="kpi blue">
+        <div class="value" style="color: #6c5ce7;">1.0000</div>
+        <div class="label">AUC-ROC</div>
+        <div class="detail">Capacidade geral de separação (1.0 = perfeito)</div>
+    </div>
+    <div class="kpi green">
+        <div class="value" style="color: #00d4aa;">+67.8</div>
+        <div class="label">GAP de Separação</div>
+        <div class="detail">Pontos entre menor fraude (91.54) e P99.9 normal (23.77)</div>
+    </div>
+</div>
+
+<!-- ═══════════ Score Visual ═══════════ -->
+<div class="section">
+    <h2>📏 Escala de Score (0-100)</h2>
+    <div class="score-bar">
+        <span class="label-left">🟢 APROVAR<br>0 — 59</span>
+        <span class="label-mid">🟡 CONFIRMAR<br>60 — 84</span>
+        <span class="label-right">🔴 BLOQUEAR<br>85 — 100</span>
+    </div>
+    <table>
+        <tr>
+            <th>Faixa</th>
+            <th>Score</th>
+            <th>Ação</th>
+            <th>Descrição</th>
+        </tr>
+        <tr>
+            <td><span class="badge badge-green">🟢 APROVAR</span></td>
+            <td>0 a 59</td>
+            <td>Liberar automaticamente</td>
+            <td>Transação com padrão normal — sem intervenção necessária</td>
+        </tr>
+        <tr>
+            <td><span class="badge badge-yellow">🟡 CONFIRMAR</span></td>
+            <td>60 a 84</td>
+            <td>Autenticação adicional (2FA / biometria)</td>
+            <td>Padrão levemente atípico — confirmar identidade do cliente</td>
+        </tr>
+        <tr>
+            <td><span class="badge badge-red">🔴 BLOQUEAR</span></td>
+            <td>85 a 100</td>
+            <td>Parar para análise humana</td>
+            <td>Alto risco de fraude — bloquear e encaminhar ao analista</td>
+        </tr>
+    </table>
+</div>
+
+<!-- ═══════════ Dashboard Visual ═══════════ -->
+<div class="section">
+    <h2>📊 Dashboard Visual</h2>
+    <div class="img-container">
+        <img src="dashboard_executivo.png" alt="Dashboard">
+    </div>
+</div>
+
+<!-- ═══════════ Como Interpretar ═══════════ -->
+<div class="section">
+    <h2>📖 Guia de Interpretação para Executivos</h2>
+
+    <div class="callout success">
+        <strong>Destaque principal:</strong> O sistema detecta <strong>100.0%</strong>
+        das fraudes com apenas <strong>19</strong> falsos alarmes em
+        20,070 transações. Nenhuma fraude escapou do modelo.
+    </div>
+
+    <table>
+        <tr>
+            <th style="width: 25%">Métrica</th>
+            <th style="width: 50%">O que significa</th>
+            <th style="width: 25%">Resultado</th>
+        </tr>
+        <tr>
+            <td><strong>Fraudes Detectadas</strong><br>(Recall)</td>
+            <td>De cada 100 fraudes reais, quantas o sistema identifica e bloqueia</td>
+            <td class="highlight" style="font-size: 18px;">100.0%</td>
+        </tr>
+        <tr>
+            <td><strong>Fraudes Não Detectadas</strong><br>(False Negative Rate)</td>
+            <td>Fraudes que passam pelo sistema sem serem barradas — <em>risco residual</em></td>
+            <td class="highlight" style="font-size: 18px;">0 (0.0%)</td>
+        </tr>
+        <tr>
+            <td><strong>Falsos Alarmes</strong><br>(False Positive Rate)</td>
+            <td>Transações legítimas erroneamente bloqueadas — <em>impacta experiência do cliente</em></td>
+            <td class="warning" style="font-size: 18px;">0.09% (19)</td>
+        </tr>
+        <tr>
+            <td><strong>Precisão dos Alarmes</strong><br>(Precision)</td>
+            <td>Quando o sistema bloqueia, qual a chance de ser fraude real — <em>eficiência dos analistas</em></td>
+            <td class="highlight" style="font-size: 18px;">78.4%</td>
+        </tr>
+        <tr>
+            <td><strong>GAP de Separação</strong></td>
+            <td>Distância em pontos entre a fraude com menor score e o percentil 99.9 dos normais. Quanto maior, mais seguro o sistema</td>
+            <td class="highlight" style="font-size: 18px;">+67.8 pontos</td>
+        </tr>
+        <tr>
+            <td><strong>AUC-ROC</strong></td>
+            <td>Nota geral do modelo: 0.50 = aleatório, 1.00 = perfeito. Acima de 0.95 é excelente</td>
+            <td class="info" style="font-size: 18px;">1.0000</td>
+        </tr>
+    </table>
+</div>
+
+<!-- ═══════════ Decisões ═══════════ -->
+<div class="section">
+    <h2>🎯 Resultados por Faixa de Decisão</h2>
+
+    <table>
+        <tr>
+            <th>Decisão</th>
+            <th>Score</th>
+            <th>Ação Operacional</th>
+            <th>Quantidade</th>
+            <th>% do Total</th>
+            <th>Fraudes Reais</th>
+            <th>Taxa Fraude</th>
+        </tr>
+        <tr>
+            <td><span class="badge badge-green">🟢 APROVAR</span></td>
+            <td>0 — 59</td>
+            <td>Transação liberada automaticamente</td>
+            <td>19,981</td>
+            <td>99.6%</td>
+            <td class="highlight">0</td>
+            <td>0.000%</td>
+        </tr>
+        <tr>
+            <td><span class="badge badge-yellow">🟡 CONFIRMAR</span></td>
+            <td>60 — 84</td>
+            <td>Solicitar 2FA / biometria</td>
+            <td>1</td>
+            <td>0.0%</td>
+            <td>0</td>
+            <td>0.00%</td>
+        </tr>
+        <tr>
+            <td><span class="badge badge-red">🔴 BLOQUEAR</span></td>
+            <td>85 — 100</td>
+            <td>Bloquear + enviar ao analista</td>
+            <td>88</td>
+            <td>0.4%</td>
+            <td class="danger">69</td>
+            <td class="danger">78.41%</td>
+        </tr>
+    </table>
+
+    <div class="callout">
+        <strong>Leitura-chave:</strong> A faixa APROVAR deve ter taxa de fraude próxima de 0% —
+        significa que nenhuma fraude escapa. A faixa BLOQUEAR deve ter taxa alta —
+        os bloqueios são precisos e o analista não perde tempo com falsos alarmes.
+    </div>
+</div>
+
+<!-- ═══════════ Separação de Scores ═══════════ -->
+<div class="section">
+    <h2>🔬 Qualidade da Separação</h2>
+
+    <div class="callout success">
+        <strong>GAP de +67.8 pontos</strong> — Existe uma enorme distância entre os scores das
+        fraudes e os das transações normais. Isso significa que o modelo tem alta confiança nas suas classificações.
+    </div>
+
+    <div class="two-col">
+        <div>
+            <h3 style="color: #00d4aa; margin-bottom: 12px;">Transações Normais</h3>
+            <table>
+                <tr><td>P99.9 (99.9% estão abaixo de)</td><td class="highlight">23.77</td></tr>
+                <tr><td>Máximo observado</td><td>95.94</td></tr>
+            </table>
+        </div>
+        <div>
+            <h3 style="color: #ff6b6b; margin-bottom: 12px;">Fraudes</h3>
+            <table>
+                <tr><td>Mínimo (fraude mais "fraca")</td><td class="danger">91.54</td></tr>
+                <tr><td>Percentil 5</td><td>92.12</td></tr>
+                <tr><td>Mediana</td><td>97.0</td></tr>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- ═══════════ Duas perspectivas ═══════════ -->
+<div class="section">
+    <h2>📐 Duas Perspectivas de Classificação</h2>
+
+    <div class="callout warning">
+        <strong>Por que duas?</strong> Na visão conservadora, apenas BLOQUEAR conta como "fraude detectada".
+        Na visão ampla, CONFIRMAR também ajuda — se o fraudador não consegue passar a biometria, a fraude é impedida.
+    </div>
+
+    <div class="two-col">
+        <div>
+            <h3 style="color: #ff6b6b; margin-bottom: 12px;">Visão Conservadora (só BLOQUEAR)</h3>
+            <table>
+                <tr><td>Recall</td><td class="highlight">100.0%</td></tr>
+                <tr><td>Precision</td><td>78.4%</td></tr>
+                <tr><td>F1-Score</td><td>0.8790</td></tr>
+                <tr><td>Falsos positivos</td><td>19</td></tr>
+                <tr><td>Falsos negativos</td><td class="highlight">0</td></tr>
+            </table>
+        </div>
+        <div>
+            <h3 style="color: #4ecdc4; margin-bottom: 12px;">Visão Ampla (CONFIRMAR + BLOQUEAR)</h3>
+            <table>
+                <tr><td>Recall</td><td class="highlight">100.0%</td></tr>
+                <tr><td>Precision</td><td>77.5%</td></tr>
+                <tr><td>F1-Score</td><td>0.8734</td></tr>
+                <tr><td>Falsos positivos</td><td>20</td></tr>
+                <tr><td>Falsos negativos</td><td class="highlight">0</td></tr>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- ═══════════ IF Stats ═══════════ -->
+<div class="section">
+    <h2>🔍 Isolation Forest — Especialista em Primeiras Transações</h2>
+    <table>
+        <tr><td>Primeiras transações do trimestre</td><td>664</td></tr>
+        <tr><td>IF efetivamente ativo (zona cinzenta do LGBM raw)</td><td>49 (0.2%)</td></tr>
+    </table>
+    <div class="callout">
+        O Isolation Forest atua <strong>apenas</strong> em primeiras transações do trimestre
+        <strong>e somente</strong> quando o LGBM está indeciso (score raw entre 0.05 e 0.5).
+    </div>
+</div>
+
+<!-- ═══════════ Arquitetura ═══════════ -->
+<div class="section">
+    <h2>⚙️ Arquitetura do Sistema v2.0</h2>
+    <table>
+        <tr><th>Componente</th><th>Tipo</th><th>Papel</th></tr>
+        <tr>
+            <td><strong>LightGBM v3 (Raw)</strong></td>
+            <td>Gradient Boosting (1500 trees, depth=7)</td>
+            <td>Modelo principal — gera score raw (0-1) com 62 features</td>
+        </tr>
+        <tr>
+            <td><strong>Motor de Regras</strong></td>
+            <td>6 regras determinísticas</td>
+            <td>Features para o LGBM: idade, relacionamento, conta mula, chave aleatória, velocidade, topaz</td>
+        </tr>
+        <tr>
+            <td><strong>Isolation Forest</strong></td>
+            <td>300 árvores, contaminação=1%</td>
+            <td>Especialista em primeiras transações — detecta anomalias sem histórico</td>
+        </tr>
+        <tr>
+            <td><strong>Mapeamento Híbrido</strong></td>
+            <td>Interpolação não-linear (12 âncoras)</td>
+            <td>Converte score raw (0-1) → score intuitivo (0-100) com máxima separação</td>
+        </tr>
+        <tr>
+            <td><strong>Preprocessor</strong></td>
+            <td>PixPreprocessor (custom)</td>
+            <td>Limpeza, imputação de nulos e preparação das features</td>
+        </tr>
+    </table>
+
+    <div class="callout">
+        <strong>Fluxo:</strong> Transação → Features → LGBM Raw (0-1) → IF (1ª tx) → Ensemble Raw
+        → Mapeamento Híbrido → Score 0-100 → Decisão (APROVAR / CONFIRMAR / BLOQUEAR)
+    </div>
+</div>
+
+<!-- ═══════════ Comparação de Modelos ═══════════ -->
+<div class="section">
+    <h2>📈 Performance do Modelo</h2>
+    <table>
+        <tr>
+            <th>Modelo</th>
+            <th>AUC-ROC</th>
+            <th>Average Precision</th>
+        </tr>
+        <tr>
+            <td>LGBM Raw</td>
+            <td>1.0000</td>
+            <td>0.9889</td>
+        </tr>
+        <tr>
+            <td><strong>Ensemble (LGBM Raw + IF)</strong></td>
+            <td class="highlight"><strong>1.0000</strong></td>
+            <td class="highlight"><strong>0.9884</strong></td>
+        </tr>
+    </table>
+</div>
+
+
+
+<div class="footer">
+    <p>🔒 Documento confidencial — uso interno BRB</p>
+    <p>Sistema Anomalia PIX v2.0 | Pipeline Híbrido Otimizado | 19/03/2026</p>
+</div>
+
+</body>
+</html>

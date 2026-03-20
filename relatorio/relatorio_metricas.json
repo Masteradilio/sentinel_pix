@@ -1,0 +1,93 @@
+{
+  "data_geracao": "19/03/2026 16:10",
+  "pipeline_version": "2.0",
+  "scoring": "Mapeamento Híbrido Otimizado",
+  "n_total": 20070,
+  "n_fraudes": 69,
+  "n_normais": 20001,
+  "taxa_fraude_pct": 0.3438,
+  "pipeline_bloquear": {
+    "tn": 19982,
+    "fp": 19,
+    "fn": 0,
+    "tp": 69,
+    "accuracy": 0.9991,
+    "precision": 0.7841,
+    "recall": 1.0,
+    "f1": 0.879,
+    "fpr": 0.0009,
+    "fnr": 0.0
+  },
+  "pipeline_qualquer_acao": {
+    "tn": 19981,
+    "fp": 20,
+    "fn": 0,
+    "tp": 69,
+    "accuracy": 0.999,
+    "precision": 0.7753,
+    "recall": 1.0,
+    "f1": 0.8734,
+    "fpr": 0.001,
+    "fnr": 0.0
+  },
+  "auc_roc_ensemble": 1.0,
+  "auc_roc_lgbm_raw": 1.0,
+  "ap_ensemble": 0.9884,
+  "ap_lgbm_raw": 0.9889,
+  "best_f1": {
+    "f1": 0.9565,
+    "threshold_mapped": 92.0,
+    "precision": 0.9565,
+    "recall": 0.9565
+  },
+  "decisoes": {
+    "APROVAR": 19981,
+    "CONFIRMAR": 1,
+    "BLOQUEAR": 88
+  },
+  "taxa_intervencao_pct": 0.44,
+  "taxa_fraude_aprovar": 0.0,
+  "n_fraude_aprovar": 0,
+  "taxa_fraude_confirmar": 0.0,
+  "n_fraude_confirmar": 0,
+  "taxa_fraude_bloquear": 78.4091,
+  "n_fraude_bloquear": 69,
+  "separacao": {
+    "fraud_min": 91.54,
+    "fraud_p5": 92.12,
+    "fraud_median": 97.0,
+    "normal_p999": 23.77,
+    "normal_max": 95.94,
+    "gap": 67.77
+  },
+  "isolation_forest": {
+    "first_tx_total": 664,
+    "if_active": 49,
+    "if_active_pct": 0.24
+  },
+  "executivo": {
+    "fraudes_detectadas_pct": 100.0,
+    "fraudes_nao_detectadas_pct": 0.0,
+    "fraudes_nao_detectadas_n": 0,
+    "falsos_alarmes_pct": 0.09,
+    "falsos_alarmes_n": 19,
+    "precisao_alarmes_pct": 78.4,
+    "taxa_intervencao_pct": 0.44,
+    "auc_roc": 1.0,
+    "f1": 0.879,
+    "gap_separacao": 67.77
+  },
+  "benchmark_latencia": {
+    "n_iteracoes": 200,
+    "media_ms": 59.44,
+    "mediana_ms": 57.0,
+    "p95_ms": 74.2,
+    "p99_ms": 96.22,
+    "min_ms": 47.85,
+    "max_ms": 146.98,
+    "std_ms": 10.3,
+    "throughput_por_segundo": 16.8,
+    "sla_limite_ms": 100,
+    "sla_ok": true
+  }
+}

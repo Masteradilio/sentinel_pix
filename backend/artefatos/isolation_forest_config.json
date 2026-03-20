@@ -1,0 +1,40 @@
+{
+  "features": [
+    "vl_pix",
+    "log_vl_pix",
+    "nr_idade",
+    "qt_tempo_relacionamento_mes",
+    "topaz_score_filled",
+    "rule_score_raw",
+    "latencia_rede_ms_final",
+    "latencia_host_ratio",
+    "tempo_processamento_host_ms",
+    "hour"
+  ],
+  "medians": {
+    "vl_pix": 91.97,
+    "log_vl_pix": 4.532276860467767,
+    "nr_idade": 46.0,
+    "qt_tempo_relacionamento_mes": 120.0,
+    "topaz_score_filled": 0.0,
+    "rule_score_raw": 5.0,
+    "latencia_rede_ms_final": 482.0,
+    "latencia_host_ratio": 1.0321428571428573,
+    "tempo_processamento_host_ms": 463.0,
+    "hour": 15.0
+  },
+  "best_threshold": 0.9500000000000002,
+  "best_params": {
+    "n_estimators": 300,
+    "max_samples": 0.7,
+    "max_features": 1.0,
+    "contamination": 0.01
+  },
+  "ensemble_strategy": "conditional",
+  "ensemble_params": {
+    "condition": "is_first_tx_trimestre=1 AND lgbm_score in (0.05, 0.6)",
+    "if_weight_when_active": 0.3,
+    "boost_threshold": 0.8,
+    "boost_amount": 0.2
+  }
+}

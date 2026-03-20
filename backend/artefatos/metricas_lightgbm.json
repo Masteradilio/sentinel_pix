@@ -1,246 +1,297 @@
 {
   "model_type": "LightGBM",
-  "n_train": 44437,
-  "n_val": 9522,
-  "n_test": 9523,
-  "n_features": 76,
-  "positives_train": 1232,
-  "negatives_train": 43205,
-  "scale_pos_weight": 35.068993506493506,
-  "best_threshold_val_f1": 0.05,
-  "best_val_f1": 0.0,
+  "version": "v3_optimized",
+  "n_train": 70242,
+  "n_val": 15052,
+  "n_test": 15053,
+  "n_features": 62,
+  "positives_train": 211,
+  "negatives_train": 70031,
+  "fraud_ratio_train": 0.0030039008000911135,
+  "scale_pos_weight": 331.90047393364927,
+  "best_iteration": 929,
+  "best_threshold_val_f1": 0.22000000000000003,
+  "best_val_f1": 0.8813559322033898,
+  "calibrated": true,
+  "n_errors_fn": 6,
+  "n_errors_fp": 4,
   "metrics": {
     "train_threshold_0_5": {
       "threshold": 0.5,
-      "roc_auc": 1.0,
-      "average_precision": 1.0,
-      "precision": 1.0,
+      "roc_auc": 0.9999989172026118,
+      "average_precision": 0.9996290075797457,
+      "precision": 0.8307086614173228,
       "recall": 1.0,
-      "f1": 1.0,
-      "accuracy": 1.0,
+      "f1": 0.9075268817204301,
+      "accuracy": 0.9993878306426355,
       "confusion_matrix": [
         [
-          43205,
-          0
+          69988,
+          43
         ],
         [
           0,
-          1232
+          211
         ]
       ],
-      "precision_at_1pct": 1.0,
-      "recall_at_1pct": 0.36038961038961037,
-      "precision_at_5pct": 0.5547050877982891,
+      "precision_at_1pct": 0.3005698005698006,
+      "recall_at_1pct": 1.0,
+      "precision_at_5pct": 0.06007972665148064,
       "recall_at_5pct": 1.0,
-      "precision_at_10pct": 0.27729011928876884,
-      "recall_at_10pct": 1.0
+      "recall_at_top_50": 0.23696682464454977,
+      "recall_at_top_100": 0.47393364928909953
     },
     "val_threshold_0_5": {
       "threshold": 0.5,
-      "roc_auc": null,
-      "average_precision": null,
-      "precision": 0.0,
-      "recall": 0.0,
-      "f1": 0.0,
-      "accuracy": 1.0,
+      "roc_auc": 0.999460732904227,
+      "average_precision": 0.934786139135919,
+      "precision": 0.8488372093023255,
+      "recall": 0.8795180722891566,
+      "f1": 0.863905325443787,
+      "accuracy": 0.9984719638586235,
       "confusion_matrix": [
         [
-          9522
+          14956,
+          13
+        ],
+        [
+          10,
+          73
         ]
       ],
-      "precision_at_1pct": 0.0,
-      "recall_at_1pct": 0.0,
-      "precision_at_5pct": 0.0,
-      "recall_at_5pct": 0.0,
-      "precision_at_10pct": 0.0,
-      "recall_at_10pct": 0.0
+      "precision_at_1pct": 0.54,
+      "recall_at_1pct": 0.9759036144578314,
+      "precision_at_5pct": 0.11037234042553191,
+      "recall_at_5pct": 1.0,
+      "recall_at_top_50": 0.5903614457831325,
+      "recall_at_top_100": 0.9397590361445783
     },
     "test_threshold_0_5": {
       "threshold": 0.5,
-      "roc_auc": null,
-      "average_precision": null,
-      "precision": 0.0,
-      "recall": 0.0,
-      "f1": 0.0,
-      "accuracy": 1.0,
+      "roc_auc": 0.9997610062893082,
+      "average_precision": 0.9679670782796588,
+      "precision": 0.9215686274509803,
+      "recall": 0.8867924528301887,
+      "f1": 0.9038461538461539,
+      "accuracy": 0.9993356805952301,
       "confusion_matrix": [
         [
-          9523
+          14996,
+          4
+        ],
+        [
+          6,
+          47
         ]
       ],
-      "precision_at_1pct": 0.0,
-      "recall_at_1pct": 0.0,
-      "precision_at_5pct": 0.0,
-      "recall_at_5pct": 0.0,
-      "precision_at_10pct": 0.0,
-      "recall_at_10pct": 0.0
+      "precision_at_1pct": 0.3466666666666667,
+      "recall_at_1pct": 0.9811320754716981,
+      "precision_at_5pct": 0.07047872340425532,
+      "recall_at_5pct": 1.0,
+      "recall_at_top_50": 0.8679245283018868,
+      "recall_at_top_100": 0.9811320754716981
     },
     "train_best_threshold": {
-      "threshold": 0.05,
-      "roc_auc": 1.0,
-      "average_precision": 1.0,
-      "precision": 1.0,
+      "threshold": 0.22000000000000003,
+      "roc_auc": 0.9999989172026118,
+      "average_precision": 0.9996290075797457,
+      "precision": 0.6963696369636964,
       "recall": 1.0,
-      "f1": 1.0,
-      "accuracy": 1.0,
+      "f1": 0.8210116731517509,
+      "accuracy": 0.9986902423051736,
       "confusion_matrix": [
         [
-          43205,
-          0
+          69939,
+          92
         ],
         [
           0,
-          1232
+          211
         ]
       ],
-      "precision_at_1pct": 1.0,
-      "recall_at_1pct": 0.36038961038961037,
-      "precision_at_5pct": 0.5547050877982891,
+      "precision_at_1pct": 0.3005698005698006,
+      "recall_at_1pct": 1.0,
+      "precision_at_5pct": 0.06007972665148064,
       "recall_at_5pct": 1.0,
-      "precision_at_10pct": 0.27729011928876884,
-      "recall_at_10pct": 1.0
+      "recall_at_top_50": 0.23696682464454977,
+      "recall_at_top_100": 0.47393364928909953
     },
     "val_best_threshold": {
-      "threshold": 0.05,
-      "roc_auc": null,
-      "average_precision": null,
-      "precision": 0.0,
-      "recall": 0.0,
-      "f1": 0.0,
-      "accuracy": 1.0,
+      "threshold": 0.22000000000000003,
+      "roc_auc": 0.999460732904227,
+      "average_precision": 0.934786139135919,
+      "precision": 0.8297872340425532,
+      "recall": 0.9397590361445783,
+      "f1": 0.8813559322033898,
+      "accuracy": 0.9986048365665692,
       "confusion_matrix": [
         [
-          9522
+          14953,
+          16
+        ],
+        [
+          5,
+          78
         ]
       ],
-      "precision_at_1pct": 0.0,
-      "recall_at_1pct": 0.0,
-      "precision_at_5pct": 0.0,
-      "recall_at_5pct": 0.0,
-      "precision_at_10pct": 0.0,
-      "recall_at_10pct": 0.0
+      "precision_at_1pct": 0.54,
+      "recall_at_1pct": 0.9759036144578314,
+      "precision_at_5pct": 0.11037234042553191,
+      "recall_at_5pct": 1.0,
+      "recall_at_top_50": 0.5903614457831325,
+      "recall_at_top_100": 0.9397590361445783
     },
     "test_best_threshold": {
-      "threshold": 0.05,
-      "roc_auc": null,
-      "average_precision": null,
-      "precision": 0.0,
-      "recall": 0.0,
-      "f1": 0.0,
-      "accuracy": 1.0,
+      "threshold": 0.22000000000000003,
+      "roc_auc": 0.9997610062893082,
+      "average_precision": 0.9679670782796588,
+      "precision": 0.85,
+      "recall": 0.9622641509433962,
+      "f1": 0.9026548672566371,
+      "accuracy": 0.9992692486547532,
       "confusion_matrix": [
         [
-          9523
+          14991,
+          9
+        ],
+        [
+          2,
+          51
         ]
       ],
-      "precision_at_1pct": 0.0,
-      "recall_at_1pct": 0.0,
-      "precision_at_5pct": 0.0,
-      "recall_at_5pct": 0.0,
-      "precision_at_10pct": 0.0,
-      "recall_at_10pct": 0.0
+      "precision_at_1pct": 0.3466666666666667,
+      "recall_at_1pct": 0.9811320754716981,
+      "precision_at_5pct": 0.07047872340425532,
+      "recall_at_5pct": 1.0,
+      "recall_at_top_50": 0.8679245283018868,
+      "recall_at_top_100": 0.9811320754716981
+    },
+    "test_calibrated_0_5": {
+      "threshold": 0.5,
+      "roc_auc": 0.9998704402515723,
+      "average_precision": 0.9663885897795955,
+      "precision": 0.95,
+      "recall": 0.7169811320754716,
+      "f1": 0.8172043010752689,
+      "accuracy": 0.9988706570118914,
+      "confusion_matrix": [
+        [
+          14998,
+          2
+        ],
+        [
+          15,
+          38
+        ]
+      ],
+      "precision_at_1pct": 0.35333333333333333,
+      "recall_at_1pct": 1.0,
+      "precision_at_5pct": 0.07047872340425532,
+      "recall_at_5pct": 1.0,
+      "recall_at_top_50": 0.8490566037735849,
+      "recall_at_top_100": 1.0
     }
   },
   "top_20_features_gain": [
     {
-      "feature": "vl_latencia_rede_media_trimestre",
-      "importance_gain": 1377500.0192233324,
-      "importance_split": 282
-    },
-    {
-      "feature": "vl_tempo_interacao_medio_trimestre",
-      "importance_gain": 88381.69105306268,
-      "importance_split": 68
-    },
-    {
-      "feature": "diff_tempo_interacao_cliente",
-      "importance_gain": 22246.841486364603,
-      "importance_split": 48
-    },
-    {
-      "feature": "qt_aparelhos_distintos_trimestre",
-      "importance_gain": 207.95012402534485,
-      "importance_split": 2
-    },
-    {
-      "feature": "vl_mediana_pix_trimestre",
-      "importance_gain": 0.0,
-      "importance_split": 0
-    },
-    {
-      "feature": "vl_desvio_padrao_pix_trimestre",
-      "importance_gain": 0.0,
-      "importance_split": 0
-    },
-    {
-      "feature": "qt_intervalo_mediana_trimestre",
-      "importance_gain": 0.0,
-      "importance_split": 0
-    },
-    {
-      "feature": "qt_intervalo_transacao_minuto",
-      "importance_gain": 0.0,
-      "importance_split": 0
-    },
-    {
-      "feature": "qt_intervalo_desvio_padrao_trimestre",
-      "importance_gain": 0.0,
-      "importance_split": 0
-    },
-    {
       "feature": "vl_pix",
-      "importance_gain": 0.0,
-      "importance_split": 0
-    },
-    {
-      "feature": "qt_total_pix_trimestre",
-      "importance_gain": 0.0,
-      "importance_split": 0
-    },
-    {
-      "feature": "log_vl_pix",
-      "importance_gain": 0.0,
-      "importance_split": 0
-    },
-    {
-      "feature": "qt_tempo_relacionamento_mes",
-      "importance_gain": 0.0,
-      "importance_split": 0
-    },
-    {
-      "feature": "nr_idade",
-      "importance_gain": 0.0,
-      "importance_split": 0
-    },
-    {
-      "feature": "qt_pix_dia_maximo_trimestre",
-      "importance_gain": 0.0,
-      "importance_split": 0
-    },
-    {
-      "feature": "latencia_rede_ms_final",
-      "importance_gain": 0.0,
-      "importance_split": 0
-    },
-    {
-      "feature": "tempo_processamento_host_ms",
-      "importance_gain": 0.0,
-      "importance_split": 0
+      "importance_gain": 8715479.958925428,
+      "importance_split": 1529
     },
     {
       "feature": "ratio_valor_mediana",
-      "importance_gain": 0.0,
-      "importance_split": 0
+      "importance_gain": 881651.5640365165,
+      "importance_split": 242
     },
     {
-      "feature": "diff_valor_mediana",
-      "importance_gain": 0.0,
-      "importance_split": 0
+      "feature": "qt_total_pix_trimestre",
+      "importance_gain": 607193.0261294297,
+      "importance_split": 970
     },
     {
-      "feature": "tempo_interacao_ms_final",
-      "importance_gain": 0.0,
-      "importance_split": 0
+      "feature": "minutes_since_prev_tx",
+      "importance_gain": 476780.4605607926,
+      "importance_split": 701
+    },
+    {
+      "feature": "qt_intervalo_mediana_trimestre",
+      "importance_gain": 169725.6653710609,
+      "importance_split": 240
+    },
+    {
+      "feature": "distinct_receivers_so_far",
+      "importance_gain": 151957.61932718754,
+      "importance_split": 122
+    },
+    {
+      "feature": "vl_mediana_pix_trimestre",
+      "importance_gain": 122130.18189288024,
+      "importance_split": 1895
+    },
+    {
+      "feature": "latencia_rede_ms_final",
+      "importance_gain": 98470.5341183893,
+      "importance_split": 904
+    },
+    {
+      "feature": "qt_intervalo_desvio_padrao_trimestre",
+      "importance_gain": 68526.86015306367,
+      "importance_split": 393
+    },
+    {
+      "feature": "qt_tempo_relacionamento_mes",
+      "importance_gain": 64685.58883263219,
+      "importance_split": 2051
+    },
+    {
+      "feature": "diff_intervalo_vs_mediana",
+      "importance_gain": 41342.428832799196,
+      "importance_split": 138
+    },
+    {
+      "feature": "qt_pix_dia_maximo_trimestre",
+      "importance_gain": 40768.6418601705,
+      "importance_split": 641
+    },
+    {
+      "feature": "ratio_valor_desvio_padrao",
+      "importance_gain": 33343.98310686322,
+      "importance_split": 157
+    },
+    {
+      "feature": "nr_idade",
+      "importance_gain": 28658.802909590857,
+      "importance_split": 1655
+    },
+    {
+      "feature": "log_vl_pix",
+      "importance_gain": 28217.120816478895,
+      "importance_split": 512
+    },
+    {
+      "feature": "ratio_intervalo_vs_mediana",
+      "importance_gain": 25160.925365198986,
+      "importance_split": 117
+    },
+    {
+      "feature": "hour",
+      "importance_gain": 23864.605840586126,
+      "importance_split": 1386
+    },
+    {
+      "feature": "app_version_minor",
+      "importance_gain": 22778.341619241983,
+      "importance_split": 612
+    },
+    {
+      "feature": "latencia_host_ratio",
+      "importance_gain": 19645.600860712177,
+      "importance_split": 1010
+    },
+    {
+      "feature": "vl_latencia_rede_media_trimestre",
+      "importance_gain": 19485.455067764502,
+      "importance_split": 982
     }
   ]
 }

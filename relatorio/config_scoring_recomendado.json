@@ -1,0 +1,260 @@
+{
+  "abordagem_recomendada": "B_percentile",
+  "faixas": {
+    "aprovar": {
+      "min": 0,
+      "max": 60,
+      "acao": "Liberar automaticamente"
+    },
+    "confirmar": {
+      "min": 60,
+      "max": 75,
+      "acao": "Exigir 2FA / biometria"
+    },
+    "bloquear": {
+      "min": 75,
+      "max": 100,
+      "acao": "Parar para analista humano"
+    }
+  },
+  "metricas_com_faixas_padrao": {
+    "bloq_recall": 1.0,
+    "bloq_precision": 0.0229,
+    "bloq_f1": 0.0448,
+    "bloq_fn": 0,
+    "bloq_fp": 2942,
+    "any_recall": 1.0,
+    "any_fn": 0,
+    "any_fp": 7960,
+    "n_aprovar": 12041,
+    "n_confirmar": 5018,
+    "n_bloquear": 3011,
+    "fraud_in_aprovar": 0,
+    "fraud_in_confirmar": 0,
+    "fraud_in_bloquear": 69
+  },
+  "limiares_otimizados": {
+    "min_fraud_score": 99.58,
+    "p5_fraud_score": 99.67,
+    "best_f1_threshold": 99.5,
+    "best_f1_value": 0.8118,
+    "fpr_01_threshold": 99.56,
+    "suggested_bloquear": 94.6,
+    "suggested_confirmar": 79.6,
+    "recall_at_bloquear": 1.0,
+    "recall_at_confirmar": 1.0,
+    "fp_at_bloquear": 1019,
+    "fp_at_confirmar": 4030
+  },
+  "estatisticas_fraudes": {
+    "fraud_min": 99.5814648729447,
+    "fraud_p5": 99.66517189835575,
+    "fraud_p10": 99.68510214250124,
+    "fraud_p25": 99.74090682610863,
+    "fraud_median": 99.83059292476332,
+    "fraud_p75": 99.91529646238166,
+    "fraud_p95": 99.98305929247633,
+    "fraud_max": 100.0,
+    "fraud_mean": 99.82662131814013,
+    "normal_max": 99.745889387145,
+    "normal_p999": 99.55655206776284,
+    "normal_p99": 98.65969108121575,
+    "normal_p95": 94.67364225211759,
+    "normal_median": 49.83059292476333,
+    "gap": -0.1644245142003058
+  },
+  "todas_abordagens": {
+    "A_raw_x100": {
+      "band": {
+        "bloq_recall": 0.9565,
+        "bloq_precision": 0.9296,
+        "bloq_f1": 0.9429,
+        "bloq_fn": 3,
+        "bloq_fp": 5,
+        "any_recall": 0.971,
+        "any_fn": 2,
+        "any_fp": 12,
+        "n_aprovar": 19991,
+        "n_confirmar": 8,
+        "n_bloquear": 71,
+        "fraud_in_aprovar": 2,
+        "fraud_in_confirmar": 1,
+        "fraud_in_bloquear": 66
+      },
+      "optimal": {
+        "min_fraud_score": 31.51,
+        "p5_fraud_score": 96.18,
+        "best_f1_threshold": 95.0,
+        "best_f1_value": 0.9565,
+        "fpr_01_threshold": 27.05,
+        "suggested_bloquear": 26.5,
+        "suggested_confirmar": 11.5,
+        "recall_at_bloquear": 1.0,
+        "recall_at_confirmar": 1.0,
+        "fp_at_bloquear": 21,
+        "fp_at_confirmar": 41
+      },
+      "stats": {
+        "fraud_min": 31.506532747257708,
+        "fraud_p5": 96.17623681717873,
+        "fraud_p10": 97.4560224447149,
+        "fraud_p25": 99.77330053836576,
+        "fraud_median": 99.91358481027441,
+        "fraud_p75": 99.97547092437222,
+        "fraud_p95": 99.98486305362003,
+        "fraud_max": 99.9857681950832,
+        "fraud_mean": 97.63432130906288,
+        "normal_max": 99.83916500437894,
+        "normal_p999": 27.051628223162144,
+        "normal_p99": 0.18051797545369028,
+        "normal_p95": 0.0034945664014275108,
+        "normal_median": 0.00021641411276750235,
+        "gap": -68.33263225712123
+      }
+    },
+    "B_percentile": {
+      "band": {
+        "bloq_recall": 1.0,
+        "bloq_precision": 0.0229,
+        "bloq_f1": 0.0448,
+        "bloq_fn": 0,
+        "bloq_fp": 2942,
+        "any_recall": 1.0,
+        "any_fn": 0,
+        "any_fp": 7960,
+        "n_aprovar": 12041,
+        "n_confirmar": 5018,
+        "n_bloquear": 3011,
+        "fraud_in_aprovar": 0,
+        "fraud_in_confirmar": 0,
+        "fraud_in_bloquear": 69
+      },
+      "optimal": {
+        "min_fraud_score": 99.58,
+        "p5_fraud_score": 99.67,
+        "best_f1_threshold": 99.5,
+        "best_f1_value": 0.8118,
+        "fpr_01_threshold": 99.56,
+        "suggested_bloquear": 94.6,
+        "suggested_confirmar": 79.6,
+        "recall_at_bloquear": 1.0,
+        "recall_at_confirmar": 1.0,
+        "fp_at_bloquear": 1019,
+        "fp_at_confirmar": 4030
+      },
+      "stats": {
+        "fraud_min": 99.5814648729447,
+        "fraud_p5": 99.66517189835575,
+        "fraud_p10": 99.68510214250124,
+        "fraud_p25": 99.74090682610863,
+        "fraud_median": 99.83059292476332,
+        "fraud_p75": 99.91529646238166,
+        "fraud_p95": 99.98305929247633,
+        "fraud_max": 100.0,
+        "fraud_mean": 99.82662131814013,
+        "normal_max": 99.745889387145,
+        "normal_p999": 99.55655206776284,
+        "normal_p99": 98.65969108121575,
+        "normal_p95": 94.67364225211759,
+        "normal_median": 49.83059292476333,
+        "gap": -0.1644245142003058
+      }
+    },
+    "C_hybrid": {
+      "band": {
+        "bloq_recall": 0.971,
+        "bloq_precision": 0.8816,
+        "bloq_f1": 0.9241,
+        "bloq_fn": 2,
+        "bloq_fp": 9,
+        "any_recall": 1.0,
+        "any_fn": 0,
+        "any_fp": 46,
+        "n_aprovar": 19955,
+        "n_confirmar": 39,
+        "n_bloquear": 76,
+        "fraud_in_aprovar": 0,
+        "fraud_in_confirmar": 2,
+        "fraud_in_bloquear": 67
+      },
+      "optimal": {
+        "min_fraud_score": 70.6,
+        "p5_fraud_score": 95.96,
+        "best_f1_threshold": 95.0,
+        "best_f1_value": 0.9565,
+        "fpr_01_threshold": 68.53,
+        "suggested_bloquear": 65.6,
+        "suggested_confirmar": 50.6,
+        "recall_at_bloquear": 1.0,
+        "recall_at_confirmar": 1.0,
+        "fp_at_bloquear": 26,
+        "fp_at_confirmar": 58
+      },
+      "stats": {
+        "fraud_min": 70.60261309890308,
+        "fraud_p5": 95.96019332014589,
+        "fraud_p10": 97.00491628139993,
+        "fraud_p25": 98.89657186805368,
+        "fraud_median": 99.13584810274413,
+        "fraud_p75": 99.75470924372212,
+        "fraud_p95": 99.8486305362003,
+        "fraud_max": 99.85768195083202,
+        "fraud_mean": 98.2142902748775,
+        "normal_max": 98.95033877908484,
+        "normal_p999": 68.52581411158107,
+        "normal_p99": 16.341966257561506,
+        "normal_p95": 1.7472832007137555,
+        "normal_median": 0.10820705638375117,
+        "gap": -28.347725680181767
+      }
+    },
+    "D_ensemble_x100": {
+      "band": {
+        "bloq_recall": 0.9565,
+        "bloq_precision": 0.9296,
+        "bloq_f1": 0.9429,
+        "bloq_fn": 3,
+        "bloq_fp": 5,
+        "any_recall": 0.971,
+        "any_fn": 2,
+        "any_fp": 9,
+        "n_aprovar": 19994,
+        "n_confirmar": 5,
+        "n_bloquear": 71,
+        "fraud_in_aprovar": 2,
+        "fraud_in_confirmar": 1,
+        "fraud_in_bloquear": 66
+      },
+      "optimal": {
+        "min_fraud_score": 36.38,
+        "p5_fraud_score": 96.18,
+        "best_f1_threshold": 95.0,
+        "best_f1_value": 0.9565,
+        "fpr_01_threshold": 29.31,
+        "suggested_bloquear": 31.4,
+        "suggested_confirmar": 16.4,
+        "recall_at_bloquear": 1.0,
+        "recall_at_confirmar": 1.0,
+        "fp_at_bloquear": 19,
+        "fp_at_confirmar": 48
+      },
+      "stats": {
+        "fraud_min": 36.38481242659085,
+        "fraud_p5": 96.17623681717873,
+        "fraud_p10": 97.4560224447149,
+        "fraud_p25": 99.77330053836576,
+        "fraud_median": 99.91358481027441,
+        "fraud_p75": 99.97547092437222,
+        "fraud_p95": 99.98486305362003,
+        "fraud_max": 99.9857681950832,
+        "fraud_mean": 97.56889109105431,
+        "normal_max": 99.83916500437894,
+        "normal_p999": 29.310937652084757,
+        "normal_p99": 0.18051797545369028,
+        "normal_p95": 0.0034945664014275108,
+        "normal_median": 0.00021641411276750235,
+        "gap": -63.45435257778809
+      }
+    }
+  }
+}
