@@ -42,7 +42,7 @@ import pandas as pd
 # =========================================================
 # CONFIG
 # =========================================================
-PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 DADOS_DIR = os.path.join(PROJECT_ROOT, "dados")
 ARTEFACT_DIR = os.path.join(PROJECT_ROOT, "backend", "artefatos")
 

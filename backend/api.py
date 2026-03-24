@@ -59,6 +59,52 @@ logger = logging.getLogger("api")
 
 
 # =========================================================
+# FUNÇÕES DE EXPLICABILIDADE
+# =========================================================
+def _identificar_fator_predominante(result: Dict[str, Any]) -> str:
+    """Identifica qual foi a principal dimensão que motivou o bloqueio/confirmação."""
+    if result.get("veto_aplicado"):
+        return "Regra de Veto de Negócio"
+    
+    if result.get("cascade", {}).get("triggered"):
+        return "Padrão Crítico de Movimentação (Cascade)"
+        
+    se_score = result.get("social_engineering", {}).get("se_score", 0)
+    beh_score = result.get("behavioral", {}).get("behavioral_score", 0)
+    
+    if se_score >= 60:
+        return "Engenharia Social / Golpe"
+    if beh_score >= 60:
+        return "Anomalia Comportamental / Dispositivo"
+        
+    lgbm_mapped = result.get("componentes", {}).get("lgbm_mapped", 0)
+    if lgbm_mapped >= 85:
+        return "Modelo Preditivo (Machine Learning)"
+        
+    return "Múltiplos Fatores de Risco Combinados"
+
+def _gerar_mensagem_cliente(decisao: str, result: Dict[str, Any]) -> str:
+    """Gera uma mensagem amigável (orientada a CX) que o app/front pode mostrar ao usuário."""
+    fator = _identificar_fator_predominante(result)
+    
+    if decisao == "CONFIRMAR":
+        if fator == "Engenharia Social / Golpe":
+            return "Para sua segurança, notamos um padrão incomum nesta transferência. Por favor, confirme a identidade do recebedor antes de prosseguir usando sua biometria facial."
+        if fator == "Anomalia Comportamental / Dispositivo":
+            return "Identificamos um acesso a partir de um novo dispositivo ou local. Confirme que é você mesmo(a) realizando esta transação."
+        return "Transação em análise de segurança. Por favor, valide sua identidade para aprovação imediata."
+        
+    if decisao == "BLOQUEAR":
+        if fator == "Engenharia Social / Golpe":
+            return "Transação bloqueada preventivamente. Este recebedor possui histórico associado a possíveis golpes. Se você não conhece a pessoa, não prossiga. Central de atendimento foi acionada."
+        if fator == "Anomalia Comportamental / Dispositivo":
+            return "Bloqueio preventivo de segurança: Suspeita de acesso não autorizado à sua conta. Por favor, entre em contato com nossa central telefônica."
+        return "Transação retida pelo nosso sistema de prevenção a fraudes para análise humana. Entraremos em contato em breve."
+        
+    return "Transação processada com sucesso."
+
+
+# =========================================================
 # PIPELINE IMPORT (lazy — carrega no startup)
 # =========================================================
 pipeline = None
@@ -67,7 +113,15 @@ pipeline = None
 def _load_pipeline():
     """Carrega o pipeline orquestrador."""
     global pipeline
-    from pipeline_orquestrador import PipelineOrquestrador
+    import sys
+    import os
+    
+    # Adicionar o diretório backend ao sys.path para imports corretos
+    backend_dir = os.path.dirname(os.path.abspath(__file__))
+    if backend_dir not in sys.path:
+        sys.path.insert(0, backend_dir)
+        
+    from core.pipeline_orquestrador import PipelineOrquestrador
     from core.decision_engine import EngineConfig
 
     artefatos_dir = os.getenv("ARTEFATOS_DIR", "backend/artefatos")
@@ -248,6 +302,8 @@ class AnalyzeResponse(BaseModel):
     customer_id: Optional[str] = None
     timestamp: Optional[str] = None
     vl_pix: Optional[float] = None
+    motivo_principal: Optional[str] = None
+    explicabilidade: Dict[str, Any] = {}
     componentes: Dict[str, Any] = {}
     agravantes: List[Dict[str, Any]] = []
     peso_total: int = 0
@@ -453,6 +509,59 @@ async def analyze_transaction(transaction: TransactionInput):
 
     try:
         result = pipeline.analisar(transaction.to_dict())
+        
+        # Enriquecer o payload com alta explicabilidade se a decisão não for APROVAR
+        decisao = result.get("decisao")
+        if decisao in ("BLOQUEAR", "CONFIRMAR"):
+            motivos = []
+            
+            # 1. Checar vetos
+            veto = result.get("veto_aplicado")
+            if veto:
+                motivos.append(veto)
+                
+            # 2. Checar Cascade Rules
+            cascade = result.get("cascade", {})
+            if cascade.get("triggered"):
+                regras = ", ".join(cascade.get("rules", []))
+                motivos.append(f"Regra de bloqueio em cascata acionada: {regras}")
+                
+            # 3. Checar Engenharia Social
+            se = result.get("social_engineering", {})
+            se_patterns = se.get("patterns", [])
+            if se_patterns:
+                padroes_str = ", ".join([p if isinstance(p, str) else p.get("pattern_name", "") for p in se_patterns])
+                motivos.append(f"Padrão de Engenharia Social detectado: {padroes_str}")
+                
+            # 4. Checar Análise Comportamental
+            beh = result.get("behavioral", {})
+            beh_factors = beh.get("risk_factors", [])
+            if beh_factors:
+                fatores = [f.get("descricao", f.get("codigo", "")) for f in beh_factors[:2]]
+                motivos.append(f"Anomalia comportamental: {'; '.join(fatores)}")
+                
+            # 5. Principais Agravantes (se não houver motivos mais fortes)
+            if not motivos:
+                agravantes = result.get("agravantes", [])
+                agravantes_sorted = sorted(agravantes, key=lambda x: x.get("peso", 0), reverse=True)
+                if agravantes_sorted:
+                    top_agravante = agravantes_sorted[0]
+                    motivos.append(f"Alto risco detectado: {top_agravante.get('descricao', top_agravante.get('codigo'))}")
+            
+            # Definir o motivo principal (o mais forte)
+            result["motivo_principal"] = motivos[0] if motivos else "Transação classificada como alto risco pelo modelo preditivo."
+            
+            # Montar bloco de explicabilidade estruturada
+            result["explicabilidade"] = {
+                "mensagem_cliente": _gerar_mensagem_cliente(decisao, result),
+                "detalhes_fraude": motivos,
+                "score_anomalia_percentil": result.get("componentes", {}).get("if_score", 0) * 100,
+                "fator_risco_predominante": _identificar_fator_predominante(result)
+            }
+        else:
+            result["motivo_principal"] = None
+            result["explicabilidade"] = {}
+
         elapsed = (time.perf_counter() - t0) * 1000
 
         metrics.record_request(result["decisao"], elapsed)

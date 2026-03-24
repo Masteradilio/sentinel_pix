@@ -1,37 +1,17 @@
 """
-core/social_engineering.py v2.0 — Detector de Padrões de Engenharia Social
+core/social_engineering.py v2.1 — Detector de Padrões de Engenharia Social
 
-Reescrita completa v2.0:
-  1. CRIADO _adapt_features() — mapeia features do pipeline para nomes esperados
-  2. REMOVIDOS indicadores sem dados reais: mulher_idosa (ds_sexo nem sempre
-     disponível no RT), viuvo_viuva, segmento_alto_patrimonio, recebedor_nunca_visto
-     → Marcados como "fase 2" (serão ativados quando cobertura > 80%)
-  3. SUBSTITUÍDO vl_razao_pix_limite → ratio_valor_mediana em todos os indicadores
-     (vl_razao_pix_limite não existe no pipeline; ratio_valor_mediana sim)
-  4. SUBSTITUÍDO tp_primeiro_envio_recebedor_trimestre → first_receiver_flag
-     (já calculado pelo pipeline sequencial, mais confiável)
-  5. IMPLEMENTADO escalada_valores usando cache do pipeline
-     (compara vl_pix com mediana + desvio padrão, sem depender de vl_transacao_anterior)
-  6. ATUALIZADOS padrões removendo indicadores indisponíveis dos optional
-  7. ADICIONADO detect_from_pipeline() — recebe dados já processados
-  8. MANTIDOS os 11 padrões mas ajustados min_score onde indicadores foram removidos
+Mudanças v2.0 → v2.1:
+  1. PROMOVIDO recebedor_nunca_visto de fase 2 para fase 1
+     (qt_envio_recebedor_trimestre agora criado pelo orquestrador v1.1)
+  2. NOVO padrão #12: BURST_ESVAZIAMENTO_CONTA
+     (burst + conta antiga + recebedor novo — cenário dos 18 FN do LGBM)
+  3. _adapt_features: mapeia distinct_receivers_so_far e valor_over_trimestre_avg
+  4. NOVO indicador: multiplos_recebedores_distintos (3+ recebedores)
+  5. NOVO indicador: valor_concentrado_trimestre (>10% do volume)
+  6. AJUSTADO PHASE2_INDICATORS: removido recebedor_nunca_visto (agora fase 1)
 
-Novos indicadores v2.0 (com dados v2.1b do Big Data):
-  - is_viuvo_flag (do pipeline, quando disponível)
-  - is_segmento_premium_flag (do pipeline)
-  - is_sexo_feminino_flag (do pipeline)
-  - perfil_vulneravel_se_flag (viúvo + idoso + sem dependentes)
-  - pix_over_100pct_renda_flag (PIX > renda mensal)
-  - pix_over_50pct_renda_flag (PIX > 50% da renda)
-  - renda_missing_flag (renda desconhecida)
-  - ratio_pix_renda (PIX / renda)
-  - burst_30m_flag (do pipeline)
-  - tx_count_prev_30m (do pipeline)
-
-Integração com pipeline:
-  - detect_from_pipeline(features_dict) → método principal
-  - detect_patterns(features_dict) → compatibilidade com orquestrador existente
-  - Todos os indicadores usam APENAS campos que existem no preprocessing.py v3.1
+Total de padrões: 11 → 12
 """
 
 from __future__ import annotations
@@ -45,14 +25,14 @@ logger = logging.getLogger(__name__)
 
 
 # =========================================================
-# DATA CLASSES
+# DATA CLASSES (sem mudanças)
 # =========================================================
 @dataclass
 class PatternMatch:
     """Representa um padrão de engenharia social detectado."""
     pattern_name: str
-    severity: str           # "CRITICO", "ALTO", "MEDIO", "BAIXO"
-    score: int              # Pontuação interna do padrão
+    severity: str
+    score: int
     matched_indicators: List[str]
     description: str
 
@@ -60,7 +40,7 @@ class PatternMatch:
 @dataclass
 class SEAnalysisResult:
     """Resultado completo da análise de engenharia social."""
-    se_score: float                                     # 0-100
+    se_score: float
     patterns: List[PatternMatch] = field(default_factory=list)
     active_indicators: Dict[str, bool] = field(default_factory=dict)
     phase2_indicators_missing: List[str] = field(default_factory=list)
@@ -80,7 +60,6 @@ class SEAnalysisResult:
         return self.patterns[0] if self.patterns else None
 
     def to_dict(self) -> Dict[str, Any]:
-        """Serializa para dict (usado pelo orquestrador/API)."""
         return {
             "se_score": round(self.se_score, 2),
             "risk_level": self.risk_level,
@@ -100,7 +79,6 @@ class SEAnalysisResult:
         }
 
     def to_features(self) -> Dict[str, float]:
-        """Exporta features numéricas para o score final do orquestrador."""
         return {
             "se_score": round(self.se_score, 2),
             "se_pattern_count": float(len(self.patterns)),
@@ -109,9 +87,6 @@ class SEAnalysisResult:
         }
 
 
-# =========================================================
-# SEVERITY ORDER (usado para ordenação)
-# =========================================================
 _SEVERITY_ORDER = {"CRITICO": 0, "ALTO": 1, "MEDIO": 2, "BAIXO": 3}
 
 
@@ -120,60 +95,31 @@ _SEVERITY_ORDER = {"CRITICO": 0, "ALTO": 1, "MEDIO": 2, "BAIXO": 3}
 # =========================================================
 class SocialEngineeringDetector:
     """
-    Detecta padrões típicos de golpes de engenharia social.
+    Detecta padrões típicos de golpes de engenharia social v2.1.
 
-    11 padrões detectados:
-    ─────────────────────────────────────────────────────────
-    #   Padrão                      Severidade  Min Score
-    1   FALSO_FUNCIONARIO_BANCO     CRITICO     4
-    2   FALSO_SEQUESTRO             CRITICO     5
-    3   ESVAZIAMENTO_CONTA          CRITICO     5
-    4   GOLPE_PIX_ERRADO            ALTO        4
-    5   ROMANCE_SCAM                ALTO        4
-    6   IDOSO_VULNERAVEL_70         CRITICO     4
-    7   IDOSO_VULNERAVEL_80         CRITICO     3
-    8   CONTA_LARANJA_SAIDA         CRITICO     4
-    9   GOLPE_INVESTIMENTO          ALTO        4
-    10  COACAO_FISICA               CRITICO     5
-    11  TRANSACAO_ATIPICA           MEDIO       4
-    ─────────────────────────────────────────────────────────
-
-    Todos os indicadores usam APENAS campos disponíveis no
-    preprocessing.py v3.1 (sem dependências externas).
+    12 padrões detectados (11 originais + BURST_ESVAZIAMENTO_CONTA).
     """
 
-    # Indicadores de "fase 2" — serão ativados quando cobertura > 80%
+    # Indicadores de "fase 2" — v2.1: removido recebedor_nunca_visto (agora fase 1)
     PHASE2_INDICATORS = [
-        "mulher_idosa_raw",             # depende de ds_sexo com alta cobertura
-        "viuvo_viuva_raw",              # depende de ds_estado_civil com alta cobertura
-        "segmento_alto_patrimonio_raw", # depende de ds_segmento com alta cobertura
-        "recebedor_nunca_visto",        # qt_envio_recebedor_trimestre == 0 (validar cobertura)
+        "mulher_idosa_raw",
+        "viuvo_viuva_raw",
+        "segmento_alto_patrimonio_raw",
     ]
 
     def __init__(self):
-        """Inicializa o detector com indicadores e padrões configurados."""
-        self._value_cache: Dict[str, List[float]] = {}  # cpf -> últimos valores
+        self._value_cache: Dict[str, List[float]] = {}
         self._max_cache_size = 10
         self._setup_indicators()
         self._setup_patterns()
-        logger.info("SocialEngineeringDetector v2.0 inicializado")
+        logger.info("SocialEngineeringDetector v2.1 inicializado (12 padrões)")
 
     # =============================================================
     # FEATURE ADAPTER
     # =============================================================
     @staticmethod
     def _adapt_features(features: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Mapeia features do pipeline para nomes esperados pelos indicadores.
-
-        Garante compatibilidade entre:
-        - Nomes do preprocessing.py v3.1 (snake_case)
-        - Nomes legados do orquestrador
-        - Features derivadas que podem vir com nomes diferentes
-
-        Returns:
-            Dict normalizado com todos os campos necessários.
-        """
+        """Mapeia features do pipeline para nomes esperados pelos indicadores."""
         f = {}
 
         # --- IDs e metadata ---
@@ -192,7 +138,7 @@ class SocialEngineeringDetector:
         else:
             f["dt_pix"] = None
 
-        # --- Temporais do pipeline ---
+        # --- Temporais ---
         f["hour"] = _safe_int(features.get("hour"), -1)
         f["day_of_week"] = _safe_int(features.get("day_of_week"), -1)
         f["is_business_hours"] = _safe_int(features.get("is_business_hours"), 0)
@@ -234,16 +180,15 @@ class SocialEngineeringDetector:
         )
         f["cd_cpf_cnpj_recebedor"] = str(features.get("cd_cpf_cnpj_recebedor") or "")
 
-        # --- Tipo de chave (flags do pipeline) ---
+        # --- Tipo de chave ---
         f["pix_key_random_flag"] = _safe_int(features.get("pix_key_random_flag"), 0)
         f["pix_key_email_flag"] = _safe_int(features.get("pix_key_email_flag"), 0)
         f["pix_key_document_flag"] = _safe_int(features.get("pix_key_document_flag"), 0)
         f["pix_key_other_flag"] = _safe_int(features.get("pix_key_other_flag"), 0)
         f["pix_key_missing_flag_derived"] = _safe_int(features.get("pix_key_missing_flag_derived"), 0)
-        # Fallback para texto bruto (quando disponível)
         f["ds_tipo_chave"] = str(features.get("ds_tipo_chave") or "")
 
-        # --- Velocidade / Frequência (do pipeline) ---
+        # --- Velocidade / Frequência ---
         f["qt_intervalo_transacao_minuto"] = _safe_float(features.get("qt_intervalo_transacao_minuto"))
         f["qt_pix_dia_maximo_trimestre"] = _safe_int(features.get("qt_pix_dia_maximo_trimestre"), 0)
         f["qt_total_pix_trimestre"] = _safe_int(features.get("qt_total_pix_trimestre"), 0)
@@ -251,6 +196,10 @@ class SocialEngineeringDetector:
         f["tx_count_prev_30m"] = _safe_int(features.get("tx_count_prev_30m"), 0)
         f["minutes_since_prev_tx"] = _safe_float(features.get("minutes_since_prev_tx"))
         f["is_first_tx_trimestre"] = _safe_int(features.get("is_first_tx_trimestre"), 0)
+
+        # --- v2.1: Novas features do IF v4 / orquestrador v1.1 ---
+        f["distinct_receivers_so_far"] = _safe_int(features.get("distinct_receivers_so_far"), 1)
+        f["valor_over_trimestre_avg"] = _safe_float(features.get("valor_over_trimestre_avg"))
 
         # --- Interação / Auth ---
         f["tempo_interacao_ms_final"] = _safe_float(features.get("tempo_interacao_ms_final"))
@@ -271,7 +220,7 @@ class SocialEngineeringDetector:
         f["rule_velocity_score"] = _safe_int(features.get("rule_velocity_score"), 0)
         f["rule_score_raw"] = _safe_float(features.get("rule_score_raw"), 0.0)
 
-        # --- Topaz (informativo, não usado no score SE) ---
+        # --- Topaz ---
         f["topaz_score_filled"] = _safe_float(features.get("topaz_score_filled"), 0.0)
         f["topaz_rejeitada_flag"] = _safe_int(features.get("topaz_rejeitada_flag"), 0)
 
@@ -281,12 +230,7 @@ class SocialEngineeringDetector:
     # INDICATORS SETUP
     # =============================================================
     def _setup_indicators(self):
-        """
-        Define os indicadores de risco.
-
-        REGRA: Cada indicador usa APENAS campos do _adapt_features().
-        Nenhum indicador faz I/O externo.
-        """
+        """Define os indicadores de risco."""
         self.INDICATORS: Dict[str, Callable[[Dict[str, Any]], bool]] = {
 
             # ─── PERFIL DO CLIENTE ───────────────────────────────
@@ -296,15 +240,15 @@ class SocialEngineeringDetector:
             "cliente_novo": lambda f: f["qt_tempo_relacionamento_mes"] <= 6,
             "cliente_muito_novo": lambda f: f["qt_tempo_relacionamento_mes"] <= 3,
             "conta_recem_aberta": lambda f: f["qt_tempo_relacionamento_mes"] <= 1,
+            "conta_antiga": lambda f: f["qt_tempo_relacionamento_mes"] >= 12,
 
-            # Indicadores do pipeline v2.1b (flags prontas)
+            # Flags do pipeline v2.1b
             "perfil_vulneravel_se": lambda f: f["perfil_vulneravel_se_flag"] == 1,
             "is_viuvo": lambda f: f["is_viuvo_flag"] == 1,
             "is_segmento_premium": lambda f: f["is_segmento_premium_flag"] == 1,
             "is_sexo_feminino": lambda f: f["is_sexo_feminino_flag"] == 1,
 
             # ─── HORÁRIO ─────────────────────────────────────────
-            # Usa hour/day_of_week do pipeline (já calculados)
             "horario_noturno": lambda f: f["hour"] >= 22 or (0 <= f["hour"] < 6),
             "horario_madrugada": lambda f: 0 <= f["hour"] < 5,
             "horario_comercial": lambda f: 8 <= f["hour"] < 18 and 0 <= f["day_of_week"] <= 4,
@@ -312,19 +256,18 @@ class SocialEngineeringDetector:
             "fim_de_semana": lambda f: f["day_of_week"] >= 5,
 
             # ─── RECEBEDOR ───────────────────────────────────────
-            # Adaptação #4: first_receiver_flag do pipeline (mais confiável)
             "primeiro_envio": lambda f: f["first_receiver_flag"] == 1,
             "recebedor_pj": lambda f: len(f["cd_cpf_cnpj_recebedor"]) >= 14,
             "recebedor_mesmo_cpf": lambda f: f["receiver_document_same_as_customer_flag"] == 1,
+            # v2.1: PROMOVIDO de fase 2 — qt_envio_recebedor_trimestre agora disponível
+            "recebedor_nunca_visto": lambda f: f["qt_envio_recebedor_trimestre"] == 0,
 
             # ─── TIPO DE CHAVE ───────────────────────────────────
-            # Usa flags do pipeline (já calculadas no preprocessing)
             "chave_aleatoria": lambda f: f["pix_key_random_flag"] == 1,
             "chave_email": lambda f: f["pix_key_email_flag"] == 1,
             "chave_documento_telefone": lambda f: f["pix_key_document_flag"] == 1,
 
             # ─── VALOR ───────────────────────────────────────────
-            # Adaptação #3: ratio_valor_mediana em vez de vl_razao_pix_limite
             "valor_alto_vs_historico": lambda f: (
                 f["ratio_valor_mediana"] is not None and f["ratio_valor_mediana"] >= 3.0
             ),
@@ -363,6 +306,13 @@ class SocialEngineeringDetector:
             "alta_frequencia_diaria": lambda f: f["qt_pix_dia_maximo_trimestre"] >= 5,
             "primeira_tx_trimestre": lambda f: f["is_first_tx_trimestre"] == 1,
 
+            # v2.1: Novos indicadores usando features do IF v4
+            "multiplos_recebedores_distintos": lambda f: f["distinct_receivers_so_far"] >= 3,
+            "valor_concentrado_trimestre": lambda f: (
+                f["valor_over_trimestre_avg"] is not None
+                and f["valor_over_trimestre_avg"] >= 0.10
+            ),
+
             # ─── COMPOSTOS ───────────────────────────────────────
             "multiplos_pix_rapidos": lambda f: (
                 f["burst_30m_flag"] == 1 and f["qt_pix_dia_maximo_trimestre"] >= 3
@@ -372,6 +322,12 @@ class SocialEngineeringDetector:
                 f["ratio_valor_mediana"] is not None
                 and f["ratio_valor_mediana"] >= 5.0
                 and f["burst_30m_flag"] == 1
+            ),
+            # v2.1: Burst em conta antiga (cenário dos 18 FN)
+            "burst_conta_antiga": lambda f: (
+                f["qt_tempo_relacionamento_mes"] >= 12
+                and f["burst_30m_flag"] == 1
+                and f["first_receiver_flag"] == 1
             ),
 
             # ─── AUTENTICAÇÃO ────────────────────────────────────
@@ -386,22 +342,18 @@ class SocialEngineeringDetector:
     # PATTERNS SETUP
     # =============================================================
     def _setup_patterns(self):
-        """
-        Define os 11 padrões de golpes.
-
-        Adaptação #8: min_score ajustado onde indicadores de fase 2 foram removidos.
-        """
+        """Define os 12 padrões de golpes."""
         self.PATTERNS = {
-            # ─── 1. FALSO FUNCIONÁRIO DO BANCO ───────────────────
+            # ─── 1-11: Mesmos do v2.0 ────────────────────────────
             "FALSO_FUNCIONARIO_BANCO": {
                 "required": ["chave_aleatoria"],
                 "optional": [
                     "idade_60_plus", "horario_comercial",
                     "valor_alto_vs_historico", "valor_redondo", "primeiro_envio",
                     "is_segmento_premium", "login_senha",
-                    "renda_incompativel",
+                    "renda_incompativel", "recebedor_nunca_visto",
                 ],
-                "min_score": 4,   # Ajustado: era 5, removido mulher_idosa dos optional
+                "min_score": 4,
                 "severity": "CRITICO",
                 "description": (
                     "Padrão de golpe do falso funcionário do banco: "
@@ -409,16 +361,15 @@ class SocialEngineeringDetector:
                 ),
             },
 
-            # ─── 2. FALSO SEQUESTRO ──────────────────────────────
             "FALSO_SEQUESTRO": {
                 "required": ["horario_noturno", "valor_alto_vs_historico"],
                 "optional": [
                     "horario_madrugada", "multiplos_pix_rapidos",
                     "intervalo_muito_curto", "chave_aleatoria",
                     "primeiro_envio", "aproximando_esgotamento",
-                    "burst_intenso",
+                    "burst_intenso", "recebedor_nunca_visto",
                 ],
-                "min_score": 5,  # Ajustado: era 6, chave_celular removida
+                "min_score": 5,
                 "severity": "CRITICO",
                 "description": (
                     "Padrão de golpe do falso sequestro: "
@@ -426,16 +377,16 @@ class SocialEngineeringDetector:
                 ),
             },
 
-            # ─── 3. ESVAZIAMENTO DE CONTA ────────────────────────
             "ESVAZIAMENTO_CONTA": {
                 "required": ["multiplos_pix_rapidos"],
                 "optional": [
                     "intervalo_muito_curto", "valor_critico_vs_historico",
                     "primeiro_envio", "chave_aleatoria", "horario_noturno",
                     "escalada_valores", "burst_intenso",
-                    "renda_incompativel",
+                    "renda_incompativel", "multiplos_recebedores_distintos",
+                    "valor_concentrado_trimestre",
                 ],
-                "min_score": 5,   # Ajustado: era 6, removido aproximando_limite dos required
+                "min_score": 5,
                 "severity": "CRITICO",
                 "description": (
                     "Esvaziamento de conta: múltiplos PIX rápidos + "
@@ -443,12 +394,11 @@ class SocialEngineeringDetector:
                 ),
             },
 
-            # ─── 4. GOLPE DO PIX ERRADO ──────────────────────────
             "GOLPE_PIX_ERRADO": {
                 "required": ["primeiro_envio", "chave_aleatoria"],
                 "optional": [
                     "valor_redondo", "intervalo_curto", "horario_comercial",
-                    "valor_alto_vs_historico",
+                    "valor_alto_vs_historico", "recebedor_nunca_visto",
                 ],
                 "min_score": 4,
                 "severity": "ALTO",
@@ -458,7 +408,6 @@ class SocialEngineeringDetector:
                 ),
             },
 
-            # ─── 5. ROMANCE SCAM ─────────────────────────────────
             "ROMANCE_SCAM": {
                 "required": ["primeiro_envio", "valor_alto_vs_historico"],
                 "optional": [
@@ -466,8 +415,9 @@ class SocialEngineeringDetector:
                     "chave_email", "valor_muito_alto_vs_historico",
                     "fim_de_semana", "escalada_valores",
                     "perfil_vulneravel_se", "renda_metade_comprometida",
+                    "recebedor_nunca_visto",
                 ],
-                "min_score": 4,  # Ajustado: era 5, removido mulher_idosa e chave_celular
+                "min_score": 4,
                 "severity": "ALTO",
                 "description": (
                     "Possível golpe do amor: primeiro envio + valor alto + "
@@ -475,7 +425,6 @@ class SocialEngineeringDetector:
                 ),
             },
 
-            # ─── 6. IDOSO VULNERÁVEL 70+ ─────────────────────────
             "IDOSO_VULNERAVEL_70": {
                 "required": ["idade_70_plus", "primeiro_envio"],
                 "optional": [
@@ -483,8 +432,9 @@ class SocialEngineeringDetector:
                     "horario_comercial", "valor_redondo",
                     "is_segmento_premium", "login_senha",
                     "perfil_vulneravel_se", "renda_incompativel",
+                    "recebedor_nunca_visto",
                 ],
-                "min_score": 4,  # Ajustado: era 5, removido mulher_idosa
+                "min_score": 4,
                 "severity": "CRITICO",
                 "description": (
                     "Cliente 70+ enviando para destino desconhecido — "
@@ -492,13 +442,13 @@ class SocialEngineeringDetector:
                 ),
             },
 
-            # ─── 7. IDOSO VULNERÁVEL 80+ ─────────────────────────
             "IDOSO_VULNERAVEL_80": {
                 "required": ["idade_80_plus"],
                 "optional": [
                     "valor_alto_vs_historico", "primeiro_envio",
                     "chave_aleatoria", "perfil_vulneravel_se",
                     "renda_incompativel", "login_senha",
+                    "recebedor_nunca_visto",
                 ],
                 "min_score": 3,
                 "severity": "CRITICO",
@@ -508,15 +458,15 @@ class SocialEngineeringDetector:
                 ),
             },
 
-            # ─── 8. CONTA LARANJA (SAÍDA) ────────────────────────
             "CONTA_LARANJA_SAIDA": {
                 "required": ["conta_recem_aberta", "valor_absoluto_alto"],
                 "optional": [
                     "multiplos_pix_rapidos", "alta_frequencia_diaria",
                     "chave_aleatoria", "primeiro_envio",
                     "burst_intenso", "renda_desconhecida_valor_alto",
+                    "multiplos_recebedores_distintos",
                 ],
-                "min_score": 4,  # Ajustado: era 5, removido frequencia_anormal
+                "min_score": 4,
                 "severity": "CRITICO",
                 "description": (
                     "Padrão de conta laranja: conta nova + alto volume + "
@@ -524,15 +474,15 @@ class SocialEngineeringDetector:
                 ),
             },
 
-            # ─── 9. GOLPE DE INVESTIMENTO ────────────────────────
             "GOLPE_INVESTIMENTO": {
                 "required": ["escalada_valores"],
                 "optional": [
                     "primeiro_envio", "chave_aleatoria",
                     "recebedor_pj", "valor_alto_vs_historico",
                     "valor_absoluto_alto", "renda_metade_comprometida",
+                    "recebedor_nunca_visto",
                 ],
-                "min_score": 4,   # Ajustado: era 5, removido pix_acima_maximo_historico
+                "min_score": 4,
                 "severity": "ALTO",
                 "description": (
                     "Possível golpe de investimento: padrão de escalada de "
@@ -540,13 +490,13 @@ class SocialEngineeringDetector:
                 ),
             },
 
-            # ─── 10. COAÇÃO FÍSICA ───────────────────────────────
             "COACAO_FISICA": {
                 "required": ["intervalo_muito_curto", "valor_absoluto_muito_alto"],
                 "optional": [
                     "horario_noturno", "horario_madrugada",
                     "multiplos_pix_rapidos", "chave_aleatoria",
                     "burst_intenso", "renda_incompativel",
+                    "multiplos_recebedores_distintos",
                 ],
                 "min_score": 5,
                 "severity": "CRITICO",
@@ -556,12 +506,12 @@ class SocialEngineeringDetector:
                 ),
             },
 
-            # ─── 11. TRANSAÇÃO ATÍPICA ───────────────────────────
             "TRANSACAO_ATIPICA": {
                 "required": ["zscore_valor_extremo", "primeiro_envio"],
                 "optional": [
                     "chave_aleatoria", "horario_noturno",
                     "valor_absoluto_alto", "renda_metade_comprometida",
+                    "recebedor_nunca_visto",
                 ],
                 "min_score": 4,
                 "severity": "MEDIO",
@@ -570,48 +520,52 @@ class SocialEngineeringDetector:
                     "destinatário desconhecido"
                 ),
             },
+
+            # ─── 12. NOVO v2.1: BURST_ESVAZIAMENTO_CONTA ────────
+            "BURST_ESVAZIAMENTO_CONTA": {
+                "required": ["burst_conta_antiga", "pix_acima_1000"],
+                "optional": [
+                    "primeiro_envio", "multiplos_recebedores_distintos",
+                    "valor_alto_vs_historico", "chave_aleatoria",
+                    "intervalo_muito_curto", "burst_intenso",
+                    "valor_concentrado_trimestre", "recebedor_nunca_visto",
+                    "renda_incompativel",
+                ],
+                "min_score": 5,
+                "severity": "CRITICO",
+                "description": (
+                    "Conta antiga com burst súbito de PIX para recebedores novos — "
+                    "padrão de conta comprometida por engenharia social"
+                ),
+            },
         }
 
     # =============================================================
-    # ESCALADA DE VALORES (usando cache do pipeline)
+    # ESCALADA DE VALORES
     # =============================================================
     def _detectar_escalada_valores(self, f: Dict[str, Any]) -> bool:
-        """
-        Detecta padrão de escalada de valores.
-
-        Adaptação #5: Usa cache interno + zscore + ratio_valor_mediana
-        em vez de depender de vl_transacao_anterior (que não existe no pipeline).
-
-        Lógica:
-        - Se ratio_valor_mediana >= 3 E zscore >= 2 → possível escalada
-        - Se há cache de valores anteriores para o CPF → compara sequência
-        """
+        """Detecta padrão de escalada de valores."""
         cpf = str(f.get("customer_id") or "")
         vl_pix = f.get("vl_pix", 0)
         ratio = f.get("ratio_valor_mediana")
         zscore = f.get("zscore_valor_aprox")
 
-        # Método 1: Comparar com cache de transações anteriores
         if cpf and cpf != "None":
             history = self._value_cache.get(cpf, [])
 
-            # Registrar valor atual no cache
             if cpf not in self._value_cache:
                 self._value_cache[cpf] = []
             self._value_cache[cpf].append(vl_pix)
             if len(self._value_cache[cpf]) > self._max_cache_size:
                 self._value_cache[cpf] = self._value_cache[cpf][-self._max_cache_size:]
 
-            # Se tem pelo menos 2 valores anteriores, verificar escalada
             if len(history) >= 2:
-                # Escalada: os 3 últimos valores são crescentes
                 recent = history[-2:] + [vl_pix]
                 if recent[0] < recent[1] < recent[2]:
                     mediana = f.get("vl_mediana_pix_trimestre", 0)
                     if mediana > 0 and recent[2] > mediana * 2:
                         return True
 
-        # Método 2: Fallback estatístico (ratio + zscore combinados)
         if ratio is not None and zscore is not None:
             if ratio >= 3.0 and zscore >= 2.0:
                 return True
@@ -619,23 +573,12 @@ class SocialEngineeringDetector:
         return False
 
     # =============================================================
-    # PUBLIC API: detect_from_pipeline (método principal)
+    # PUBLIC API
     # =============================================================
     def detect_from_pipeline(self, features: Dict[str, Any]) -> SEAnalysisResult:
-        """
-        Método principal — recebe features já processadas pelo pipeline.
-
-        Args:
-            features: Dict com features do preprocessing.py v3.1
-                      (pode conter nomes do pipeline ou legados).
-
-        Returns:
-            SEAnalysisResult com score 0-100, padrões e indicadores ativos.
-        """
-        # Adaptar features para formato interno
+        """Método principal — recebe features já processadas pelo pipeline."""
         f = self._adapt_features(features)
 
-        # Avaliar todos os indicadores
         active_indicators: Dict[str, bool] = {}
         for name, check in self.INDICATORS.items():
             try:
@@ -644,18 +587,13 @@ class SocialEngineeringDetector:
                 logger.debug(f"Indicador '{name}' falhou: {e}")
                 active_indicators[name] = False
 
-        # Verificar indicadores de fase 2
-        phase2_missing = []
-        for ind in self.PHASE2_INDICATORS:
-            phase2_missing.append(ind)
+        phase2_missing = list(self.PHASE2_INDICATORS)
 
-        # Avaliar padrões
         detected: List[PatternMatch] = []
         for pattern_name, config in self.PATTERNS.items():
             score = 0
             matched = []
 
-            # Required: TODOS devem estar ativos (2 pontos cada)
             required_ok = True
             for ind in config["required"]:
                 if active_indicators.get(ind, False):
@@ -668,13 +606,11 @@ class SocialEngineeringDetector:
             if not required_ok:
                 continue
 
-            # Optional: 1 ponto cada
             for ind in config["optional"]:
                 if active_indicators.get(ind, False):
                     score += 1
                     matched.append(ind)
 
-            # Verificar min_score
             if score >= config["min_score"]:
                 detected.append(PatternMatch(
                     pattern_name=pattern_name,
@@ -684,10 +620,8 @@ class SocialEngineeringDetector:
                     description=config["description"],
                 ))
 
-        # Ordenar por severidade e score
         detected.sort(key=lambda x: (_SEVERITY_ORDER.get(x.severity, 99), -x.score))
 
-        # Calcular score SE
         se_score = self._calculate_se_score(detected, active_indicators)
 
         return SEAnalysisResult(
@@ -697,29 +631,18 @@ class SocialEngineeringDetector:
             phase2_indicators_missing=phase2_missing,
         )
 
-    # =============================================================
-    # PUBLIC API: detect_patterns (compatibilidade com orquestrador)
-    # =============================================================
     def detect_patterns(self, features: Dict[str, Any]) -> List[PatternMatch]:
-        """
-        API de compatibilidade — retorna apenas a lista de padrões.
-        Usado pelo PixDecisionEngine existente.
-        """
+        """API de compatibilidade."""
         result = self.detect_from_pipeline(features)
         return result.patterns
 
     def get_worst_pattern(self, features: Dict[str, Any]) -> Optional[PatternMatch]:
-        """Retorna o padrão mais grave detectado, se houver."""
         result = self.detect_from_pipeline(features)
         return result.worst_pattern
 
     def calculate_social_engineering_score(
         self, features: Dict[str, Any]
     ) -> Tuple[float, List[PatternMatch]]:
-        """
-        API de compatibilidade — retorna (score, patterns).
-        Usado pelo PixDecisionEngine existente.
-        """
         result = self.detect_from_pipeline(features)
         return result.se_score, result.patterns
 
@@ -731,13 +654,6 @@ class SocialEngineeringDetector:
         patterns: List[PatternMatch],
         active_indicators: Dict[str, bool],
     ) -> float:
-        """
-        Calcula score de engenharia social 0-100.
-
-        Lógica:
-        - Base: soma de severidades dos padrões detectados
-        - Atenuante: agendamento_recorrente reduz -15
-        """
         if not patterns:
             return 0.0
 
@@ -752,7 +668,6 @@ class SocialEngineeringDetector:
         for pattern in patterns:
             score += severity_scores.get(pattern.severity, 10)
 
-        # Atenuante: agendamento recorrente
         if active_indicators.get("agendamento_recorrente", False):
             score = max(0.0, score - 15)
 
@@ -767,7 +682,7 @@ def _safe_float(val: Any, default: Optional[float] = None) -> Optional[float]:
         return default
     try:
         v = float(val)
-        if v != v:  # NaN
+        if v != v:
             return default
         return v
     except (ValueError, TypeError):
@@ -779,7 +694,7 @@ def _safe_int(val: Any, default: int = 0) -> int:
         return default
     try:
         v = float(val)
-        if v != v:  # NaN
+        if v != v:
             return default
         return int(v)
     except (ValueError, TypeError):
@@ -787,7 +702,6 @@ def _safe_int(val: Any, default: int = 0) -> int:
 
 
 def _is_valor_redondo(valor: float) -> bool:
-    """Valores redondos são típicos de golpes (R$1000, R$5000, R$500)."""
     if not valor or valor <= 0:
         return False
     return valor >= 100 and (valor % 100 == 0)

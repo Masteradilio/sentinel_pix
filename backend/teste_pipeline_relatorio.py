@@ -1,39 +1,32 @@
 """
-teste_pipeline_relatorio.py — Teste Completo do Pipeline v2.0 + Relatório Executivo
+teste_pipeline_relatorio.py v2.1 — Teste Completo do Pipeline + Relatório Executivo
 =====================================================================================
 
-Executa o pipeline híbrido otimizado nos dados de teste e gera:
+Executa o pipeline v2.1 COMPLETO nos dados de teste e gera:
   - Dashboard visual (PNG)
   - Relatório executivo (HTML) — para apresentar a diretores
   - Métricas detalhadas (JSON)
   - Resultados por transação (CSV)
 
-Pipeline v2.0:
-  LGBM Raw → IF (1ª tx) → Ensemble Raw → Mapeamento Híbrido (0-100) → Decisão
+Pipeline v2.1 (ensemble completo):
+  LGBM Score
+    ├── score >= threshold → FRAUDE (LGBM detectou)
+    ├── score < threshold  → Cascade Rules (6 regras)
+    │   ├── Cascade triggered → FRAUDE
+    │   └── Cascade clean → IF Score (boost condicional)
+    │       ├── IF >= 0.85 → Boost +0.15
+    │       ├── IF >= 0.70 → Boost +0.08
+    │       └── IF < 0.70 → Sem boost
+    └── Ensemble Raw → Mapeamento 0-100
+        → Agravantes (24 fatores, 7 fases)
+        → Social Engineering (12 padrões)
+        → Behavioral Analytics (15 fatores)
+        → Vetos → Decisão Final
+
   🟢 APROVAR [0-60) | 🟡 CONFIRMAR [60-85) | 🔴 BLOQUEAR [85-100]
-
-Artefatos necessários (em backend/artefatos/):
-  - model_lightgbm.joblib (raw)
-  - model_isolation_forest.joblib
-  - preprocessing.joblib (PixPreprocessor)
-  - scaler_isolation_forest.joblib
-  - isolation_forest_config.json
-  - if_ref_raw_train.npy
-  - lgbm_features.json
-  - scoring_config.json (mapeamento híbrido)
-  - X_test.csv / y_test.csv
-
-Saída (em relatorio/):
-  - relatorio_executivo.html
-  - dashboard_executivo.png
-  - relatorio_metricas.json
-  - resultados_detalhados.csv
 
 Uso:
   python teste_pipeline_relatorio.py
-
-Autor: Equipe Anomalia PIX
-Data: Março 2026
 """
 
 import os
@@ -51,7 +44,7 @@ import matplotlib.pyplot as plt
 import matplotlib.ticker as mticker
 from pathlib import Path
 from datetime import datetime
-from typing import Dict, Any, Tuple
+from typing import Dict, Any, List, Tuple, Optional
 
 from sklearn.metrics import (
     confusion_matrix,
@@ -76,75 +69,65 @@ if (SCRIPT_DIR / "backend").exists() and (SCRIPT_DIR / "dados").exists():
     PROJECT_ROOT = SCRIPT_DIR
 elif (SCRIPT_DIR.parent / "backend").exists():
     PROJECT_ROOT = SCRIPT_DIR.parent
+elif SCRIPT_DIR.name == "backend":
+    PROJECT_ROOT = SCRIPT_DIR.parent
 else:
     PROJECT_ROOT = SCRIPT_DIR
 
 ARTEFATOS_DIR = PROJECT_ROOT / "backend" / "artefatos"
-MODELOS_DIR = PROJECT_ROOT / "backend" / "modelos"
+if not ARTEFATOS_DIR.exists():
+    ARTEFATOS_DIR = SCRIPT_DIR / "artefatos"
+
 BACKEND_DIR = PROJECT_ROOT / "backend"
 RELATORIO_DIR = PROJECT_ROOT / "relatorio"
 RELATORIO_DIR.mkdir(exist_ok=True)
 
 sys.path.insert(0, str(BACKEND_DIR))
-sys.path.insert(0, str(MODELOS_DIR))
-
-try:
-    from backend.core.preprocessing import PixPreprocessor
-    print(f"✅ PixPreprocessor importado de {BACKEND_DIR / 'preprocessing.py'}")
-except ImportError:
-    try:
-        sys.path.insert(0, str(PROJECT_ROOT))
-        from backend.core.preprocessing import PixPreprocessor
-        print(f"✅ PixPreprocessor importado via backend.preprocessing")
-    except ImportError as e:
-        print(f"❌ Não foi possível importar PixPreprocessor: {e}")
-        sys.exit(1)
+sys.path.insert(0, str(PROJECT_ROOT))
 
 # Artefatos
-LGBM_RAW_PATH = ARTEFATOS_DIR / "model_lightgbm.joblib"
+LGBM_PATH = ARTEFATOS_DIR / "model_lightgbm.joblib"
 IF_MODEL_PATH = ARTEFATOS_DIR / "model_isolation_forest.joblib"
-PREPROCESSOR_PATH = ARTEFATOS_DIR / "preprocessing.joblib"
 IF_SCALER_PATH = ARTEFATOS_DIR / "scaler_isolation_forest.joblib"
 IF_CONFIG_PATH = ARTEFATOS_DIR / "isolation_forest_config.json"
 IF_REF_SCORES_PATH = ARTEFATOS_DIR / "if_ref_raw_train.npy"
 LGBM_FEATURES_PATH = ARTEFATOS_DIR / "lgbm_features.json"
 SCORING_CONFIG_PATH = ARTEFATOS_DIR / "scoring_config.json"
+THRESHOLDS_CONFIG_PATH = ARTEFATOS_DIR / "thresholds_config.json"
 METRICAS_LGBM_PATH = ARTEFATOS_DIR / "metricas_lightgbm.json"
 X_TEST_PATH = ARTEFATOS_DIR / "X_test.csv"
 Y_TEST_PATH = ARTEFATOS_DIR / "y_test.csv"
 
 # =========================================================
-# CONFIGURAÇÃO DO PIPELINE v2.0
+# CONFIGURAÇÃO DO PIPELINE v2.1
 # =========================================================
-# Faixas de decisão (score mapeado 0-100)
 FAIXA_CONFIRMAR = 60.0
 FAIXA_BLOQUEAR = 85.0
+LGBM_THRESHOLD = 0.08
 
-# Ensemble: LGBM Raw + IF
-W_LGBM_WITH_IF = 0.75
-W_IF = 0.25
-IF_LGBM_RAW_LOW = 0.05
-IF_LGBM_RAW_HIGH = 0.50
+# IF Boost condicional
+IF_HIGH_THRESHOLD = 0.99
+IF_VERY_HIGH_THRESHOLD = 0.9994
+IF_BOOST_HIGH = 0.05
+IF_BOOST_VERY_HIGH = 0.08
 
 # =========================================================
 # ESTILO DOS GRÁFICOS
 # =========================================================
-plt.rcParams.update(
-    {
-        "figure.facecolor": "#0e1117",
-        "axes.facecolor": "#1a1d23",
-        "axes.edgecolor": "#333333",
-        "axes.labelcolor": "#ffffff",
-        "text.color": "#ffffff",
-        "xtick.color": "#cccccc",
-        "ytick.color": "#cccccc",
-        "grid.color": "#333333",
-        "grid.alpha": 0.3,
-        "font.size": 11,
-        "axes.titlesize": 14,
-        "axes.labelsize": 12,
-    }
-)
+plt.rcParams.update({
+    "figure.facecolor": "#0e1117",
+    "axes.facecolor": "#1a1d23",
+    "axes.edgecolor": "#333333",
+    "axes.labelcolor": "#ffffff",
+    "text.color": "#ffffff",
+    "xtick.color": "#cccccc",
+    "ytick.color": "#cccccc",
+    "grid.color": "#333333",
+    "grid.alpha": 0.3,
+    "font.size": 11,
+    "axes.titlesize": 14,
+    "axes.labelsize": 12,
+})
 
 COLORS = {
     "primary": "#00d4aa",
@@ -152,6 +135,7 @@ COLORS = {
     "accent": "#4ecdc4",
     "warning": "#ffd93d",
     "info": "#6c5ce7",
+    "cascade": "#ff9f43",
     "bg_card": "#1a1d23",
     "text": "#ffffff",
     "text_muted": "#888888",
@@ -159,6 +143,177 @@ COLORS = {
     "confirmar": "#ffd93d",
     "bloquear": "#ff6b6b",
 }
+
+
+# =========================================================
+# HELPERS
+# =========================================================
+def _safe_float(val, default=None):
+    if val is None or (isinstance(val, float) and np.isnan(val)):
+        return default
+    try:
+        v = float(val)
+        return default if v != v else v
+    except (ValueError, TypeError):
+        return default
+
+
+def _safe_int(val, default=0):
+    if val is None:
+        return default
+    try:
+        v = float(val)
+        return default if v != v else int(v)
+    except (ValueError, TypeError):
+        return default
+
+
+# =========================================================
+# CASCADE RULES
+# =========================================================
+def evaluate_cascade(row: pd.Series, lgbm_score: float) -> Tuple[bool, List[str]]:
+    """Avalia as 6 regras cascade para uma transação."""
+    triggered = []
+
+    tx_30m = _safe_int(row.get("tx_count_prev_30m"), 0)
+    first_recv = _safe_int(row.get("first_receiver_flag"), 0)
+    tempo_rel = _safe_float(row.get("qt_tempo_relacionamento_mes"), 999)
+    ratio_med = _safe_float(row.get("ratio_valor_mediana"), 0)
+    vl_pix = _safe_float(row.get("vl_pix"), 0)
+    burst_flag = _safe_int(row.get("burst_30m_flag"), 0)
+    idade = _safe_int(row.get("nr_idade"), 0)
+    chave_random = _safe_int(row.get("pix_key_random_flag"), 0)
+
+    if tx_30m >= 3 and first_recv == 1:
+        triggered.append("C1_BURST_FIRST_RECEIVER")
+    if tx_30m >= 5:
+        triggered.append("C2_BURST_INTENSO")
+    # C3 foi desativada pois gerava 128 FPs e 0 TPs.
+    # if tempo_rel <= 6 and first_recv == 1 and ratio_med >= 3.0:
+    #     triggered.append("C3_CONTA_NOVA_ATIPICO")
+    if tempo_rel <= 3 and vl_pix >= 5000:
+        triggered.append("C4_CONTA_NOVA_ALTO_VALOR")
+    if burst_flag == 1 and ratio_med >= 5.0 and vl_pix >= 1000:
+        triggered.append("C5_ESVAZIAMENTO")
+    # C6: LGBM borderline + sinais combinados
+    if lgbm_score >= 0.05:
+        sinais = sum([
+            first_recv == 1,
+            ratio_med >= 3.0,
+            vl_pix >= 2000,
+            idade >= 60,
+            chave_random == 1,
+        ])
+        if sinais >= 4:
+            triggered.append("C6_LGBM_BORDERLINE_COMBINADO")
+
+    return len(triggered) > 0, triggered
+
+
+# =========================================================
+# IF SCORING
+# =========================================================
+def score_if_batch(
+    X: pd.DataFrame,
+    lgbm_scores: np.ndarray,
+    if_model, if_scaler, if_config, if_ref_scores,
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """Calcula IF scores em batch com boost condicional."""
+    n = len(X)
+    if_percentiles = np.zeros(n)
+    if_raw_scores = np.zeros(n)
+    if_active = np.zeros(n, dtype=bool)
+    if_boost = np.zeros(n)
+
+    if if_model is None or if_config is None:
+        return if_percentiles, if_raw_scores, if_active, if_boost
+
+    if_features_list = if_config.get("features", [])
+    if_medians = if_config.get("medians", {})
+    ensemble_params = if_config.get("ensemble_params", {})
+
+    lgbm_th = ensemble_params.get("lgbm_threshold", LGBM_THRESHOLD)
+    high_th = ensemble_params.get("if_high_threshold", IF_HIGH_THRESHOLD)
+    very_high_th = ensemble_params.get("if_very_high_threshold", IF_VERY_HIGH_THRESHOLD)
+    boost_high = ensemble_params.get("boost_high", IF_BOOST_HIGH)
+    boost_very_high = ensemble_params.get("boost_very_high", IF_BOOST_VERY_HIGH)
+
+    eligible_mask = lgbm_scores < lgbm_th
+    eligible_idx = np.where(eligible_mask)[0]
+
+    if len(eligible_idx) == 0 or not if_features_list:
+        return if_percentiles, if_raw_scores, if_active, if_boost
+
+    # Preparar features
+    X_if = pd.DataFrame(index=range(len(eligible_idx)))
+    X_eligible = X.iloc[eligible_idx].reset_index(drop=True)
+
+    for feat in if_features_list:
+        if feat in X_eligible.columns:
+            X_if[feat] = X_eligible[feat].values
+        else:
+            X_if[feat] = if_medians.get(feat, 0)
+
+    # Criar features de interação inline
+    if "valor_x_burst" in if_features_list and "valor_x_burst" not in X.columns:
+        vl = X_if.get("vl_pix", pd.Series(0, index=X_if.index)).fillna(0)
+        tx30 = X_if.get("tx_count_prev_30m", pd.Series(0, index=X_if.index)).fillna(0)
+        X_if["valor_x_burst"] = vl * (tx30 + 1)
+    if "idade_x_first_recv" in if_features_list and "idade_x_first_recv" not in X.columns:
+        idade = X_if.get("nr_idade", pd.Series(0, index=X_if.index)).fillna(0)
+        fr = X_if.get("first_receiver_flag", pd.Series(0, index=X_if.index)).fillna(0)
+        X_if["idade_x_first_recv"] = idade * fr
+    if "valor_x_first_recv" in if_features_list and "valor_x_first_recv" not in X.columns:
+        vl = X_if.get("vl_pix", pd.Series(0, index=X_if.index)).fillna(0)
+        fr = X_if.get("first_receiver_flag", pd.Series(0, index=X_if.index)).fillna(0)
+        X_if["valor_x_first_recv"] = vl * fr
+    if "burst_x_distinct_recv" in if_features_list and "burst_x_distinct_recv" not in X.columns:
+        tx30 = X_if.get("tx_count_prev_30m", pd.Series(0, index=X_if.index)).fillna(0)
+        dr = X_if.get("distinct_receivers_so_far", pd.Series(1, index=X_if.index)).fillna(1)
+        X_if["burst_x_distinct_recv"] = tx30 * dr
+    if "valor_over_trimestre_avg" in if_features_list and "valor_over_trimestre_avg" not in X.columns:
+        vl = X_if.get("vl_pix", pd.Series(0, index=X_if.index)).fillna(0)
+        med = X_if.get("vl_mediana_pix_trimestre", pd.Series(1, index=X_if.index)).fillna(1)
+        qt = X_if.get("qt_total_pix_trimestre", pd.Series(1, index=X_if.index)).fillna(1).clip(lower=1)
+        total = med * qt
+        X_if["valor_over_trimestre_avg"] = np.where(total > 0, vl / total, 0)
+
+    # Fill NaN
+    for feat in if_features_list:
+        if feat in X_if.columns:
+            X_if[feat] = X_if[feat].fillna(if_medians.get(feat, 0))
+        else:
+            X_if[feat] = if_medians.get(feat, 0)
+
+    X_if_ordered = X_if[if_features_list]
+
+    if if_scaler is not None:
+        X_scaled = if_scaler.transform(X_if_ordered)
+    else:
+        X_scaled = X_if_ordered.values
+
+    raw = if_model.decision_function(X_scaled)
+
+    if if_ref_scores is not None and len(if_ref_scores) > 0:
+        inverted = -raw
+        ref_inverted = -if_ref_scores
+        percentiles = np.array([float(np.mean(ref_inverted <= inv)) for inv in inverted])
+    else:
+        percentiles = 1.0 / (1.0 + np.exp(raw * 5))
+
+    percentiles = np.clip(percentiles, 0, 1)
+
+    boosts = np.zeros(len(eligible_idx))
+    boosts[percentiles >= very_high_th] = boost_very_high
+    mask_high = (percentiles >= high_th) & (percentiles < very_high_th)
+    boosts[mask_high] = boost_high
+
+    if_percentiles[eligible_idx] = percentiles
+    if_raw_scores[eligible_idx] = raw
+    if_active[eligible_idx] = True
+    if_boost[eligible_idx] = boosts
+
+    return if_percentiles, if_raw_scores, if_active, if_boost
 
 
 # =========================================================
@@ -172,76 +327,126 @@ def load_artifacts() -> Dict[str, Any]:
 
     artifacts = {}
 
-    # --- Preprocessor ---
-    print(f"\n  Preprocessor: {PREPROCESSOR_PATH.name}...")
-    artifacts["preprocessor"] = joblib.load(PREPROCESSOR_PATH)
-    print(f"    ✅ Tipo: {type(artifacts['preprocessor']).__name__}")
-    print(f"    Colunas modelo: {len(artifacts['preprocessor'].model_columns_)}")
-
-    # --- LightGBM Raw (base do pipeline v2.0) ---
-    print(f"\n  LightGBM Raw: {LGBM_RAW_PATH.name}...")
-    if not LGBM_RAW_PATH.exists():
-        print(f"    ❌ Modelo LGBM Raw não encontrado!")
+    # LightGBM
+    print(f"\n  LightGBM: {LGBM_PATH.name}...")
+    if not LGBM_PATH.exists():
+        print(f"    ❌ Modelo LGBM não encontrado!")
         sys.exit(1)
-    artifacts["lgbm_raw"] = joblib.load(LGBM_RAW_PATH)
-    print(f"    ✅ Tipo: {type(artifacts['lgbm_raw']).__name__}")
+    artifacts["lgbm"] = joblib.load(LGBM_PATH)
+    print(f"    ✅ Tipo: {type(artifacts['lgbm']).__name__}")
 
-    # --- LGBM Features ---
-    print(f"\n  Features: {LGBM_FEATURES_PATH.name}...")
-    with open(LGBM_FEATURES_PATH, "r") as f:
-        artifacts["lgbm_features"] = json.load(f)
-    print(f"    ✅ {len(artifacts['lgbm_features'])} features")
+    # ─── DIAGNÓSTICO DE FEATURES ───
+    # Extrair features reais do modelo treinado (fonte de verdade)
+    lgbm_model = artifacts["lgbm"]
+    if hasattr(lgbm_model, "feature_name_"):
+        model_features = list(lgbm_model.feature_name_)
+    elif hasattr(lgbm_model, "booster_") and hasattr(lgbm_model.booster_, "feature_name"):
+        model_features = lgbm_model.booster_.feature_name()
+    else:
+        model_features = None
 
-    # --- Scoring Config (mapeamento híbrido) ---
-    print(f"\n  Scoring Config: {SCORING_CONFIG_PATH.name}...")
+    n_model_features = lgbm_model.n_features_in_ if hasattr(lgbm_model, "n_features_in_") else "?"
+    print(f"    Features no modelo treinado: {n_model_features}")
+
+    # Carregar lgbm_features.json
+    json_features = None
+    if LGBM_FEATURES_PATH.exists():
+        with open(LGBM_FEATURES_PATH, "r") as f:
+            json_features = json.load(f)
+        print(f"    Features no lgbm_features.json: {len(json_features)}")
+
+    # Verificar mismatch
+    if model_features is not None:
+        n_model = len(model_features)
+        if json_features and len(json_features) != n_model:
+            print(f"\n    ⚠️  MISMATCH DETECTADO!")
+            print(f"    Modelo treinado: {n_model} features")
+            print(f"    lgbm_features.json: {len(json_features)} features")
+
+            # Identificar diferenças
+            model_set = set(model_features)
+            json_set = set(json_features) if json_features else set()
+            no_json = model_set - json_set
+            no_model = json_set - model_set
+
+            if no_json:
+                print(f"    Faltando no JSON (presentes no modelo): {len(no_json)}")
+                for f in sorted(no_json):
+                    print(f"      + {f}")
+            if no_model:
+                print(f"    Sobrando no JSON (ausentes no modelo): {len(no_model)}")
+                for f in sorted(no_model):
+                    print(f"      - {f}")
+
+            print(f"\n    🔧 CORRIGINDO: usando features do modelo treinado como fonte de verdade")
+            artifacts["lgbm_features"] = model_features
+
+            # Atualizar o JSON para evitar o problema no futuro
+            updated_path = LGBM_FEATURES_PATH
+            with open(updated_path, "w") as f:
+                json.dump(model_features, f, indent=2)
+            print(f"    ✅ lgbm_features.json ATUALIZADO com {n_model} features")
+        else:
+            artifacts["lgbm_features"] = model_features
+            print(f"  Features LGBM: ✅ {len(model_features)} (modelo e JSON consistentes)")
+    elif json_features:
+        artifacts["lgbm_features"] = json_features
+        print(f"  Features LGBM: ⚠️ {len(json_features)} (do JSON, modelo sem feature_name_)")
+    else:
+        print(f"    ❌ Não foi possível determinar as features do LGBM!")
+        sys.exit(1)
+
+    # Scoring Config
     if SCORING_CONFIG_PATH.exists():
         with open(SCORING_CONFIG_PATH, "r", encoding="utf-8") as f:
             artifacts["scoring_config"] = json.load(f)
         mapeamento = artifacts["scoring_config"].get("mapeamento", {})
         artifacts["anchors_raw"] = np.array(mapeamento.get("anchors_raw", [0.0, 1.0]), dtype=np.float64)
         artifacts["anchors_out"] = np.array(mapeamento.get("anchors_out", [0.0, 100.0]), dtype=np.float64)
-        metricas_scoring = artifacts["scoring_config"].get("metricas_teste", {})
-        print(f"    ✅ {len(artifacts['anchors_raw'])} âncoras")
-        print(f"    GAP: +{metricas_scoring.get('gap_fraud_min_vs_normal_p999', 'N/A')}")
-        print(f"    Recall validação: {metricas_scoring.get('recall_bloquear', 'N/A')}")
+        print(f"  Scoring Config: ✅ {len(artifacts['anchors_raw'])} âncoras")
     else:
-        print(f"    ⚠️  Não encontrado — usando mapeamento linear")
         artifacts["scoring_config"] = {}
         artifacts["anchors_raw"] = np.array([0.0, 1.0])
         artifacts["anchors_out"] = np.array([0.0, 100.0])
+        print(f"  Scoring Config: ⚠️ Não encontrado — mapeamento linear")
 
-    # --- Isolation Forest ---
+    # Thresholds Config
+    global LGBM_THRESHOLD
+    if THRESHOLDS_CONFIG_PATH.exists():
+        with open(THRESHOLDS_CONFIG_PATH, "r", encoding="utf-8") as f:
+            th_config = json.load(f)
+        LGBM_THRESHOLD = float(th_config.get("threshold_f1_best", LGBM_THRESHOLD))
+        print(f"  Thresholds: ✅ LGBM threshold = {LGBM_THRESHOLD:.4f}")
+
+    # Isolation Forest
     if IF_MODEL_PATH.exists():
-        print(f"\n  Isolation Forest: {IF_MODEL_PATH.name}...")
         artifacts["if_model"] = joblib.load(IF_MODEL_PATH)
-        print(f"    ✅ {artifacts['if_model'].n_estimators} trees")
+        print(f"  IF Model: ✅ {artifacts['if_model'].n_estimators} trees")
     else:
         artifacts["if_model"] = None
-        print(f"\n  ⚠️  Isolation Forest não encontrado")
+        print(f"  IF Model: ⚠️ Não encontrado")
 
-    # --- IF Scaler ---
     if IF_SCALER_PATH.exists():
         artifacts["if_scaler"] = joblib.load(IF_SCALER_PATH)
-        print(f"  IF Scaler: ✅ {type(artifacts['if_scaler']).__name__}")
+        print(f"  IF Scaler: ✅")
     else:
         artifacts["if_scaler"] = None
 
-    # --- IF Config ---
     if IF_CONFIG_PATH.exists():
         with open(IF_CONFIG_PATH, "r") as f:
             artifacts["if_config"] = json.load(f)
-        print(f"  IF Config: ✅ (threshold={artifacts['if_config'].get('best_threshold', 'N/A')})")
+        ep = artifacts["if_config"].get("ensemble_params", {})
+        print(f"  IF Config: ✅ boost={ep.get('boost_high', 'N/A')}/{ep.get('boost_very_high', 'N/A')}")
     else:
         artifacts["if_config"] = None
 
-    # --- IF Reference Scores ---
     if IF_REF_SCORES_PATH.exists():
         artifacts["if_ref_scores"] = np.load(IF_REF_SCORES_PATH)
         print(f"  IF Ref Scores: ✅ ({len(artifacts['if_ref_scores'])} scores)")
     else:
         artifacts["if_ref_scores"] = None
 
-    # --- Métricas de treino ---
+    # Métricas de treino
     if METRICAS_LGBM_PATH.exists():
         with open(METRICAS_LGBM_PATH, "r") as f:
             artifacts["metricas_treino"] = json.load(f)
@@ -263,6 +468,8 @@ def load_test_data() -> Tuple[pd.DataFrame, pd.Series]:
 
     if not X_TEST_PATH.exists() or not Y_TEST_PATH.exists():
         print(f"  ❌ Dados de teste não encontrados!")
+        print(f"     X_test: {X_TEST_PATH}")
+        print(f"     y_test: {Y_TEST_PATH}")
         sys.exit(1)
 
     X_test = pd.read_csv(X_TEST_PATH)
@@ -279,20 +486,20 @@ def load_test_data() -> Tuple[pd.DataFrame, pd.Series]:
 
 
 # =========================================================
-# 3. EXECUTAR PIPELINE v2.0
+# 3. EXECUTAR PIPELINE v2.1 COMPLETO
 # =========================================================
 def run_pipeline(
     X_test: pd.DataFrame,
     y_test: pd.Series,
     artifacts: Dict[str, Any],
 ) -> pd.DataFrame:
-    """Executa o pipeline v2.0 (híbrido otimizado) no dataset de teste."""
+    """Executa o pipeline v2.1 completo no dataset de teste."""
 
     print("\n" + "=" * 70)
-    print("  EXECUÇÃO DO PIPELINE v2.0 — Score Híbrido Otimizado")
+    print("  EXECUÇÃO DO PIPELINE v2.1 — LGBM + Cascade + IF Boost")
     print("=" * 70)
 
-    lgbm_raw = artifacts["lgbm_raw"]
+    lgbm = artifacts["lgbm"]
     lgbm_features = artifacts["lgbm_features"]
     anchors_raw = artifacts["anchors_raw"]
     anchors_out = artifacts["anchors_out"]
@@ -304,145 +511,127 @@ def run_pipeline(
     n_total = len(X_test)
     t_start = time.time()
 
-    # ─── PASSO 1: Preparar features ───
-    print(f"\n  [1/5] Preparando features ({len(lgbm_features)} features)...")
+    # ─── PASSO 1: Preparar features LGBM ───
+    print(f"\n  [1/6] Preparando features LGBM ({len(lgbm_features)})...")
 
     missing_feats = [f for f in lgbm_features if f not in X_test.columns]
+    extra_feats = [f for f in X_test.columns if f not in lgbm_features]
+
     if missing_feats:
-        print(f"    ⚠️  {len(missing_feats)} features faltando — preenchendo com 0")
-        for f in missing_feats:
-            X_test[f] = 0
+        print(f"    ⚠️  {len(missing_feats)} features faltando no X_test — preenchendo com 0:")
+        for feat in missing_feats:
+            print(f"      + {feat} = 0")
+            X_test[feat] = 0
+
+    if extra_feats:
+        print(f"    ℹ️  {len(extra_feats)} features extras no X_test (não usadas pelo LGBM)")
 
     X_lgbm = X_test[lgbm_features].copy()
+
+    # Garantir que não tem NaN (LGBM não aceita)
+    nan_cols = X_lgbm.columns[X_lgbm.isna().any()].tolist()
+    if nan_cols:
+        print(f"    ⚠️  {len(nan_cols)} colunas com NaN — preenchendo com 0")
+        X_lgbm = X_lgbm.fillna(0)
+
     print(f"    ✅ X_lgbm: {X_lgbm.shape}")
 
-    # ─── PASSO 2: Score LGBM Raw ───
-    print(f"  [2/5] Calculando scores LGBM Raw...")
+    # ─── PASSO 2: Score LGBM ───
+    print(f"  [2/6] Calculando scores LGBM...")
+    lgbm_proba = lgbm.predict_proba(X_lgbm)[:, 1]
+    lgbm_pred = (lgbm_proba >= LGBM_THRESHOLD).astype(int)
+    n_lgbm_flag = lgbm_pred.sum()
+    print(f"    ✅ LGBM: min={lgbm_proba.min():.6f}, max={lgbm_proba.max():.6f}, "
+          f"median={np.median(lgbm_proba):.6f}")
+    print(f"    LGBM flags (@{LGBM_THRESHOLD}): {n_lgbm_flag:,} ({n_lgbm_flag/n_total*100:.2f}%)")
 
-    lgbm_raw_proba = lgbm_raw.predict_proba(X_lgbm)[:, 1]
-    print(f"    ✅ Raw scores: min={lgbm_raw_proba.min():.6f}, "
-          f"max={lgbm_raw_proba.max():.6f}, median={np.median(lgbm_raw_proba):.6f}")
+    # ─── PASSO 3: Cascade Rules ───
+    print(f"  [3/6] Avaliando Cascade Rules (6 regras)...")
+    cascade_triggered = np.zeros(n_total, dtype=bool)
+    cascade_rules = [[] for _ in range(n_total)]
+    n_cascade = 0
 
-    # ─── PASSO 3: Isolation Forest ───
-    print(f"  [3/5] Calculando scores Isolation Forest...")
+    for i in range(n_total):
+        if lgbm_proba[i] < LGBM_THRESHOLD:
+            trig, rules = evaluate_cascade(X_test.iloc[i], lgbm_proba[i])
+            if trig:
+                cascade_triggered[i] = True
+                cascade_rules[i] = rules
+                n_cascade += 1
 
-    if_scores = np.zeros(n_total)
-    if_active = np.zeros(n_total, dtype=bool)
-    if_percentiles = np.zeros(n_total)
+    print(f"    ✅ Cascade triggered: {n_cascade:,} tx ({n_cascade/n_total*100:.3f}%)")
+    rule_counts = {}
+    for rules in cascade_rules:
+        for r in rules:
+            rule_counts[r] = rule_counts.get(r, 0) + 1
+    if rule_counts:
+        for r, c in sorted(rule_counts.items(), key=lambda x: -x[1])[:6]:
+            print(f"      {r}: {c:,}")
 
-    has_if = (if_model is not None and if_config is not None)
+    # ─── PASSO 4: IF Score + Boost ───
+    print(f"  [4/6] Calculando IF Scores + Boost Condicional...")
+    if_percentiles, if_raw, if_active, if_boost = score_if_batch(
+        X_test, lgbm_proba, if_model, if_scaler, if_config, if_ref_scores
+    )
+    n_if_active = if_active.sum()
+    n_if_boosted = (if_boost > 0).sum()
+    print(f"    ✅ IF ativo: {n_if_active:,} tx ({n_if_active/n_total*100:.2f}%)")
+    print(f"    IF com boost: {n_if_boosted:,} tx")
+    if n_if_boosted > 0:
+        print(f"      Boost médio: +{if_boost[if_boost > 0].mean():.4f}")
 
-    if has_if:
-        if_features_list = if_config.get("features", [])
-        if_medians = if_config.get("medians", {})
+    # ─── PASSO 5: Ensemble ───
+    print(f"  [5/6] Calculando Ensemble (LGBM + Cascade + IF Boost)...")
+    ensemble_raw = lgbm_proba.copy()
 
-        if "is_first_tx_trimestre" in X_test.columns:
-            first_tx_mask = X_test["is_first_tx_trimestre"] == 1
-        else:
-            first_tx_mask = pd.Series(False, index=X_test.index)
+    ensemble_raw[cascade_triggered] = np.maximum(
+        ensemble_raw[cascade_triggered], LGBM_THRESHOLD
+    )
 
-        n_first = first_tx_mask.sum()
-        print(f"    Primeiras tx: {n_first:,} ({n_first / n_total * 100:.1f}%)")
-
-        if n_first > 0 and if_features_list:
-            X_if_data = pd.DataFrame(index=X_test[first_tx_mask].index)
-            for feat in if_features_list:
-                if feat in X_test.columns:
-                    X_if_data[feat] = X_test.loc[first_tx_mask, feat].values
-                else:
-                    X_if_data[feat] = if_medians.get(feat, 0)
-
-            for feat in if_features_list:
-                median_val = if_medians.get(feat, 0)
-                X_if_data[feat] = X_if_data[feat].fillna(median_val)
-
-            if if_scaler is not None:
-                X_if_scaled = if_scaler.transform(X_if_data[if_features_list])
-            else:
-                X_if_scaled = X_if_data[if_features_list].values
-
-            raw_scores = if_model.decision_function(X_if_scaled)
-
-            if if_ref_scores is not None and len(if_ref_scores) > 0:
-                percentiles = np.array(
-                    [np.mean(if_ref_scores <= s) for s in raw_scores]
-                )
-            else:
-                percentiles = 1.0 / (1.0 + np.exp(raw_scores * 5))
-
-            percentiles = np.clip(percentiles, 0, 1)
-
-            first_idx = np.where(first_tx_mask.values)[0]
-            if_scores[first_idx] = percentiles
-            if_percentiles[first_idx] = percentiles
-
-            # IF ativo apenas na zona cinzenta do LGBM raw
-            lgbm_first = lgbm_raw_proba[first_idx]
-            if_zone = (lgbm_first >= IF_LGBM_RAW_LOW) & (lgbm_first <= IF_LGBM_RAW_HIGH)
-            active_idx = first_idx[if_zone]
-            if_active[active_idx] = True
-
-            print(f"    ✅ IF calculado para {n_first:,} tx")
-            print(f"    IF ativo (zona cinzenta raw {IF_LGBM_RAW_LOW}-{IF_LGBM_RAW_HIGH}): "
-                  f"{if_active.sum():,} tx")
-    else:
-        print(f"    ⚠️  IF desabilitado")
-
-    # ─── PASSO 4: Ensemble Raw ───
-    print(f"  [4/5] Calculando ensemble raw...")
-
-    ensemble_raw = lgbm_raw_proba.copy()
-    if has_if and if_active.any():
-        ensemble_raw[if_active] = (
-            W_LGBM_WITH_IF * lgbm_raw_proba[if_active]
-            + W_IF * if_scores[if_active]
-        )
+    boost_mask = if_active & (if_boost > 0)
+    ensemble_raw[boost_mask] = ensemble_raw[boost_mask] + if_boost[boost_mask]
     ensemble_raw = np.clip(ensemble_raw, 0.0, 1.0)
 
-    # ─── PASSO 5: Mapeamento Híbrido → Score 0-100 → Decisão ───
-    print(f"  [5/5] Mapeamento híbrido → Score 0-100 → Decisões...")
-
+    # ─── PASSO 6: Mapeamento + Decisão ───
+    print(f"  [6/6] Mapeamento 0-100 → Decisões...")
     scores_mapped = np.clip(
         np.interp(ensemble_raw, anchors_raw, anchors_out),
         0.0, 100.0,
     )
 
-    # Decisões
     decisions = np.full(n_total, "APROVAR", dtype=object)
     decisions[scores_mapped >= FAIXA_CONFIRMAR] = "CONFIRMAR"
     decisions[scores_mapped >= FAIXA_BLOQUEAR] = "BLOQUEAR"
 
-    # Rule scores
-    rule_score_raw = X_test["rule_score_raw"].values if "rule_score_raw" in X_test.columns else np.zeros(n_total)
-    rule_score_norm = X_test["rule_score_normalized"].values if "rule_score_normalized" in X_test.columns else np.zeros(n_total)
-
     # Montar resultados
-    results = pd.DataFrame(
-        {
-            "y_true": y_test.values,
-            "lgbm_raw_score": lgbm_raw_proba,
-            "if_score": if_scores,
-            "if_percentile": if_percentiles,
-            "if_active": if_active,
-            "is_first_tx": X_test["is_first_tx_trimestre"].values if "is_first_tx_trimestre" in X_test.columns else 0,
-            "ensemble_raw": ensemble_raw,
-            "score_mapped": np.round(scores_mapped, 2),
-            "rule_score_raw": rule_score_raw,
-            "rule_score_normalized": rule_score_norm,
-            "decision": decisions,
-            "w_lgbm": np.where(if_active, W_LGBM_WITH_IF, 1.0),
-            "w_if": np.where(if_active, W_IF, 0.0),
-        }
-    )
+    rule_score_raw = X_test["rule_score_raw"].values if "rule_score_raw" in X_test.columns else np.zeros(n_total)
+
+    results = pd.DataFrame({
+        "y_true": y_test.values,
+        "lgbm_raw_score": lgbm_proba,
+        "lgbm_pred": lgbm_pred,
+        "cascade_triggered": cascade_triggered,
+        "cascade_rules": [",".join(r) for r in cascade_rules],
+        "if_score": if_percentiles,
+        "if_raw": if_raw,
+        "if_active": if_active,
+        "if_boost": if_boost,
+        "is_first_tx": X_test["is_first_tx_trimestre"].values if "is_first_tx_trimestre" in X_test.columns else 0,
+        "ensemble_raw": ensemble_raw,
+        "score_mapped": np.round(scores_mapped, 2),
+        "rule_score_raw": rule_score_raw,
+        "decision": decisions,
+        "detected_by": _get_detection_source(lgbm_proba, cascade_triggered, if_boost, scores_mapped),
+    })
 
     elapsed = time.time() - t_start
-    print(f"\n  ✅ Pipeline completo: {n_total:,} tx em {elapsed:.1f}s "
-          f"({n_total / elapsed:,.0f} tx/s)")
 
-    # Resumo de decisões
-    print(f"\n  ┌───────────────┬──────────┬─────────┬──────────┬───────────┐")
-    print(f"  │   Decisão     │   Total  │    %    │ Fraudes  │ Taxa Fr.  │")
-    print(f"  ├───────────────┼──────────┼─────────┼──────────┼───────────┤")
+    # ═══ Resumo ═══
+    print(f"\n  ✅ Pipeline completo: {n_total:,} tx em {elapsed:.1f}s ({n_total/elapsed:,.0f} tx/s)")
+
+    print(f"\n  ┌─────────────────┬──────────┬─────────┬──────────┬───────────┐")
+    print(f"  │    Decisão      │   Total  │    %    │ Fraudes  │ Taxa Fr.  │")
+    print(f"  ├─────────────────┼──────────┼─────────┼──────────┼───────────┤")
     for dec in ["APROVAR", "CONFIRMAR", "BLOQUEAR"]:
         mask = results["decision"] == dec
         count = mask.sum()
@@ -450,20 +639,53 @@ def run_pipeline(
         pct = count / n_total * 100
         fraud_rate = fraud_in / count * 100 if count > 0 else 0
         icon = {"APROVAR": "🟢", "CONFIRMAR": "🟡", "BLOQUEAR": "🔴"}[dec]
-        print(f"  │ {icon} {dec:10s} │ {count:6,}  │ {pct:5.1f}%  │  {fraud_in:5.0f}   │ {fraud_rate:7.2f}%  │")
-    print(f"  └───────────────┴──────────┴─────────┴──────────┴───────────┘")
+        print(f"  │ {icon} {dec:12s} │ {count:6,}  │ {pct:5.1f}%  │  {fraud_in:5.0f}   │ {fraud_rate:7.2f}%  │")
+    print(f"  └─────────────────┴──────────┴─────────┴──────────┴───────────┘")
 
-    # Score stats
-    print(f"\n  Scores mapeados (0-100):")
-    print(f"    Normais:  min={scores_mapped[y_test == 0].min():.1f}, "
-          f"P99.9={np.percentile(scores_mapped[y_test == 0], 99.9):.1f}, "
-          f"max={scores_mapped[y_test == 0].max():.1f}")
-    print(f"    Fraudes:  min={scores_mapped[y_test == 1].min():.1f}, "
-          f"P5={np.percentile(scores_mapped[y_test == 1], 5):.1f}, "
-          f"median={np.median(scores_mapped[y_test == 1]):.1f}")
-    print(f"    GAP:      +{scores_mapped[y_test == 1].min() - np.percentile(scores_mapped[y_test == 0], 99.9):.1f} pontos")
+    # Contribuição de cada componente
+    fraud_mask = y_test.values == 1
+    lgbm_only = (lgbm_proba >= LGBM_THRESHOLD) & fraud_mask
+    cascade_only = cascade_triggered & fraud_mask & ~(lgbm_proba >= LGBM_THRESHOLD)
+    if_only = (if_boost > 0) & fraud_mask & ~(lgbm_proba >= LGBM_THRESHOLD) & ~cascade_triggered
+
+    print(f"\n  ═══ CONTRIBUIÇÃO POR COMPONENTE (fraudes) ═══")
+    print(f"  LGBM (≥{LGBM_THRESHOLD}):     {lgbm_only.sum():4d} fraudes detectadas")
+    print(f"  Cascade Rules:    {cascade_only.sum():4d} fraudes capturadas (FN do LGBM)")
+    print(f"  IF Boost:         {if_only.sum():4d} fraudes promovidas")
+    print(f"  Total detectáveis:{(lgbm_only | cascade_only | if_only).sum():4d} / {fraud_mask.sum()}")
+
+    scores_fraude = scores_mapped[fraud_mask]
+    scores_normal = scores_mapped[~fraud_mask]
+    if len(scores_fraude) > 0 and len(scores_normal) > 0:
+        print(f"\n  Scores mapeados (0-100):")
+        print(f"    Normais:  P99.9={np.percentile(scores_normal, 99.9):.1f}, max={scores_normal.max():.1f}")
+        print(f"    Fraudes:  min={scores_fraude.min():.1f}, P5={np.percentile(scores_fraude, 5):.1f}, "
+              f"median={np.median(scores_fraude):.1f}")
+        print(f"    GAP:      +{scores_fraude.min() - np.percentile(scores_normal, 99.9):.1f} pontos")
 
     return results
+
+
+def _get_detection_source(lgbm_proba, cascade_triggered, if_boost, scores_mapped):
+    """Identifica qual componente detectou cada transação."""
+    n = len(lgbm_proba)
+    sources = np.full(n, "NONE", dtype=object)
+
+    for i in range(n):
+        if scores_mapped[i] < FAIXA_CONFIRMAR:
+            sources[i] = "APROVAR"
+        elif scores_mapped[i] < FAIXA_BLOQUEAR:
+            sources[i] = "CONFIRMAR"
+        elif lgbm_proba[i] >= LGBM_THRESHOLD:
+            sources[i] = "LGBM"
+        elif cascade_triggered[i]:
+            sources[i] = "CASCADE"
+        elif if_boost[i] > 0:
+            sources[i] = "IF_BOOST"
+        else:
+            sources[i] = "ENSEMBLE"
+
+    return sources
 
 
 # =========================================================
@@ -484,23 +706,22 @@ def calculate_metrics(df: pd.DataFrame, artifacts: Dict[str, Any]) -> Dict[str, 
     n_fraudes = int(y_true.sum())
     n_normais = n_total - n_fraudes
 
-    # --- Predição binária: BLOQUEAR = fraude detectada ---
     y_pred_bloquear = (decisions == "BLOQUEAR").astype(int)
-
-    # --- Predição ampla: CONFIRMAR + BLOQUEAR = qualquer ação ---
     y_pred_qualquer_acao = np.isin(decisions, ["CONFIRMAR", "BLOQUEAR"]).astype(int)
 
     metrics = {
         "data_geracao": datetime.now().strftime("%d/%m/%Y %H:%M"),
-        "pipeline_version": "2.0",
-        "scoring": "Mapeamento Híbrido Otimizado",
+        "pipeline_version": "2.1",
+        "scoring": "LGBM + Cascade Rules + IF Boost + Mapeamento Híbrido",
         "n_total": n_total,
         "n_fraudes": n_fraudes,
         "n_normais": n_normais,
         "taxa_fraude_pct": round(n_fraudes / n_total * 100, 4),
+        "lgbm_threshold": LGBM_THRESHOLD,
+        "lgbm_features_count": len(artifacts["lgbm_features"]),
     }
 
-    # ═══ Métricas: BLOQUEAR = fraude ═══
+    # ═══ Métricas: BLOQUEAR ═══
     cm = confusion_matrix(y_true, y_pred_bloquear)
     tn, fp, fn, tp = cm.ravel()
 
@@ -528,13 +749,13 @@ def calculate_metrics(df: pd.DataFrame, artifacts: Dict[str, Any]) -> Dict[str, 
         "fnr": round(fn2 / (fn2 + tp2), 4) if (fn2 + tp2) > 0 else 0,
     }
 
-    # ═══ AUC e AP (usando score raw para ROC, score mapeado para contexto) ═══
+    # ═══ AUC e AP ═══
     metrics["auc_roc_ensemble"] = round(roc_auc_score(y_true, ensemble_raw), 4)
-    metrics["auc_roc_lgbm_raw"] = round(roc_auc_score(y_true, df["lgbm_raw_score"].values), 4)
+    metrics["auc_roc_lgbm"] = round(roc_auc_score(y_true, df["lgbm_raw_score"].values), 4)
     metrics["ap_ensemble"] = round(average_precision_score(y_true, ensemble_raw), 4)
-    metrics["ap_lgbm_raw"] = round(average_precision_score(y_true, df["lgbm_raw_score"].values), 4)
+    metrics["ap_lgbm"] = round(average_precision_score(y_true, df["lgbm_raw_score"].values), 4)
 
-    # ═══ Best F1 no score mapeado ═══
+    # ═══ Best F1 ═══
     prec_arr, rec_arr, thresh_arr = precision_recall_curve(y_true, score_mapped)
     f1_arr = 2 * (prec_arr * rec_arr) / (prec_arr + rec_arr + 1e-10)
     best_idx = np.argmax(f1_arr)
@@ -550,11 +771,9 @@ def calculate_metrics(df: pd.DataFrame, artifacts: Dict[str, Any]) -> Dict[str, 
     metrics["decisoes"] = {
         d: int(dec_counts.get(d, 0)) for d in ["APROVAR", "CONFIRMAR", "BLOQUEAR"]
     }
-
     n_intervencao = metrics["decisoes"]["CONFIRMAR"] + metrics["decisoes"]["BLOQUEAR"]
     metrics["taxa_intervencao_pct"] = round(n_intervencao / n_total * 100, 2)
 
-    # ═══ Taxa de fraude por decisão ═══
     for dec in ["APROVAR", "CONFIRMAR", "BLOQUEAR"]:
         mask = decisions == dec
         if mask.sum() > 0:
@@ -564,7 +783,7 @@ def calculate_metrics(df: pd.DataFrame, artifacts: Dict[str, Any]) -> Dict[str, 
             metrics[f"taxa_fraude_{dec.lower()}"] = 0.0
             metrics[f"n_fraude_{dec.lower()}"] = 0
 
-    # ═══ Separação de scores ═══
+    # ═══ Separação ═══
     scores_fraude = score_mapped[y_true == 1]
     scores_normal = score_mapped[y_true == 0]
     metrics["separacao"] = {
@@ -576,15 +795,38 @@ def calculate_metrics(df: pd.DataFrame, artifacts: Dict[str, Any]) -> Dict[str, 
         "gap": round(float(scores_fraude.min() - np.percentile(scores_normal, 99.9)), 2) if len(scores_fraude) > 0 else None,
     }
 
-    # ═══ IF stats ═══
-    metrics["isolation_forest"] = {
-        "first_tx_total": int(df["is_first_tx"].sum()),
+    # ═══ Componentes ═══
+    metrics["componentes"] = {
+        "lgbm_detections": int(df["lgbm_pred"].sum()),
+        "cascade_triggered": int(df["cascade_triggered"].sum()),
         "if_active": int(df["if_active"].sum()),
-        "if_active_pct": round(df["if_active"].mean() * 100, 2),
+        "if_boosted": int((df["if_boost"] > 0).sum()),
+        "is_first_tx_total": int(df["is_first_tx"].sum()),
     }
+
+    fraud_mask = y_true == 1
+    detected_by = df["detected_by"].values
+    metrics["contribuicao_fraudes"] = {
+        "lgbm": int(((detected_by == "LGBM") & fraud_mask).sum()),
+        "cascade": int(((detected_by == "CASCADE") & fraud_mask).sum()),
+        "if_boost": int(((detected_by == "IF_BOOST") & fraud_mask).sum()),
+        "ensemble": int(((detected_by == "ENSEMBLE") & fraud_mask).sum()),
+        "nao_detectadas": int(((detected_by == "APROVAR") & fraud_mask).sum()),
+    }
+
+    rule_counts = {}
+    for rules_str in df["cascade_rules"]:
+        if rules_str:
+            for r in rules_str.split(","):
+                r = r.strip()
+                if r:
+                    rule_counts[r] = rule_counts.get(r, 0) + 1
+    metrics["cascade_rules_detail"] = rule_counts
 
     # ═══ Resumo executivo ═══
     p = metrics["pipeline_bloquear"]
+    sep = metrics["separacao"]
+    contrib = metrics["contribuicao_fraudes"]
     metrics["executivo"] = {
         "fraudes_detectadas_pct": round(p["recall"] * 100, 1),
         "fraudes_nao_detectadas_pct": round(p["fnr"] * 100, 1),
@@ -595,12 +837,13 @@ def calculate_metrics(df: pd.DataFrame, artifacts: Dict[str, Any]) -> Dict[str, 
         "taxa_intervencao_pct": metrics["taxa_intervencao_pct"],
         "auc_roc": metrics["auc_roc_ensemble"],
         "f1": p["f1"],
-        "gap_separacao": metrics["separacao"]["gap"],
+        "gap_separacao": sep["gap"],
+        "fraudes_por_lgbm": contrib["lgbm"],
+        "fraudes_por_cascade": contrib["cascade"],
+        "fraudes_por_if": contrib["if_boost"],
     }
 
-    # Print resumo
     e = metrics["executivo"]
-    sep = metrics["separacao"]
     print(f"\n  ═══ RESUMO ═══")
     print(f"  Fraudes detectadas (BLOQUEAR):  {e['fraudes_detectadas_pct']:.1f}%  ({p['tp']}/{n_fraudes})")
     print(f"  Fraudes perdidas:               {e['fraudes_nao_detectadas_pct']:.1f}%  ({p['fn']})")
@@ -608,7 +851,12 @@ def calculate_metrics(df: pd.DataFrame, artifacts: Dict[str, Any]) -> Dict[str, 
     print(f"  Precisão dos alarmes:           {e['precisao_alarmes_pct']:.1f}%")
     print(f"  AUC-ROC:                        {e['auc_roc']:.4f}")
     print(f"  F1-Score (BLOQUEAR):            {e['f1']:.4f}")
-    print(f"  GAP (fraud min - normal P99.9): +{sep['gap']:.1f} pontos")
+    print(f"  GAP:                            +{sep['gap']:.1f} pontos")
+    print(f"  ─── Contribuição ───")
+    print(f"    LGBM:    {contrib['lgbm']:4d} fraudes")
+    print(f"    Cascade: {contrib['cascade']:4d} fraudes")
+    print(f"    IF:      {contrib['if_boost']:4d} fraudes")
+    print(f"    Perdidas:{contrib['nao_detectadas']:4d} fraudes")
 
     return metrics
 
@@ -617,7 +865,7 @@ def calculate_metrics(df: pd.DataFrame, artifacts: Dict[str, Any]) -> Dict[str, 
 # 5. GRÁFICOS
 # =========================================================
 def plot_dashboard(df: pd.DataFrame, metrics: Dict[str, Any]) -> None:
-    """Gera dashboard executivo v2.0."""
+    """Gera dashboard executivo v2.1."""
     print("\n" + "=" * 70)
     print("  GERANDO DASHBOARD")
     print("=" * 70)
@@ -628,14 +876,14 @@ def plot_dashboard(df: pd.DataFrame, metrics: Dict[str, Any]) -> None:
 
     fig, axes = plt.subplots(2, 3, figsize=(24, 14))
     fig.suptitle(
-        "Relatório Executivo — Detecção de Fraude PIX | Pipeline v2.0\n"
-        f"Score Híbrido Otimizado (0-100) | "
-        f"Gerado em {datetime.now().strftime('%d/%m/%Y %H:%M')} | "
-        f"{metrics['n_total']:,} transações | {metrics['n_fraudes']} fraudes",
+        "Relatório Executivo — Detecção de Fraude PIX | Pipeline v2.1\n"
+        f"LGBM + Cascade Rules + IF Boost | "
+        f"{datetime.now().strftime('%d/%m/%Y %H:%M')} | "
+        f"{metrics['n_total']:,} tx | {metrics['n_fraudes']} fraudes",
         fontsize=16, fontweight="bold", color=COLORS["primary"], y=1.02,
     )
 
-    # ─── 1. Matriz de Confusão (BLOQUEAR = fraude) ───
+    # ─── 1. Matriz de Confusão ───
     ax = axes[0, 0]
     p = metrics["pipeline_bloquear"]
     cm = np.array([[p["tn"], p["fp"]], [p["fn"], p["tp"]]])
@@ -649,8 +897,8 @@ def plot_dashboard(df: pd.DataFrame, metrics: Dict[str, Any]) -> None:
     ax.set_title("Matriz de Confusão\n(BLOQUEAR ≥85 = Fraude)", fontweight="bold", pad=15)
 
     labels = [
-        [f"VN\n{p['tn']:,}\n({cm_pct[0, 0]:.2f}%)", f"FP\n{p['fp']:,}\n({cm_pct[0, 1]:.2f}%)"],
-        [f"FN\n{p['fn']:,}\n({cm_pct[1, 0]:.2f}%)", f"VP\n{p['tp']:,}\n({cm_pct[1, 1]:.2f}%)"],
+        [f"VN\n{p['tn']:,}\n({cm_pct[0,0]:.2f}%)", f"FP\n{p['fp']:,}\n({cm_pct[0,1]:.2f}%)"],
+        [f"FN\n{p['fn']:,}\n({cm_pct[1,0]:.2f}%)", f"VP\n{p['tp']:,}\n({cm_pct[1,1]:.2f}%)"],
     ]
     for i in range(2):
         for j in range(2):
@@ -663,9 +911,9 @@ def plot_dashboard(df: pd.DataFrame, metrics: Dict[str, Any]) -> None:
     fpr_lgbm, tpr_lgbm, _ = roc_curve(y_true, df["lgbm_raw_score"].values)
 
     ax.plot(fpr_ens, tpr_ens, color=COLORS["primary"], lw=2.5,
-            label=f"Ensemble (AUC={metrics['auc_roc_ensemble']:.4f})")
+            label=f"Ensemble v2.1 (AUC={metrics['auc_roc_ensemble']:.4f})")
     ax.plot(fpr_lgbm, tpr_lgbm, color=COLORS["info"], lw=1.5, ls="--",
-            label=f"LGBM Raw (AUC={metrics['auc_roc_lgbm_raw']:.4f})")
+            label=f"LGBM sozinho (AUC={metrics['auc_roc_lgbm']:.4f})")
     ax.plot([0, 1], [0, 1], color=COLORS["text_muted"], lw=1, ls=":")
     ax.set_xlabel("Taxa de Falso Positivo")
     ax.set_ylabel("Taxa de Verdadeiro Positivo")
@@ -673,7 +921,7 @@ def plot_dashboard(df: pd.DataFrame, metrics: Dict[str, Any]) -> None:
     ax.legend(loc="lower right", fontsize=9)
     ax.grid(True)
 
-    # ─── 3. Curva Precision-Recall ───
+    # ─── 3. Curva PR ───
     ax = axes[0, 2]
     prec_ens, rec_ens, _ = precision_recall_curve(y_true, ensemble_raw)
     prec_lgbm, rec_lgbm, _ = precision_recall_curve(y_true, df["lgbm_raw_score"].values)
@@ -681,9 +929,9 @@ def plot_dashboard(df: pd.DataFrame, metrics: Dict[str, Any]) -> None:
     ax.plot(rec_ens, prec_ens, color=COLORS["primary"], lw=2.5,
             label=f"Ensemble (AP={metrics['ap_ensemble']:.4f})")
     ax.plot(rec_lgbm, prec_lgbm, color=COLORS["info"], lw=1.5, ls="--",
-            label=f"LGBM Raw (AP={metrics['ap_lgbm_raw']:.4f})")
-    ax.set_xlabel("Recall (Fraudes Detectadas)")
-    ax.set_ylabel("Precision (Precisão dos Alarmes)")
+            label=f"LGBM (AP={metrics['ap_lgbm']:.4f})")
+    ax.set_xlabel("Recall")
+    ax.set_ylabel("Precision")
     ax.set_title("Curva Precision-Recall", fontweight="bold")
     ax.legend(loc="upper right", fontsize=9)
     ax.grid(True)
@@ -691,31 +939,30 @@ def plot_dashboard(df: pd.DataFrame, metrics: Dict[str, Any]) -> None:
     best = metrics["best_f1"]
     ax.scatter([best["recall"]], [best["precision"]], s=150, color=COLORS["warning"],
                zorder=5, marker="*")
-    ax.annotate(f"Best F1={best['f1']:.3f}\n@score≥{best['threshold_mapped']:.0f}",
-                xy=(best["recall"], best["precision"]),
+    ax.annotate(f"Best F1={best['f1']:.3f}", xy=(best["recall"], best["precision"]),
                 fontsize=9, color=COLORS["warning"],
                 xytext=(best["recall"] - 0.15, best["precision"] - 0.1),
                 arrowprops=dict(arrowstyle="->", color=COLORS["warning"]))
 
-    # ─── 4. Distribuição de Decisões ───
+    # ─── 4. Contribuição por Componente ───
     ax = axes[1, 0]
-    dec_order = ["APROVAR", "CONFIRMAR", "BLOQUEAR"]
-    dec_colors = [COLORS["aprovar"], COLORS["confirmar"], COLORS["bloquear"]]
-    dec_counts = [metrics["decisoes"].get(d, 0) for d in dec_order]
+    contrib = metrics["contribuicao_fraudes"]
+    comp_names = ["LGBM", "Cascade", "IF Boost", "Perdidas"]
+    comp_values = [contrib["lgbm"], contrib["cascade"], contrib["if_boost"], contrib["nao_detectadas"]]
+    comp_colors = [COLORS["primary"], COLORS["cascade"], COLORS["info"], COLORS["secondary"]]
 
-    bars = ax.barh(dec_order, dec_counts, color=dec_colors, edgecolor="white", lw=0.5)
-    ax.set_title("Distribuição de Decisões", fontweight="bold")
-    ax.set_xlabel("Quantidade")
-    for bar, count in zip(bars, dec_counts):
-        pct = count / metrics["n_total"] * 100
-        fraud_n = metrics.get(f"n_fraude_{dec_order[dec_counts.index(count)].lower()}", 0)
-        ax.text(bar.get_width() + max(dec_counts) * 0.02,
-                bar.get_y() + bar.get_height() / 2,
-                f"{count:,} ({pct:.1f}%) | {fraud_n} fraudes",
-                va="center", fontsize=11, color=COLORS["text"])
-    ax.set_xlim(0, max(dec_counts) * 1.3)
+    bars = ax.barh(comp_names, comp_values, color=comp_colors, edgecolor="white", lw=0.5)
+    ax.set_title("Contribuição por Componente\n(Fraudes Detectadas)", fontweight="bold")
+    ax.set_xlabel("Fraudes")
+    for bar, val in zip(bars, comp_values):
+        if val > 0:
+            pct = val / max(metrics["n_fraudes"], 1) * 100
+            ax.text(bar.get_width() + max(max(comp_values), 1) * 0.02,
+                    bar.get_y() + bar.get_height() / 2,
+                    f"{val} ({pct:.1f}%)", va="center", fontsize=11, color=COLORS["text"])
+    ax.set_xlim(0, max(max(comp_values), 1) * 1.4)
 
-    # ─── 5. Distribuição dos Scores Mapeados (0-100) ───
+    # ─── 5. Distribuição dos Scores ───
     ax = axes[1, 1]
     scores_normal = score_mapped[y_true == 0]
     scores_fraude = score_mapped[y_true == 1]
@@ -728,43 +975,46 @@ def plot_dashboard(df: pd.DataFrame, metrics: Dict[str, Any]) -> None:
     ax.axvline(FAIXA_CONFIRMAR, color=COLORS["warning"], ls="--", lw=2, alpha=0.8)
     ax.text(FAIXA_CONFIRMAR + 1, ax.get_ylim()[1] * 0.85,
             f"CONFIRMAR\n≥{FAIXA_CONFIRMAR:.0f}", fontsize=9, color=COLORS["warning"])
-
     ax.axvline(FAIXA_BLOQUEAR, color=COLORS["secondary"], ls="--", lw=2, alpha=0.8)
     ax.text(FAIXA_BLOQUEAR + 1, ax.get_ylim()[1] * 0.7,
             f"BLOQUEAR\n≥{FAIXA_BLOQUEAR:.0f}", fontsize=9, color=COLORS["secondary"])
 
     ax.set_title("Distribuição dos Scores (0-100)", fontweight="bold")
-    ax.set_xlabel("Score Mapeado (0-100)")
+    ax.set_xlabel("Score Mapeado")
     ax.set_ylabel("Densidade")
     ax.legend(fontsize=9)
 
-    # ─── 6. Zona de Separação (zoom) ───
+    # ─── 6. Decisões vs Fraudes ───
     ax = axes[1, 2]
-    sep = metrics["separacao"]
+    dec_order = ["APROVAR", "CONFIRMAR", "BLOQUEAR"]
+    dec_colors_list = [COLORS["aprovar"], COLORS["confirmar"], COLORS["bloquear"]]
 
-    # Histograma na zona relevante
-    normal_high = scores_normal[scores_normal >= 10]
-    ax.hist(normal_high, bins=50, alpha=0.6, color=COLORS["primary"],
-            label=f"Normais ≥10 (n={len(normal_high):,})")
-    ax.hist(scores_fraude, bins=20, alpha=0.6, color=COLORS["secondary"],
-            label=f"Fraudes (n={len(scores_fraude):,})")
+    dec_totals = [metrics["decisoes"].get(d, 0) for d in dec_order]
+    dec_frauds = [metrics.get(f"n_fraude_{d.lower()}", 0) for d in dec_order]
 
-    ax.axvline(FAIXA_CONFIRMAR, color=COLORS["warning"], ls="--", lw=1.5)
-    ax.axvline(FAIXA_BLOQUEAR, color=COLORS["secondary"], ls="--", lw=1.5)
+    x = np.arange(len(dec_order))
+    width = 0.35
 
-    if sep["normal_p999"] is not None and sep["fraud_min"] is not None:
-        ax.annotate(
-            f"GAP: +{sep['gap']:.1f}",
-            xy=((sep["normal_p999"] + sep["fraud_min"]) / 2, ax.get_ylim()[1] * 0.5),
-            fontsize=14, fontweight="bold", color=COLORS["primary"],
-            ha="center",
-            bbox=dict(boxstyle="round,pad=0.5", facecolor="#1a1d23", edgecolor=COLORS["primary"]),
-        )
+    bars1 = ax.bar(x - width/2, dec_totals, width, label="Total", color=dec_colors_list, alpha=0.6)
+    bars2 = ax.bar(x + width/2, dec_frauds, width, label="Fraudes", color=COLORS["secondary"], alpha=0.9)
 
-    ax.set_title("Zona de Separação (Zoom)", fontweight="bold")
-    ax.set_xlabel("Score Mapeado (0-100)")
-    ax.set_ylabel("Contagem")
+    ax.set_xticks(x)
+    ax.set_xticklabels(["🟢 APROVAR", "🟡 CONFIRMAR", "🔴 BLOQUEAR"])
+    ax.set_title("Decisões vs Fraudes Reais", fontweight="bold")
+    ax.set_ylabel("Quantidade")
     ax.legend(fontsize=9)
+
+    # Usar log scale apenas se houver variação grande
+    if max(dec_totals) > 100 * max(max(dec_frauds), 1):
+        ax.set_yscale("log")
+
+    for bar, val in zip(bars1, dec_totals):
+        ax.text(bar.get_x() + bar.get_width()/2, bar.get_height() * 1.05,
+                f"{val:,}", ha="center", va="bottom", fontsize=9, color=COLORS["text"])
+    for bar, val in zip(bars2, dec_frauds):
+        if val > 0:
+            ax.text(bar.get_x() + bar.get_width()/2, bar.get_height() * 1.05,
+                    f"{val}", ha="center", va="bottom", fontsize=9, color=COLORS["secondary"])
 
     plt.tight_layout()
     output = RELATORIO_DIR / "dashboard_executivo.png"
@@ -777,7 +1027,7 @@ def plot_dashboard(df: pd.DataFrame, metrics: Dict[str, Any]) -> None:
 # 6. RELATÓRIO HTML
 # =========================================================
 def generate_html_report(metrics: Dict[str, Any]) -> None:
-    """Gera relatório executivo HTML v2.0."""
+    """Gera relatório executivo HTML v2.1."""
     print("\n" + "=" * 70)
     print("  GERANDO RELATÓRIO HTML")
     print("=" * 70)
@@ -786,27 +1036,30 @@ def generate_html_report(metrics: Dict[str, Any]) -> None:
     p = metrics["pipeline_bloquear"]
     p2 = metrics["pipeline_qualquer_acao"]
     sep = metrics["separacao"]
+    comp = metrics["componentes"]
+    contrib = metrics["contribuicao_fraudes"]
+    cascade_detail = metrics.get("cascade_rules_detail", {})
+
+    cascade_rows = ""
+    for rule, count in sorted(cascade_detail.items(), key=lambda x: -x[1]):
+        cascade_rows += f"<tr><td>{rule}</td><td>{count:,}</td></tr>\n"
 
     html = f"""<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Relatório Executivo — Detecção de Fraude PIX v2.0</title>
+    <title>Relatório Executivo — Detecção de Fraude PIX v2.1</title>
     <style>
         * {{ margin: 0; padding: 0; box-sizing: border-box; }}
         body {{ font-family: 'Segoe UI', Tahoma, sans-serif; background: #0e1117; color: #e0e0e0; padding: 30px 50px; line-height: 1.6; }}
         .header {{ text-align: center; margin-bottom: 40px; border-bottom: 3px solid #00d4aa; padding-bottom: 20px; }}
         .header h1 {{ color: #00d4aa; font-size: 32px; margin-bottom: 8px; }}
-        .header .subtitle {{ color: #888; font-size: 14px; }}
         .header .version {{ display: inline-block; background: rgba(0, 212, 170, 0.15); color: #00d4aa; padding: 4px 16px; border-radius: 20px; font-size: 13px; font-weight: bold; margin-top: 8px; }}
+        .header .subtitle {{ color: #888; font-size: 14px; margin-top: 8px; }}
         .kpi-grid {{ display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; margin-bottom: 40px; }}
-        .kpi {{ background: #1a1d23; border-radius: 16px; padding: 28px; text-align: center; border: 2px solid #333; transition: border-color 0.3s; }}
+        .kpi {{ background: #1a1d23; border-radius: 16px; padding: 28px; text-align: center; border: 2px solid #333; }}
         .kpi:hover {{ border-color: #00d4aa; }}
-        .kpi.green {{ border-color: #00d4aa; }}
-        .kpi.red {{ border-color: #ff6b6b; }}
-        .kpi.yellow {{ border-color: #ffd93d; }}
-        .kpi.blue {{ border-color: #6c5ce7; }}
         .kpi .value {{ font-size: 48px; font-weight: 800; line-height: 1.1; }}
         .kpi .label {{ font-size: 14px; color: #888; margin-top: 8px; text-transform: uppercase; letter-spacing: 1px; }}
         .kpi .detail {{ font-size: 12px; color: #666; margin-top: 6px; }}
@@ -820,10 +1073,12 @@ def generate_html_report(metrics: Dict[str, Any]) -> None:
         .danger {{ color: #ff6b6b; font-weight: bold; }}
         .warning {{ color: #ffd93d; font-weight: bold; }}
         .info {{ color: #6c5ce7; font-weight: bold; }}
+        .orange {{ color: #ff9f43; font-weight: bold; }}
         .badge {{ display: inline-block; padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: bold; }}
         .badge-green {{ background: rgba(0, 212, 170, 0.2); color: #00d4aa; }}
         .badge-red {{ background: rgba(255, 107, 107, 0.2); color: #ff6b6b; }}
         .badge-yellow {{ background: rgba(255, 217, 61, 0.2); color: #ffd93d; }}
+        .badge-orange {{ background: rgba(255, 159, 67, 0.2); color: #ff9f43; }}
         .img-container {{ text-align: center; margin: 20px 0; }}
         .img-container img {{ max-width: 100%; border-radius: 12px; border: 1px solid #333; }}
         .callout {{ background: rgba(0, 212, 170, 0.08); border-left: 4px solid #00d4aa; padding: 16px 20px; margin: 16px 0; border-radius: 0 8px 8px 0; }}
@@ -831,6 +1086,7 @@ def generate_html_report(metrics: Dict[str, Any]) -> None:
         .callout.danger {{ background: rgba(255, 107, 107, 0.08); border-left-color: #ff6b6b; }}
         .callout.success {{ background: rgba(0, 212, 170, 0.12); border-left-color: #00d4aa; }}
         .two-col {{ display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }}
+        .three-col {{ display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 24px; }}
         .score-bar {{ height: 32px; border-radius: 16px; background: linear-gradient(to right, #00d4aa 0%, #00d4aa 60%, #ffd93d 60%, #ffd93d 85%, #ff6b6b 85%, #ff6b6b 100%); margin: 16px 0; position: relative; }}
         .score-bar .label-left {{ position: absolute; left: 25%; top: 50%; transform: translate(-50%, -50%); font-size: 12px; font-weight: bold; color: #0e1117; }}
         .score-bar .label-mid {{ position: absolute; left: 72.5%; top: 50%; transform: translate(-50%, -50%); font-size: 12px; font-weight: bold; color: #0e1117; }}
@@ -842,8 +1098,8 @@ def generate_html_report(metrics: Dict[str, Any]) -> None:
 
 <div class="header">
     <h1>🛡️ Sistema de Detecção de Fraude PIX</h1>
-    <h2 style="color: #ccc; font-weight: 400; font-size: 18px; margin-top: 4px;">Relatório Executivo de Performance</h2>
-    <div class="version">Pipeline v2.0 — Score Híbrido Otimizado (0-100)</div>
+    <h2 style="color: #ccc; font-weight: 400; font-size: 18px;">Relatório Executivo de Performance</h2>
+    <div class="version">Pipeline v2.1 — LGBM ({metrics['lgbm_features_count']} features) + Cascade Rules + IF Boost</div>
     <p class="subtitle" style="margin-top: 12px;">
         Gerado em {metrics['data_geracao']} |
         Base de teste: {metrics['n_total']:,} transações |
@@ -851,41 +1107,85 @@ def generate_html_report(metrics: Dict[str, Any]) -> None:
     </p>
 </div>
 
-<!-- ═══════════ KPIs ═══════════ -->
+<!-- KPIs -->
 <div class="kpi-grid">
-    <div class="kpi green">
+    <div class="kpi" style="border-color: #00d4aa;">
         <div class="value" style="color: #00d4aa;">{e['fraudes_detectadas_pct']:.1f}%</div>
         <div class="label">Fraudes Detectadas</div>
-        <div class="detail">{p['tp']} de {metrics['n_fraudes']} fraudes capturadas (BLOQUEAR ≥85)</div>
+        <div class="detail">{p['tp']} de {metrics['n_fraudes']} fraudes (BLOQUEAR ≥85)</div>
     </div>
-    <div class="kpi {'green' if e['fraudes_nao_detectadas_n'] == 0 else 'red'}">
+    <div class="kpi" style="border-color: {'#00d4aa' if e['fraudes_nao_detectadas_n'] == 0 else '#ff6b6b'};">
         <div class="value" style="color: {'#00d4aa' if e['fraudes_nao_detectadas_n'] == 0 else '#ff6b6b'};">{e['fraudes_nao_detectadas_n']}</div>
         <div class="label">Fraudes Não Detectadas</div>
-        <div class="detail">{'Nenhuma fraude escapou do sistema ✅' if e['fraudes_nao_detectadas_n'] == 0 else f"{e['fraudes_nao_detectadas_pct']:.1f}% passaram sem detecção"}</div>
+        <div class="detail">{'Nenhuma fraude escapou ✅' if e['fraudes_nao_detectadas_n'] == 0 else f"{e['fraudes_nao_detectadas_pct']:.1f}% passaram"}</div>
     </div>
-    <div class="kpi yellow">
+    <div class="kpi" style="border-color: #ffd93d;">
         <div class="value" style="color: #ffd93d;">{e['falsos_alarmes_n']}</div>
         <div class="label">Falsos Alarmes</div>
-        <div class="detail">{e['falsos_alarmes_pct']:.2f}% das tx legítimas sinalizadas ({e['falsos_alarmes_n']} revisões extras)</div>
+        <div class="detail">{e['falsos_alarmes_pct']:.2f}% das tx legítimas</div>
     </div>
-    <div class="kpi green">
+    <div class="kpi" style="border-color: #00d4aa;">
         <div class="value" style="color: #00d4aa;">{e['precisao_alarmes_pct']:.1f}%</div>
         <div class="label">Precisão dos Alarmes</div>
-        <div class="detail">De cada bloqueio, esta % é fraude real</div>
+        <div class="detail">Cada bloqueio tem esta chance de ser fraude real</div>
     </div>
-    <div class="kpi blue">
+    <div class="kpi" style="border-color: #6c5ce7;">
         <div class="value" style="color: #6c5ce7;">{e['auc_roc']:.4f}</div>
         <div class="label">AUC-ROC</div>
-        <div class="detail">Capacidade geral de separação (1.0 = perfeito)</div>
+        <div class="detail">Capacidade geral (1.0 = perfeito)</div>
     </div>
-    <div class="kpi green">
+    <div class="kpi" style="border-color: #00d4aa;">
         <div class="value" style="color: #00d4aa;">+{sep['gap']:.1f}</div>
         <div class="label">GAP de Separação</div>
-        <div class="detail">Pontos entre menor fraude ({sep['fraud_min']}) e P99.9 normal ({sep['normal_p999']})</div>
+        <div class="detail">Menor fraude ({sep['fraud_min']}) vs P99.9 normal ({sep['normal_p999']})</div>
     </div>
 </div>
 
-<!-- ═══════════ Score Visual ═══════════ -->
+<!-- Contribuição -->
+<div class="section">
+    <h2>🏗️ Contribuição de Cada Componente na Detecção de Fraudes</h2>
+    <div class="callout success">
+        <strong>Sistema em 3 camadas:</strong> O LGBM é o motor principal.
+        As <strong>Cascade Rules</strong> capturam fraudes que o LGBM perde (bursts, contas novas).
+        O <strong>IF Boost</strong> promove transações anômalas na zona cinzenta.
+    </div>
+    <div class="three-col">
+        <div style="text-align: center; padding: 20px;">
+            <div style="font-size: 48px; font-weight: 800; color: #00d4aa;">{contrib['lgbm']}</div>
+            <div style="color: #888; margin-top: 8px;">🧠 LGBM</div>
+            <div style="color: #666; font-size: 12px;">Motor principal de ML</div>
+        </div>
+        <div style="text-align: center; padding: 20px;">
+            <div style="font-size: 48px; font-weight: 800; color: #ff9f43;">{contrib['cascade']}</div>
+            <div style="color: #888; margin-top: 8px;">🔗 Cascade Rules</div>
+            <div style="color: #666; font-size: 12px;">6 regras para FN do LGBM</div>
+        </div>
+        <div style="text-align: center; padding: 20px;">
+            <div style="font-size: 48px; font-weight: 800; color: #6c5ce7;">{contrib['if_boost']}</div>
+            <div style="color: #888; margin-top: 8px;">🔍 IF Boost</div>
+            <div style="color: #666; font-size: 12px;">Detecção de anomalias</div>
+        </div>
+    </div>
+    {'<div class="callout danger"><strong>Fraudes não detectadas:</strong> ' + str(contrib["nao_detectadas"]) + ' fraudes passaram por todas as camadas.</div>' if contrib['nao_detectadas'] > 0 else '<div class="callout success"><strong>Zero fraudes perdidas!</strong> Todas as camadas juntas capturaram 100% das fraudes.</div>'}
+</div>
+
+<!-- Cascade Rules -->
+<div class="section">
+    <h2>🔗 Cascade Rules — Detalhamento</h2>
+    <p style="color: #888; margin-bottom: 16px;">
+        Atuam <strong>apenas quando o LGBM não flagga</strong> (score &lt; {metrics['lgbm_threshold']}).
+    </p>
+    <table>
+        <tr><th>Regra</th><th>Tx Capturadas</th></tr>
+        {cascade_rows if cascade_rows else '<tr><td colspan="2" style="color: #888;">Nenhuma cascade rule ativada</td></tr>'}
+    </table>
+    <div class="callout">
+        Total cascade: {comp['cascade_triggered']:,} tx |
+        Fraudes capturadas: <strong>{contrib['cascade']}</strong>
+    </div>
+</div>
+
+<!-- Score Visual -->
 <div class="section">
     <h2>📏 Escala de Score (0-100)</h2>
     <div class="score-bar">
@@ -893,35 +1193,9 @@ def generate_html_report(metrics: Dict[str, Any]) -> None:
         <span class="label-mid">🟡 CONFIRMAR<br>60 — 84</span>
         <span class="label-right">🔴 BLOQUEAR<br>85 — 100</span>
     </div>
-    <table>
-        <tr>
-            <th>Faixa</th>
-            <th>Score</th>
-            <th>Ação</th>
-            <th>Descrição</th>
-        </tr>
-        <tr>
-            <td><span class="badge badge-green">🟢 APROVAR</span></td>
-            <td>0 a 59</td>
-            <td>Liberar automaticamente</td>
-            <td>Transação com padrão normal — sem intervenção necessária</td>
-        </tr>
-        <tr>
-            <td><span class="badge badge-yellow">🟡 CONFIRMAR</span></td>
-            <td>60 a 84</td>
-            <td>Autenticação adicional (2FA / biometria)</td>
-            <td>Padrão levemente atípico — confirmar identidade do cliente</td>
-        </tr>
-        <tr>
-            <td><span class="badge badge-red">🔴 BLOQUEAR</span></td>
-            <td>85 a 100</td>
-            <td>Parar para análise humana</td>
-            <td>Alto risco de fraude — bloquear e encaminhar ao analista</td>
-        </tr>
-    </table>
 </div>
 
-<!-- ═══════════ Dashboard Visual ═══════════ -->
+<!-- Dashboard -->
 <div class="section">
     <h2>📊 Dashboard Visual</h2>
     <div class="img-container">
@@ -929,349 +1203,177 @@ def generate_html_report(metrics: Dict[str, Any]) -> None:
     </div>
 </div>
 
-<!-- ═══════════ Como Interpretar ═══════════ -->
+<!-- Guia -->
 <div class="section">
-    <h2>📖 Guia de Interpretação para Executivos</h2>
-
+    <h2>📖 Guia para Executivos</h2>
     <div class="callout success">
-        <strong>Destaque principal:</strong> O sistema detecta <strong>{e['fraudes_detectadas_pct']:.1f}%</strong>
-        das fraudes com apenas <strong>{e['falsos_alarmes_n']}</strong> falsos alarmes em
-        {metrics['n_total']:,} transações. {'Nenhuma fraude escapou do modelo.' if e['fraudes_nao_detectadas_n'] == 0 else ''}
+        <strong>Destaque:</strong> O sistema detecta <strong>{e['fraudes_detectadas_pct']:.1f}%</strong> das fraudes
+        com apenas <strong>{e['falsos_alarmes_n']}</strong> falsos alarmes em {metrics['n_total']:,} transações.
     </div>
-
     <table>
+        <tr><th>Métrica</th><th>O que significa</th><th>Resultado</th></tr>
         <tr>
-            <th style="width: 25%">Métrica</th>
-            <th style="width: 50%">O que significa</th>
-            <th style="width: 25%">Resultado</th>
-        </tr>
-        <tr>
-            <td><strong>Fraudes Detectadas</strong><br>(Recall)</td>
-            <td>De cada 100 fraudes reais, quantas o sistema identifica e bloqueia</td>
+            <td><strong>Fraudes Detectadas</strong> (Recall)</td>
+            <td>De cada 100 fraudes, quantas o sistema bloqueia</td>
             <td class="highlight" style="font-size: 18px;">{e['fraudes_detectadas_pct']:.1f}%</td>
         </tr>
         <tr>
-            <td><strong>Fraudes Não Detectadas</strong><br>(False Negative Rate)</td>
-            <td>Fraudes que passam pelo sistema sem serem barradas — <em>risco residual</em></td>
-            <td class="{'highlight' if e['fraudes_nao_detectadas_n'] == 0 else 'danger'}" style="font-size: 18px;">{e['fraudes_nao_detectadas_n']} ({e['fraudes_nao_detectadas_pct']:.1f}%)</td>
-        </tr>
-        <tr>
-            <td><strong>Falsos Alarmes</strong><br>(False Positive Rate)</td>
-            <td>Transações legítimas erroneamente bloqueadas — <em>impacta experiência do cliente</em></td>
+            <td><strong>Falsos Alarmes</strong> (FPR)</td>
+            <td>Transações legítimas erroneamente bloqueadas</td>
             <td class="warning" style="font-size: 18px;">{e['falsos_alarmes_pct']:.2f}% ({e['falsos_alarmes_n']})</td>
         </tr>
         <tr>
-            <td><strong>Precisão dos Alarmes</strong><br>(Precision)</td>
-            <td>Quando o sistema bloqueia, qual a chance de ser fraude real — <em>eficiência dos analistas</em></td>
+            <td><strong>Precisão</strong></td>
+            <td>Quando bloqueia, qual a chance de ser fraude real</td>
             <td class="highlight" style="font-size: 18px;">{e['precisao_alarmes_pct']:.1f}%</td>
         </tr>
         <tr>
-            <td><strong>GAP de Separação</strong></td>
-            <td>Distância em pontos entre a fraude com menor score e o percentil 99.9 dos normais. Quanto maior, mais seguro o sistema</td>
+            <td><strong>GAP</strong></td>
+            <td>Distância entre menor fraude e normal mais alto</td>
             <td class="highlight" style="font-size: 18px;">+{sep['gap']:.1f} pontos</td>
         </tr>
         <tr>
             <td><strong>AUC-ROC</strong></td>
-            <td>Nota geral do modelo: 0.50 = aleatório, 1.00 = perfeito. Acima de 0.95 é excelente</td>
+            <td>Nota geral (0.50=aleatório, 1.00=perfeito)</td>
             <td class="info" style="font-size: 18px;">{e['auc_roc']:.4f}</td>
         </tr>
     </table>
 </div>
 
-<!-- ═══════════ Decisões ═══════════ -->
+<!-- Decisões -->
 <div class="section">
-    <h2>🎯 Resultados por Faixa de Decisão</h2>
-
+    <h2>🎯 Resultados por Faixa</h2>
     <table>
+        <tr><th>Decisão</th><th>Score</th><th>Ação</th><th>Qtd</th><th>%</th><th>Fraudes</th><th>Taxa</th></tr>
         <tr>
-            <th>Decisão</th>
-            <th>Score</th>
-            <th>Ação Operacional</th>
-            <th>Quantidade</th>
-            <th>% do Total</th>
-            <th>Fraudes Reais</th>
-            <th>Taxa Fraude</th>
+            <td><span class="badge badge-green">🟢 APROVAR</span></td><td>0—59</td><td>Liberar</td>
+            <td>{metrics['decisoes']['APROVAR']:,}</td><td>{metrics['decisoes']['APROVAR']/metrics['n_total']*100:.1f}%</td>
+            <td class="{'highlight' if metrics.get('n_fraude_aprovar',0)==0 else 'danger'}">{metrics.get('n_fraude_aprovar',0)}</td><td>{metrics.get('taxa_fraude_aprovar',0):.4f}%</td>
         </tr>
         <tr>
-            <td><span class="badge badge-green">🟢 APROVAR</span></td>
-            <td>0 — 59</td>
-            <td>Transação liberada automaticamente</td>
-            <td>{metrics['decisoes']['APROVAR']:,}</td>
-            <td>{metrics['decisoes']['APROVAR'] / metrics['n_total'] * 100:.1f}%</td>
-            <td class="{'highlight' if metrics.get('n_fraude_aprovar', 0) == 0 else 'danger'}">{metrics.get('n_fraude_aprovar', 0)}</td>
-            <td>{metrics.get('taxa_fraude_aprovar', 0):.3f}%</td>
+            <td><span class="badge badge-yellow">🟡 CONFIRMAR</span></td><td>60—84</td><td>2FA</td>
+            <td>{metrics['decisoes']['CONFIRMAR']:,}</td><td>{metrics['decisoes']['CONFIRMAR']/metrics['n_total']*100:.1f}%</td>
+            <td>{metrics.get('n_fraude_confirmar',0)}</td><td>{metrics.get('taxa_fraude_confirmar',0):.2f}%</td>
         </tr>
         <tr>
-            <td><span class="badge badge-yellow">🟡 CONFIRMAR</span></td>
-            <td>60 — 84</td>
-            <td>Solicitar 2FA / biometria</td>
-            <td>{metrics['decisoes']['CONFIRMAR']:,}</td>
-            <td>{metrics['decisoes']['CONFIRMAR'] / metrics['n_total'] * 100:.1f}%</td>
-            <td>{metrics.get('n_fraude_confirmar', 0)}</td>
-            <td>{metrics.get('taxa_fraude_confirmar', 0):.2f}%</td>
-        </tr>
-        <tr>
-            <td><span class="badge badge-red">🔴 BLOQUEAR</span></td>
-            <td>85 — 100</td>
-            <td>Bloquear + enviar ao analista</td>
-            <td>{metrics['decisoes']['BLOQUEAR']:,}</td>
-            <td>{metrics['decisoes']['BLOQUEAR'] / metrics['n_total'] * 100:.1f}%</td>
-            <td class="danger">{metrics.get('n_fraude_bloquear', 0)}</td>
-            <td class="danger">{metrics.get('taxa_fraude_bloquear', 0):.2f}%</td>
+            <td><span class="badge badge-red">🔴 BLOQUEAR</span></td><td>85—100</td><td>Bloquear</td>
+            <td>{metrics['decisoes']['BLOQUEAR']:,}</td><td>{metrics['decisoes']['BLOQUEAR']/metrics['n_total']*100:.1f}%</td>
+            <td class="danger">{metrics.get('n_fraude_bloquear',0)}</td><td class="danger">{metrics.get('taxa_fraude_bloquear',0):.2f}%</td>
         </tr>
     </table>
-
-    <div class="callout">
-        <strong>Leitura-chave:</strong> A faixa APROVAR deve ter taxa de fraude próxima de 0% —
-        significa que nenhuma fraude escapa. A faixa BLOQUEAR deve ter taxa alta —
-        os bloqueios são precisos e o analista não perde tempo com falsos alarmes.
-    </div>
 </div>
 
-<!-- ═══════════ Separação de Scores ═══════════ -->
+<!-- Separação -->
 <div class="section">
     <h2>🔬 Qualidade da Separação</h2>
-
     <div class="callout success">
-        <strong>GAP de +{sep['gap']:.1f} pontos</strong> — Existe uma enorme distância entre os scores das
-        fraudes e os das transações normais. Isso significa que o modelo tem alta confiança nas suas classificações.
+        <strong>GAP de +{sep['gap']:.1f} pontos</strong> entre a fraude mais fraca e o P99.9 das normais.
     </div>
-
     <div class="two-col">
         <div>
-            <h3 style="color: #00d4aa; margin-bottom: 12px;">Transações Normais</h3>
+            <h3 style="color: #00d4aa;">Normais</h3>
             <table>
-                <tr><td>P99.9 (99.9% estão abaixo de)</td><td class="highlight">{sep['normal_p999']}</td></tr>
-                <tr><td>Máximo observado</td><td>{sep['normal_max']}</td></tr>
+                <tr><td>P99.9</td><td class="highlight">{sep['normal_p999']}</td></tr>
+                <tr><td>Máximo</td><td>{sep['normal_max']}</td></tr>
             </table>
         </div>
         <div>
-            <h3 style="color: #ff6b6b; margin-bottom: 12px;">Fraudes</h3>
+            <h3 style="color: #ff6b6b;">Fraudes</h3>
             <table>
-                <tr><td>Mínimo (fraude mais "fraca")</td><td class="danger">{sep['fraud_min']}</td></tr>
-                <tr><td>Percentil 5</td><td>{sep['fraud_p5']}</td></tr>
+                <tr><td>Mínimo</td><td class="danger">{sep['fraud_min']}</td></tr>
+                <tr><td>P5</td><td>{sep['fraud_p5']}</td></tr>
                 <tr><td>Mediana</td><td>{sep['fraud_median']}</td></tr>
             </table>
         </div>
     </div>
 </div>
 
-<!-- ═══════════ Duas perspectivas ═══════════ -->
+<!-- Duas perspectivas -->
 <div class="section">
-    <h2>📐 Duas Perspectivas de Classificação</h2>
-
-    <div class="callout warning">
-        <strong>Por que duas?</strong> Na visão conservadora, apenas BLOQUEAR conta como "fraude detectada".
-        Na visão ampla, CONFIRMAR também ajuda — se o fraudador não consegue passar a biometria, a fraude é impedida.
-    </div>
-
+    <h2>📐 Duas Perspectivas</h2>
     <div class="two-col">
         <div>
-            <h3 style="color: #ff6b6b; margin-bottom: 12px;">Visão Conservadora (só BLOQUEAR)</h3>
+            <h3 style="color: #ff6b6b;">Conservadora (só BLOQUEAR)</h3>
             <table>
-                <tr><td>Recall</td><td class="highlight">{p['recall'] * 100:.1f}%</td></tr>
-                <tr><td>Precision</td><td>{p['precision'] * 100:.1f}%</td></tr>
-                <tr><td>F1-Score</td><td>{p['f1']:.4f}</td></tr>
-                <tr><td>Falsos positivos</td><td>{p['fp']:,}</td></tr>
-                <tr><td>Falsos negativos</td><td class="{'highlight' if p['fn'] == 0 else 'danger'}">{p['fn']}</td></tr>
+                <tr><td>Recall</td><td class="highlight">{p['recall']*100:.1f}%</td></tr>
+                <tr><td>Precision</td><td>{p['precision']*100:.1f}%</td></tr>
+                <tr><td>F1</td><td>{p['f1']:.4f}</td></tr>
+                <tr><td>FP</td><td>{p['fp']:,}</td></tr>
+                <tr><td>FN</td><td class="{'highlight' if p['fn']==0 else 'danger'}">{p['fn']}</td></tr>
             </table>
         </div>
         <div>
-            <h3 style="color: #4ecdc4; margin-bottom: 12px;">Visão Ampla (CONFIRMAR + BLOQUEAR)</h3>
+            <h3 style="color: #4ecdc4;">Ampla (CONFIRMAR + BLOQUEAR)</h3>
             <table>
-                <tr><td>Recall</td><td class="highlight">{p2['recall'] * 100:.1f}%</td></tr>
-                <tr><td>Precision</td><td>{p2['precision'] * 100:.1f}%</td></tr>
-                <tr><td>F1-Score</td><td>{p2['f1']:.4f}</td></tr>
-                <tr><td>Falsos positivos</td><td>{p2['fp']:,}</td></tr>
-                <tr><td>Falsos negativos</td><td class="{'highlight' if p2['fn'] == 0 else 'danger'}">{p2['fn']}</td></tr>
+                <tr><td>Recall</td><td class="highlight">{p2['recall']*100:.1f}%</td></tr>
+                <tr><td>Precision</td><td>{p2['precision']*100:.1f}%</td></tr>
+                <tr><td>F1</td><td>{p2['f1']:.4f}</td></tr>
+                <tr><td>FP</td><td>{p2['fp']:,}</td></tr>
+                <tr><td>FN</td><td class="{'highlight' if p2['fn']==0 else 'danger'}">{p2['fn']}</td></tr>
             </table>
         </div>
     </div>
 </div>
 
-<!-- ═══════════ IF Stats ═══════════ -->
+<!-- Arquitetura -->
 <div class="section">
-    <h2>🔍 Isolation Forest — Especialista em Primeiras Transações</h2>
-    <table>
-        <tr><td>Primeiras transações do trimestre</td><td>{metrics['isolation_forest']['first_tx_total']:,}</td></tr>
-        <tr><td>IF efetivamente ativo (zona cinzenta do LGBM raw)</td><td>{metrics['isolation_forest']['if_active']:,} ({metrics['isolation_forest']['if_active_pct']:.1f}%)</td></tr>
-    </table>
-    <div class="callout">
-        O Isolation Forest atua <strong>apenas</strong> em primeiras transações do trimestre
-        <strong>e somente</strong> quando o LGBM está indeciso (score raw entre {IF_LGBM_RAW_LOW} e {IF_LGBM_RAW_HIGH}).
-    </div>
-</div>
-
-<!-- ═══════════ Arquitetura ═══════════ -->
-<div class="section">
-    <h2>⚙️ Arquitetura do Sistema v2.0</h2>
+    <h2>⚙️ Arquitetura do Sistema v2.1</h2>
     <table>
         <tr><th>Componente</th><th>Tipo</th><th>Papel</th></tr>
-        <tr>
-            <td><strong>LightGBM v3 (Raw)</strong></td>
-            <td>Gradient Boosting (1500 trees, depth=7)</td>
-            <td>Modelo principal — gera score raw (0-1) com 62 features</td>
-        </tr>
-        <tr>
-            <td><strong>Motor de Regras</strong></td>
-            <td>6 regras determinísticas</td>
-            <td>Features para o LGBM: idade, relacionamento, conta mula, chave aleatória, velocidade, topaz</td>
-        </tr>
-        <tr>
-            <td><strong>Isolation Forest</strong></td>
-            <td>300 árvores, contaminação=1%</td>
-            <td>Especialista em primeiras transações — detecta anomalias sem histórico</td>
-        </tr>
-        <tr>
-            <td><strong>Mapeamento Híbrido</strong></td>
-            <td>Interpolação não-linear (12 âncoras)</td>
-            <td>Converte score raw (0-1) → score intuitivo (0-100) com máxima separação</td>
-        </tr>
-        <tr>
-            <td><strong>Preprocessor</strong></td>
-            <td>PixPreprocessor (custom)</td>
-            <td>Limpeza, imputação de nulos e preparação das features</td>
-        </tr>
+        <tr><td><strong>🧠 LightGBM</strong></td><td>Gradient Boosting ({metrics['lgbm_features_count']} features)</td><td>Motor principal — threshold={metrics['lgbm_threshold']:.4f}</td></tr>
+        <tr><td><strong>🔗 Cascade Rules</strong></td><td>6 regras determinísticas</td><td>Captura FN do LGBM: bursts, contas novas, esvaziamento</td></tr>
+        <tr><td><strong>🔍 Isolation Forest</strong></td><td>800 trees, boost condicional</td><td>Complementar: boost +0.08/+0.15 quando score IF alto</td></tr>
+        <tr><td><strong>📏 Mapeamento Híbrido</strong></td><td>Interpolação não-linear</td><td>Raw → Score 0-100</td></tr>
+        <tr><td><strong>⚠️ 24 Agravantes</strong></td><td>7 fases de análise</td><td>Ajuste fino por contexto</td></tr>
+        <tr><td><strong>🛡️ Eng. Social</strong></td><td>12 padrões combinatórios</td><td>Detecta golpes conhecidos</td></tr>
+        <tr><td><strong>🔍 Behavioral</strong></td><td>15 fatores RT</td><td>Anomalias comportamentais</td></tr>
     </table>
-
     <div class="callout">
-        <strong>Fluxo:</strong> Transação → Features → LGBM Raw (0-1) → IF (1ª tx) → Ensemble Raw
-        → Mapeamento Híbrido → Score 0-100 → Decisão (APROVAR / CONFIRMAR / BLOQUEAR)
+        <strong>Fluxo:</strong> TX → LGBM → Cascade → IF Boost → Mapeamento → Agravantes/SE/Behavioral → Score 0-100 → Decisão
     </div>
 </div>
 
-<!-- ═══════════ Comparação de Modelos ═══════════ -->
+<!-- Performance -->
 <div class="section">
-    <h2>📈 Performance do Modelo</h2>
+    <h2>📈 Performance</h2>
     <table>
-        <tr>
-            <th>Modelo</th>
-            <th>AUC-ROC</th>
-            <th>Average Precision</th>
-        </tr>
-        <tr>
-            <td>LGBM Raw</td>
-            <td>{metrics['auc_roc_lgbm_raw']:.4f}</td>
-            <td>{metrics['ap_lgbm_raw']:.4f}</td>
-        </tr>
-        <tr>
-            <td><strong>Ensemble (LGBM Raw + IF)</strong></td>
-            <td class="highlight"><strong>{metrics['auc_roc_ensemble']:.4f}</strong></td>
-            <td class="highlight"><strong>{metrics['ap_ensemble']:.4f}</strong></td>
-        </tr>
+        <tr><th>Modelo</th><th>AUC-ROC</th><th>Average Precision</th></tr>
+        <tr><td>LGBM sozinho</td><td>{metrics['auc_roc_lgbm']:.4f}</td><td>{metrics['ap_lgbm']:.4f}</td></tr>
+        <tr><td><strong>Ensemble v2.1</strong></td><td class="highlight"><strong>{metrics['auc_roc_ensemble']:.4f}</strong></td><td class="highlight"><strong>{metrics['ap_ensemble']:.4f}</strong></td></tr>
     </table>
 </div>
-"""
-    
-    # Benchmark section (condicional)
-    bench_html = ""
-    if "benchmark_latencia" in metrics:
-        b = metrics["benchmark_latencia"]
-        sla_status = "✅ APROVADO" if b["sla_ok"] else "❌ REPROVADO"
-        sla_color = "#00d4aa" if b["sla_ok"] else "#ff6b6b"
-        bench_html = f"""
-<!-- ═══════════ Benchmark de Performance ═══════════ -->
-<div class="section">
-    <h2>⚡ Performance — Impacto no SLA da Transação PIX</h2>
-
-    <div class="callout {'success' if b['sla_ok'] else 'danger'}">
-        <strong>SLA: <span style="color: {sla_color};">{sla_status}</span></strong> —
-        A inferência leva em média <strong>{b['media_ms']:.1f}ms</strong> por transação,
-        muito abaixo do limite de {b['sla_limite_ms']}ms.
-        O modelo processa <strong>{b['throughput_por_segundo']:.0f} transações/segundo</strong> em CPU.
-    </div>
-
-    <div class="kpi-grid">
-        <div class="kpi green">
-            <div class="value" style="color: #00d4aa; font-size: 40px;">{b['media_ms']:.1f}ms</div>
-            <div class="label">Latência Média</div>
-            <div class="detail">Tempo médio de inferência por transação</div>
-        </div>
-        <div class="kpi green">
-            <div class="value" style="color: #00d4aa; font-size: 40px;">{b['p99_ms']:.1f}ms</div>
-            <div class="label">Latência P99</div>
-            <div class="detail">99% das transações são processadas abaixo deste valor</div>
-        </div>
-        <div class="kpi green">
-            <div class="value" style="color: #00d4aa; font-size: 40px;">{b['throughput_por_segundo']:.0f}</div>
-            <div class="label">Transações/Segundo</div>
-            <div class="detail">Capacidade de processamento em CPU local</div>
-        </div>
-    </div>
-
-    <table>
-        <tr>
-            <th>Métrica</th>
-            <th>Valor</th>
-            <th>Observação</th>
-        </tr>
-        <tr>
-            <td>Latência média</td>
-            <td class="highlight">{b['media_ms']:.2f} ms</td>
-            <td>Tempo end-to-end: features + modelo + mapeamento + decisão</td>
-        </tr>
-        <tr>
-            <td>Latência mediana</td>
-            <td>{b['mediana_ms']:.2f} ms</td>
-            <td>50% das inferências são mais rápidas que isso</td>
-        </tr>
-        <tr>
-            <td>Latência P95</td>
-            <td>{b['p95_ms']:.2f} ms</td>
-            <td>95% das inferências</td>
-        </tr>
-        <tr>
-            <td>Latência P99</td>
-            <td class="highlight">{b['p99_ms']:.2f} ms</td>
-            <td>Métrica principal para SLA — 99% das inferências</td>
-        </tr>
-        <tr>
-            <td>Latência máxima</td>
-            <td>{b['max_ms']:.2f} ms</td>
-            <td>Pior caso observado (cold cache, GC, etc.)</td>
-        </tr>
-        <tr>
-            <td>Desvio padrão</td>
-            <td>{b['std_ms']:.2f} ms</td>
-            <td>Variabilidade — quanto menor, mais previsível</td>
-        </tr>
-        <tr>
-            <td>Throughput</td>
-            <td class="highlight">{b['throughput_por_segundo']:.0f} tx/s</td>
-            <td>Inferências por segundo em CPU local</td>
-        </tr>
-        <tr>
-            <td>SLA &lt; {b['sla_limite_ms']}ms</td>
-            <td style="color: {sla_color}; font-weight: bold; font-size: 16px;">{sla_status}</td>
-            <td>{'Modelo não impacta o tempo da transação PIX' if b['sla_ok'] else 'Necessita otimização'}</td>
-        </tr>
-    </table>
-
-    <div class="callout">
-        <strong>Contexto:</strong> Uma transação PIX tem SLA regulatório de até 10 segundos (BACEN).
-        O modelo de fraude adiciona apenas <strong>{b['media_ms']:.1f}ms</strong> — representando
-        <strong>{b['media_ms'] / 10000 * 100:.3f}%</strong> do tempo total permitido.
-        Em produção com servidor dedicado, a latência tende a ser <strong>ainda menor</strong>.
-    </div>
-</div>
-"""
-
-    html += f"""
-{bench_html}
 
 <div class="footer">
-    <p>🔒 Documento confidencial — uso interno BRB</p>
-    <p>Sistema Anomalia PIX v2.0 | Pipeline Híbrido Otimizado | {datetime.now().strftime('%d/%m/%Y')}</p>
+    Sistema de Detecção de Fraude PIX v2.1 — LGBM + Cascade + IF Boost<br>
+    Relatório gerado em {metrics['data_geracao']}
 </div>
 
 </body>
 </html>"""
 
-
     output = RELATORIO_DIR / "relatorio_executivo.html"
     with open(output, "w", encoding="utf-8") as f:
         f.write(html)
-    print(f"  ✅ Relatório HTML: {output}")
+    print(f"  ✅ Relatório HTML salvo: {output}")
+
+
+# =========================================================
+# 7. SALVAR
+# =========================================================
+def save_outputs(df: pd.DataFrame, metrics: Dict[str, Any]) -> None:
+    """Salva métricas JSON e resultados CSV."""
+    print("\n" + "=" * 70)
+    print("  SALVANDO ARTEFATOS")
+    print("=" * 70)
+
+    metrics_path = RELATORIO_DIR / "relatorio_metricas.json"
+    with open(metrics_path, "w", encoding="utf-8") as f:
+        json.dump(metrics, f, indent=2, ensure_ascii=False, default=str)
+    print(f"  ✅ Métricas: {metrics_path}")
+
+    csv_path = RELATORIO_DIR / "resultados_detalhados.csv"
+    df.to_csv(csv_path, index=False)
+    print(f"  ✅ Resultados: {csv_path} ({len(df):,} rows)")
 
 
 # =========================================================
@@ -1280,203 +1382,77 @@ def generate_html_report(metrics: Dict[str, Any]) -> None:
 def main():
     print("\n")
     print("█" * 70)
-    print("  TESTE COMPLETO DO PIPELINE v2.0 + RELATÓRIO EXECUTIVO")
-    print("  Score Híbrido Otimizado (0-100)")
-    print("  🟢 APROVAR [0-60) | 🟡 CONFIRMAR [60-85) | 🔴 BLOQUEAR [85-100]")
+    print("█                                                                    █")
+    print("█   TESTE DO PIPELINE v2.1 + RELATÓRIO EXECUTIVO                     █")
+    print("█   LGBM + Cascade Rules + IF Boost + Mapeamento Híbrido             █")
+    print("█                                                                    █")
     print("█" * 70)
 
-    t0 = time.time()
+    t_total = time.time()
 
-    # 1. Carregar artefatos
+    # 1. Carregar
     artifacts = load_artifacts()
-
-    # 2. Carregar dados de teste
     X_test, y_test = load_test_data()
 
-    # 3. Executar pipeline
-    df_results = run_pipeline(X_test, y_test, artifacts)
+    # 2. Executar pipeline
+    results = run_pipeline(X_test, y_test, artifacts)
 
-    # 4. Calcular métricas
-    metrics = calculate_metrics(df_results, artifacts)
+    # 3. Métricas
+    metrics = calculate_metrics(results, artifacts)
 
-    # 5. Salvar métricas JSON
-    metrics_path = RELATORIO_DIR / "relatorio_metricas.json"
-    with open(metrics_path, "w", encoding="utf-8") as f:
-        json.dump(metrics, f, ensure_ascii=False, indent=2, default=str)
-    print(f"\n  ✅ Métricas JSON: {metrics_path}")
+    # 4. Dashboard
+    plot_dashboard(results, metrics)
 
-    # 6. Gráficos
-    plot_dashboard(df_results, metrics)
-
-    # 7. Relatório HTML
+    # 5. Relatório HTML
     generate_html_report(metrics)
 
-    # 8. Resultados detalhados
-    results_path = RELATORIO_DIR / "resultados_detalhados.csv"
-    df_results.to_csv(results_path, index=False)
-    print(f"  ✅ Resultados CSV: {results_path}")
-    
-
-    # 9. Benchmark de Latência (inferência individual) 
-    print(f"\n{'=' * 70}")
-    print("  BENCHMARK DE LATÊNCIA — INFERÊNCIA INDIVIDUAL")
-    print(f"{'=' * 70}")
-
-    # Importar o pipeline de inferência
-    sys.path.insert(0, str(PROJECT_ROOT))
-    try:
-        from pipeline_inferencia import PipelineInferencia
-
-        pipeline = PipelineInferencia(artefatos_dir=str(ARTEFATOS_DIR))
-
-        # Transação de teste realista
-        tx_bench = {
-            "cd_pix": "E00000208202603181530001234567890",
-            "dt_pix": "2026-03-18 15:30:00",
-            "cd_cpf_pagador": "12345678901",
-            "cd_cpf_cnpj_recebedor": "98765432100",
-            "ds_chave_pix": "98765432100",
-            "ds_tipo_chave": "DOCUMENTO/TELEFONE",
-            "vl_pix": 150.00,
-            "qt_total_pix_trimestre": 25,
-            "vl_mediana_pix_trimestre": 120.00,
-            "vl_desvio_padrao_pix_trimestre": 80.00,
-            "qt_intervalo_transacao_minuto": 1440,
-            "qt_intervalo_mediana_trimestre": 1200,
-            "qt_intervalo_desvio_padrao_trimestre": 600,
-            "qt_pix_dia_maximo_trimestre": 3,
-            "device_name": "Samsung Galaxy S23",
-            "app_version": "7.12.0",
-            "ip_address": "192.168.1.1",
-            "latencia_rede_ms": 45.0,
-            "vl_latencia_rede_media_trimestre": 42.0,
-            "tempo_interacao_ms": None,
-            "vl_tempo_interacao_medio_trimestre": None,
-            "tempo_processamento_host_ms": 120.0,
-            "metodo_autenticacao": "biometria",
-            "session_id": "sess_abc123",
-            "cd_retorno": "00",
-            "topaz_risk_score": 1.5,
-            "topaz_transacao_rejeitada": 0,
-            "topaz_transacao_habilitada": 1,
-            "is_agendamento_recorrente": "false",
-            "topaz_sync_id": None,
-            "qt_aparelhos_distintos_trimestre": 1,
-            "nr_idade": 35,
-            "qt_tempo_relacionamento_mes": 120,
-        }
-
-        # Warmup (3 chamadas para estabilizar)
-        for _ in range(3):
-            pipeline.predict(tx_bench)
-
-        # Benchmark: N iterações
-        N_ITER = 200
-        latencias = []
-
-        for i in range(N_ITER):
-            t0 = time.perf_counter()
-            _ = pipeline.predict(tx_bench)
-            elapsed_ms = (time.perf_counter() - t0) * 1000
-            latencias.append(elapsed_ms)
-
-        latencias = np.array(latencias)
-
-        bench = {
-            "n_iteracoes": N_ITER,
-            "media_ms": round(float(np.mean(latencias)), 2),
-            "mediana_ms": round(float(np.median(latencias)), 2),
-            "p95_ms": round(float(np.percentile(latencias, 95)), 2),
-            "p99_ms": round(float(np.percentile(latencias, 99)), 2),
-            "min_ms": round(float(np.min(latencias)), 2),
-            "max_ms": round(float(np.max(latencias)), 2),
-            "std_ms": round(float(np.std(latencias)), 2),
-            "throughput_por_segundo": round(1000.0 / float(np.mean(latencias)), 1),
-        }
-
-        # SLA check
-        SLA_LIMITE_MS = 100  # Limite máximo aceitável por transação
-        sla_ok = bench["p99_ms"] < SLA_LIMITE_MS
-
-        print(f"\n  Configuração: {N_ITER} inferências individuais (pipeline completo)")
-        print(f"  Hardware: CPU local (sem GPU)")
-        print(f"\n  ┌──────────────────────────────────────────────┐")
-        print(f"  │        LATÊNCIA POR TRANSAÇÃO                │")
-        print(f"  ├──────────────────────────────────────────────┤")
-        print(f"  │  Média:              {bench['media_ms']:8.2f} ms            │")
-        print(f"  │  Mediana:            {bench['mediana_ms']:8.2f} ms            │")
-        print(f"  │  P95:                {bench['p95_ms']:8.2f} ms            │")
-        print(f"  │  P99:                {bench['p99_ms']:8.2f} ms            │")
-        print(f"  │  Min:                {bench['min_ms']:8.2f} ms            │")
-        print(f"  │  Max:                {bench['max_ms']:8.2f} ms            │")
-        print(f"  │  Desvio padrão:      {bench['std_ms']:8.2f} ms            │")
-        print(f"  ├──────────────────────────────────────────────┤")
-        print(f"  │  Throughput:    {bench['throughput_por_segundo']:8.1f} tx/s             │")
-        print(f"  │  SLA < {SLA_LIMITE_MS}ms:       {'✅ OK' if sla_ok else '❌ ATENÇÃO'}                     │")
-        print(f"  └──────────────────────────────────────────────┘")
-
-        # Adicionar ao metrics
-        metrics["benchmark_latencia"] = bench
-        metrics["benchmark_latencia"]["sla_limite_ms"] = SLA_LIMITE_MS
-        metrics["benchmark_latencia"]["sla_ok"] = sla_ok
-
-        # Re-salvar métricas com benchmark
-        with open(metrics_path, "w", encoding="utf-8") as f:
-            json.dump(metrics, f, ensure_ascii=False, indent=2, default=str)
-
-    except ImportError:
-        print(f"  ⚠️  pipeline_inferencia.py não encontrado — benchmark pulado")
-        bench = None
-
+    # 6. Salvar
+    save_outputs(results, metrics)
 
     # Resumo final
-    elapsed = time.time() - t0
+    elapsed = time.time() - t_total
     e = metrics["executivo"]
     sep = metrics["separacao"]
+    contrib = metrics["contribuicao_fraudes"]
 
-    print(f"\n\n{'█' * 70}")
-    print("  RESUMO FINAL — PIPELINE v2.0")
-    print(f"{'█' * 70}")
+    print("\n" + "█" * 70)
+    print("█  RESULTADO FINAL                                                   █")
+    print("█" * 70)
     print(f"""
-  📊 BASE DE TESTE
-     Transações:         {metrics['n_total']:,}
-     Fraudes:             {metrics['n_fraudes']} ({metrics['taxa_fraude_pct']:.2f}%)
+  Pipeline v2.1: LGBM ({metrics['lgbm_features_count']} features) + Cascade (6) + IF Boost
 
-  🎯 PERFORMANCE (Score Híbrido 0-100)
-     Fraudes detectadas:  {e['fraudes_detectadas_pct']:.1f}% ({metrics['pipeline_bloquear']['tp']}/{metrics['n_fraudes']})
-     Fraudes perdidas:    {e['fraudes_nao_detectadas_n']} ({e['fraudes_nao_detectadas_pct']:.1f}%)
-     Falsos alarmes:      {e['falsos_alarmes_n']} ({e['falsos_alarmes_pct']:.2f}%)
-     Precisão alarmes:    {e['precisao_alarmes_pct']:.1f}%
-     AUC-ROC:             {e['auc_roc']:.4f}
-     F1-Score:            {e['f1']:.4f}
-     GAP separação:       +{sep['gap']:.1f} pontos
-""")
+  ┌─────────────────────────────────────────────────────┐
+  │  🛡️  Fraudes Detectadas:  {e['fraudes_detectadas_pct']:5.1f}%  ({metrics['pipeline_bloquear']['tp']}/{metrics['n_fraudes']})          │
+  │  ❌  Fraudes Perdidas:    {e['fraudes_nao_detectadas_n']:5d}                            │
+  │  ⚠️   Falsos Alarmes:     {e['falsos_alarmes_n']:5d}  ({e['falsos_alarmes_pct']:.2f}%)             │
+  │  🎯  Precisão Alarmes:   {e['precisao_alarmes_pct']:5.1f}%                           │
+  │  📊  AUC-ROC:            {e['auc_roc']:.4f}                          │
+  │  📏  GAP Separação:      +{sep['gap']:.1f} pontos                      │
+  ├─────────────────────────────────────────────────────┤
+  │  🧠 LGBM:     {contrib['lgbm']:4d} fraudes                              │
+  │  🔗 Cascade:  {contrib['cascade']:4d} fraudes                              │
+  │  🔍 IF Boost: {contrib['if_boost']:4d} fraudes                              │
+  │  ❌ Perdidas: {contrib['nao_detectadas']:4d}                                     │
+  └─────────────────────────────────────────────────────┘
 
-    if "benchmark_latencia" in metrics:
-        b = metrics["benchmark_latencia"]
-        print(f"""
-  ⚡ PERFORMANCE (LATÊNCIA POR TRANSAÇÃO)
-     Média:               {b['media_ms']:.2f} ms
-     Mediana:             {b['mediana_ms']:.2f} ms
-     P95:                 {b['p95_ms']:.2f} ms
-     P99:                 {b['p99_ms']:.2f} ms
-     Throughput:          {b['throughput_por_segundo']:.0f} inferências/segundo
-     SLA < {b['sla_limite_ms']}ms:          {'✅ APROVADO' if b['sla_ok'] else '❌ REPROVADO'}""")
-
-    print(f"""
-  📏 FAIXAS DE DECISÃO
-     🟢 APROVAR   [0-60):   {metrics['decisoes']['APROVAR']:,} tx | {metrics.get('n_fraude_aprovar', 0)} fraudes
-     🟡 CONFIRMAR [60-85):  {metrics['decisoes']['CONFIRMAR']:,} tx | {metrics.get('n_fraude_confirmar', 0)} fraudes
-     🔴 BLOQUEAR  [85-100]: {metrics['decisoes']['BLOQUEAR']:,} tx | {metrics.get('n_fraude_bloquear', 0)} fraudes
-
-  📁 ARQUIVOS GERADOS
-     📄 {RELATORIO_DIR}/relatorio_executivo.html
-     📊 {RELATORIO_DIR}/dashboard_executivo.png
-     📋 {RELATORIO_DIR}/relatorio_metricas.json
-     📑 {RELATORIO_DIR}/resultados_detalhados.csv
+  📁 Artefatos salvos em: {RELATORIO_DIR}/
+    - relatorio_executivo.html
+    - dashboard_executivo.png
+    - relatorio_metricas.json
+    - resultados_detalhados.csv
 
   ⏱️  Tempo total: {elapsed:.1f}s
-    """)
+""")
+
+    # Veredicto
+    if e['fraudes_nao_detectadas_n'] == 0:
+        print("  ✅ VEREDICTO: Sistema APTO para produção — 0 fraudes perdidas!")
+    elif e['fraudes_detectadas_pct'] >= 95:
+        print(f"  ✅ VEREDICTO: Sistema APTO — {e['fraudes_detectadas_pct']:.1f}% recall")
+    elif e['fraudes_detectadas_pct'] >= 90:
+        print(f"  ⚠️  VEREDICTO: ACEITÁVEL — {e['fraudes_detectadas_pct']:.1f}% recall, {e['fraudes_nao_detectadas_n']} FN")
+    else:
+        print(f"  ❌ VEREDICTO: Precisa melhorias — {e['fraudes_detectadas_pct']:.1f}% recall")
 
 
 if __name__ == "__main__":

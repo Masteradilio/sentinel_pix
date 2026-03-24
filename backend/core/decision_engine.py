@@ -1,30 +1,28 @@
 """
-core/decision_engine.py v2.0 — Motor de Decisão para Transações PIX
+core/decision_engine.py v2.1 — Motor de Decisão para Transações PIX
 
-Reescrita completa v2.0:
-  - REMOVIDAS todas as dependências de repositório (ClientRepository,
-    AutorizacaoPreviaManager, CPFMonitoringManager, MobileFeaturesRepository)
-  - REMOVIDO demo mode legado (orquestrador controla isso agora)
-  - REMOVIDA duplicação de feature engineering (orquestrador faz isso)
-  - REMOVIDA classe Preprocessor inline (orquestrador carrega o real)
-  - REMOVIDOS imports pesados desnecessários (pandas, sys, os, hashlib)
-  - SIMPLIFICADO para scoring puro: recebe features → retorna decisão
+Mudanças v2.0 → v2.1:
+  1. IF v4 COMPLEMENTAR: IF ativa para QUALQUER tx quando LGBM < threshold
+     (antes: só primeiras tx do trimestre)
+  2. CASCADE RULES: 6 regras integradas para capturar bursts que LGBM perde
+  3. FEATURES DE INTERAÇÃO: cria valor_x_burst, etc. inline para o IF
+  4. ENSEMBLE BOOST CONDICIONAL: IF adiciona boost ao score quando LGBM incerto
+     (antes: weighted average com zona cinzenta)
+  5. IF CONFIG v4: carrega ensemble_params do isolation_forest_config.json
+  6. THRESHOLDS CONFIG: carrega thresholds_config.json com threshold_f1 do LGBM
+  7. NOVO AGRAVANTE: CASCADE_RULE quando cascade detecta padrão
+  8. LGBM THRESHOLD: usa threshold_f1 (0.08) em vez de fixo 0.5
 
 Responsabilidades deste módulo (e SOMENTE estas):
   1. Carregar modelos (LGBM + IF) e artefatos de scoring
   2. Calcular scores dos modelos
-  3. Calcular ensemble raw → mapeamento 0-100
-  4. Calcular 21 agravantes (6 fases)
-  5. Aplicar regras de veto
-  6. Integrar scores de SE e Behavioral (recebidos prontos)
-  7. Retornar DecisionResult completo
-
-O que este módulo NÃO faz:
-  - Feature engineering (→ orquestrador)
-  - Carregar dados de clientes (→ orquestrador)
-  - Análise comportamental (→ behavioral_analytics.py)
-  - Detecção de SE (→ social_engineering.py)
-  - Servir API (→ api.py)
+  3. Aplicar cascade rules nos FN do LGBM
+  4. Calcular ensemble com boost condicional do IF
+  5. Mapeamento 0-100
+  6. Calcular 24 agravantes (7 fases)
+  7. Aplicar regras de veto
+  8. Integrar scores de SE e Behavioral (recebidos prontos)
+  9. Retornar DecisionResult completo
 
 Integração:
   O orquestrador chama:
@@ -63,6 +61,9 @@ class EngineConfig:
     # --- Thresholds de veto (score raw 0-1) ---
     veto_threshold: float = 0.85
 
+    # --- LGBM threshold (melhor F1 do treino v4.1) ---
+    lgbm_threshold: float = 0.08
+
     # --- Faixas de agravante para scores de modelo ---
     faixa_1_max: int = 50       # 0-50%: peso 0
     faixa_2_max: int = 69       # 51-69%: peso 1
@@ -73,14 +74,17 @@ class EngineConfig:
     peso_intervalo_30min_1tx: int = 1
     peso_intervalo_30min_2tx: int = 2
 
-    # --- Ensemble IF ---
-    w_lgbm_with_if: float = 0.75
-    w_if: float = 0.25
-    if_lgbm_raw_low: float = 0.05
-    if_lgbm_raw_high: float = 0.50
+    # --- Ensemble IF v4 (boost condicional) ---
+    if_high_threshold: float = 0.99
+    if_very_high_threshold: float = 0.9994
+    if_boost_high: float = 0.05
+    if_boost_very_high: float = 0.08
+
+    # --- Cascade rules ---
+    cascade_enabled: bool = True
 
     # --- Peso máximo teórico dos agravantes ---
-    peso_maximo: int = 65
+    peso_maximo: int = 70
 
     @classmethod
     def from_dict(cls, d: Dict[str, Any]) -> "EngineConfig":
@@ -102,6 +106,15 @@ class AgravanteFator:
 
 
 @dataclass
+class CascadeResult:
+    """Resultado de uma regra cascade."""
+    triggered: bool
+    rule_id: str = ""
+    rule_name: str = ""
+    reason: str = ""
+
+
+@dataclass
 class DecisionResult:
     """Resultado completo da decisão para uma transação."""
     # Decisão
@@ -112,17 +125,22 @@ class DecisionResult:
     # Componentes de scoring
     score_lgbm_raw: float           # 0-1
     score_lgbm_mapped: float        # 0-100
-    score_if: float                 # 0-1
+    score_if: float                 # 0-1 (percentile)
     score_if_raw: float             # Decision function raw
     if_active: bool                 # Se IF contribuiu
+    if_boost_applied: float         # Boost adicionado pelo IF
+
+    # Cascade
+    cascade_triggered: bool = False
+    cascade_rules: List[str] = field(default_factory=list)
 
     # Regras do pipeline
-    rule_score_raw: float           # Soma dos rule_*_score
-    rule_score_normalized: float    # 0-1
+    rule_score_raw: float = 0.0
+    rule_score_normalized: float = 0.0
 
     # Agravantes
-    peso_total: int
-    peso_maximo: int
+    peso_total: int = 0
+    peso_maximo: int = 70
     agravantes: List[AgravanteFator] = field(default_factory=list)
 
     # SE + Behavioral (recebidos do orquestrador)
@@ -152,8 +170,13 @@ class DecisionResult:
                 "if_score": round(self.score_if, 6),
                 "if_raw": round(self.score_if_raw, 6),
                 "if_active": self.if_active,
+                "if_boost_applied": round(self.if_boost_applied, 4),
                 "rule_score_raw": round(self.rule_score_raw, 2),
                 "rule_score_normalized": round(self.rule_score_normalized, 4),
+            },
+            "cascade": {
+                "triggered": self.cascade_triggered,
+                "rules": self.cascade_rules,
             },
             "agravantes": [asdict(a) for a in self.agravantes if a.peso > 0],
             "peso_total": self.peso_total,
@@ -182,28 +205,123 @@ class DecisionResult:
 
 
 # =========================================================
+# CASCADE RULES (integradas do train_lgbm v4.1)
+# =========================================================
+class CascadeRuleEngine:
+    """
+    Regras cascade para capturar fraudes que o LGBM perde.
+
+    6 regras baseadas na análise dos FN da v4.0/v4.1:
+      C1: BURST_FIRST_RECEIVER — 3+ tx em 30min para recebedor novo
+      C2: BURST_INTENSO — 5+ tx em 30min
+      C3: CONTA_NOVA_ATIPICO — conta nova + recebedor novo + valor 3x mediana
+      C4: CONTA_NOVA_ALTO_VALOR — conta < 3 meses + PIX > R$5000
+      C5: ESVAZIAMENTO — burst + valor 5x mediana + > R$1000
+      C6: LGBM_BORDERLINE_COMBINADO — LGBM > 0.01 + 3 sinais combinados
+    """
+
+    @staticmethod
+    def evaluate(features: Dict[str, Any], lgbm_score: float) -> List[CascadeResult]:
+        """Avalia todas as 6 regras cascade. Retorna lista de resultados."""
+        results = []
+        f = features
+
+        tx_30m = _safe_int(f.get("tx_count_prev_30m"), 0)
+        first_recv = _safe_int(f.get("first_receiver_flag"), 0)
+        tempo_rel = _safe_float(f.get("qt_tempo_relacionamento_mes"), 999)
+        ratio_med = _safe_float(f.get("ratio_valor_mediana"), 0)
+        vl_pix = _safe_float(f.get("vl_pix"), 0)
+        burst_flag = _safe_int(f.get("burst_30m_flag"), 0)
+        idade = _safe_int(f.get("nr_idade"), 0)
+        chave_random = _safe_int(f.get("pix_key_random_flag"), 0)
+
+        # C1: Burst + primeiro recebedor
+        if tx_30m >= 3 and first_recv == 1:
+            results.append(CascadeResult(
+                triggered=True, rule_id="C1",
+                rule_name="BURST_FIRST_RECEIVER",
+                reason=f"Burst de {tx_30m + 1} tx em 30min para recebedor novo",
+            ))
+
+        # C2: Burst intenso
+        if tx_30m >= 5:
+            results.append(CascadeResult(
+                triggered=True, rule_id="C2",
+                rule_name="BURST_INTENSO",
+                reason=f"{tx_30m + 1} transações em 30 minutos (esvaziamento)",
+            ))
+
+        # C3 foi desativada (gerava muitos FPs sem capturar FNs adicionais)
+        # if tempo_rel <= 6 and first_recv == 1 and ratio_med >= 3.0:
+        #     results.append(CascadeResult(
+        #         triggered=True, rule_id="C3",
+        #         rule_name="CONTA_NOVA_ATIPICO",
+        #         reason=f"Conta nova ({tempo_rel:.0f}m) + recebedor novo + valor {ratio_med:.1f}x mediana",
+        #     ))
+
+        # C4: Conta muito nova + alto valor
+        if tempo_rel <= 3 and vl_pix >= 5000:
+            results.append(CascadeResult(
+                triggered=True, rule_id="C4",
+                rule_name="CONTA_NOVA_ALTO_VALOR",
+                reason=f"Conta < 3 meses + PIX R${vl_pix:,.0f}",
+            ))
+
+        # C5: Esvaziamento (burst + valor extremo)
+        if burst_flag == 1 and ratio_med >= 5.0 and vl_pix >= 1000:
+            results.append(CascadeResult(
+                triggered=True, rule_id="C5",
+                rule_name="ESVAZIAMENTO",
+                reason=f"Burst + valor {ratio_med:.1f}x mediana (R${vl_pix:,.0f})",
+            ))
+
+        # C6: LGBM borderline + sinais combinados
+        if lgbm_score >= 0.05:
+            sinais = 0
+            if first_recv == 1:
+                sinais += 1
+            if ratio_med >= 3.0:
+                sinais += 1
+            if vl_pix >= 2000:
+                sinais += 1
+            if idade >= 60:
+                sinais += 1
+            if chave_random == 1:
+                sinais += 1
+            if sinais >= 4:
+                results.append(CascadeResult(
+                    triggered=True, rule_id="C6",
+                    rule_name="LGBM_BORDERLINE_COMBINADO",
+                    reason=f"Score limítrofe ({lgbm_score:.3f}) com {sinais} sinais de risco",
+                ))
+
+        return results
+
+
+# =========================================================
 # MOTOR DE DECISÃO
 # =========================================================
 class PixDecisionEngine:
     """
-    Motor de decisão para transações PIX v2.0.
+    Motor de decisão para transações PIX v2.1.
 
     Recebe features processadas + resultados de SE/Behavioral
     → Retorna DecisionResult com score 0-100 e decisão.
 
-    Fluxo interno:
-      features_dict → LGBM Score → IF Score (1ª tx)
-      → Ensemble Raw → Mapeamento 0-100
-      → Agravantes → Vetos → Decisão Final
+    Fluxo interno v2.1:
+      features_dict → LGBM Score
+        ├── score >= lgbm_threshold → FRAUDE (LGBM detectou)
+        ├── score < lgbm_threshold → Cascade Rules
+        │   ├── Cascade triggered → FRAUDE (regras capturaram)
+        │   └── Cascade clean → IF Score (boost condicional)
+        │       ├── IF >= very_high → Boost +0.15
+        │       ├── IF >= high → Boost +0.08
+        │       └── IF < high → Sem boost
+        └── Ensemble Raw → Mapeamento 0-100
+            → Agravantes → Vetos → Decisão Final
     """
 
     def __init__(self, config: Optional[EngineConfig] = None):
-        """
-        Inicializa o motor de decisão.
-
-        Args:
-            config: Configuração do engine. Se None, usa defaults.
-        """
         self.config = config or EngineConfig()
         self.art_dir = Path(self.config.artefatos_dir)
 
@@ -216,6 +334,11 @@ class PixDecisionEngine:
         self.if_medians: Dict[str, float] = {}
         self.if_ref_scores: Optional[np.ndarray] = None
         self.if_threshold: float = 0.95
+        self.if_ensemble_params: Dict[str, Any] = {}
+
+        # Cascade
+        self.cascade_engine = CascadeRuleEngine()
+        self.cascade_rules_config: List[Dict] = []
 
         # Scoring config (mapeamento híbrido)
         self.anchors_raw: np.ndarray = np.array([0.0, 1.0])
@@ -237,7 +360,7 @@ class PixDecisionEngine:
         t0 = time.perf_counter()
         art = self.art_dir
 
-        # 1. LightGBM (principal)
+        # 1. LightGBM
         lgbm_path = art / "model_lightgbm.joblib"
         if lgbm_path.exists():
             self.lgbm_model = joblib.load(lgbm_path)
@@ -253,9 +376,8 @@ class PixDecisionEngine:
             logger.info(f"LGBM features: {len(self.lgbm_features)}")
         elif self.lgbm_model and hasattr(self.lgbm_model, "feature_name_"):
             self.lgbm_features = list(self.lgbm_model.feature_name_)
-            logger.info(f"LGBM features (do modelo): {len(self.lgbm_features)}")
 
-        # 3. Scoring Config (mapeamento híbrido)
+        # 3. Scoring Config
         scoring_path = art / "scoring_config.json"
         if scoring_path.exists():
             with open(scoring_path, "r", encoding="utf-8") as f:
@@ -268,21 +390,28 @@ class PixDecisionEngine:
                 mapeamento.get("anchors_out", [0.0, 100.0]), dtype=np.float64
             )
             logger.info(f"Scoring config: {len(self.anchors_raw)} âncoras")
-        else:
-            logger.warning("scoring_config.json não encontrado — mapeamento linear")
 
-        # 4. Isolation Forest
+        # 4. Thresholds Config (v4.1)
+        thresholds_path = art / "thresholds_config.json"
+        if thresholds_path.exists():
+            with open(thresholds_path, "r", encoding="utf-8") as f:
+                th_config = json.load(f)
+            lgbm_th = th_config.get("threshold_f1_best", self.config.lgbm_threshold)
+            self.config.lgbm_threshold = float(lgbm_th)
+            logger.info(f"LGBM threshold loaded: {self.config.lgbm_threshold:.4f}")
+
+        # 5. Isolation Forest
         if_path = art / "model_isolation_forest.joblib"
         if if_path.exists():
             self.if_model = joblib.load(if_path)
             logger.info(f"IF carregado: {self.if_model.n_estimators} trees")
 
-        # 5. IF Scaler
+        # 6. IF Scaler
         scaler_path = art / "scaler_isolation_forest.joblib"
         if scaler_path.exists():
             self.if_scaler = joblib.load(scaler_path)
 
-        # 6. IF Config
+        # 7. IF Config (v4)
         config_path = art / "isolation_forest_config.json"
         if config_path.exists():
             with open(config_path, "r") as f:
@@ -290,26 +419,48 @@ class PixDecisionEngine:
             self.if_features = if_config.get("features", [])
             self.if_medians = if_config.get("medians", {})
             self.if_threshold = if_config.get("best_threshold", 0.95)
-            logger.info(f"IF config: {len(self.if_features)} features")
+            self.if_ensemble_params = if_config.get("ensemble_params", {})
 
-        # 7. IF Reference Scores
+            # Sobrescrever config com params do IF v4
+            ep = self.if_ensemble_params
+            if ep:
+                self.config.if_high_threshold = float(ep.get("if_high_threshold", 0.70))
+                self.config.if_very_high_threshold = float(ep.get("if_very_high_threshold", 0.85))
+                self.config.if_boost_high = float(ep.get("boost_high", 0.08))
+                self.config.if_boost_very_high = float(ep.get("boost_very_high", 0.15))
+
+            logger.info(
+                f"IF config v4: {len(self.if_features)} features | "
+                f"boost: +{self.config.if_boost_high}/{self.config.if_boost_very_high}"
+            )
+
+        # 8. IF Reference Scores
         ref_path = art / "if_ref_raw_train.npy"
         if ref_path.exists():
             self.if_ref_scores = np.load(ref_path)
             logger.info(f"IF ref scores: {len(self.if_ref_scores)}")
 
+        # 9. Cascade Rules Config
+        cascade_path = art / "cascade_rules.json"
+        if cascade_path.exists():
+            with open(cascade_path, "r", encoding="utf-8") as f:
+                cascade_config = json.load(f)
+            self.cascade_rules_config = cascade_config.get("rules", [])
+            logger.info(f"Cascade rules: {len(self.cascade_rules_config)}")
+
         self.available = self.lgbm_model is not None
         self._load_time = (time.perf_counter() - t0) * 1000
 
         logger.info(
-            f"PixDecisionEngine v2.0 inicializado em {self._load_time:.1f}ms | "
+            f"PixDecisionEngine v2.1 inicializado em {self._load_time:.1f}ms | "
             f"LGBM={'OK' if self.lgbm_model else 'MISSING'} | "
             f"IF={'OK' if self.if_model else 'OFF'} | "
-            f"Features: {len(self.lgbm_features)}"
+            f"Cascade={'ON' if self.config.cascade_enabled else 'OFF'} | "
+            f"Features: LGBM={len(self.lgbm_features)} IF={len(self.if_features)}"
         )
 
     # ==========================================================
-    # SCORING
+    # SCORING — LGBM
     # ==========================================================
     def _score_lgbm(self, features: Dict[str, Any]) -> float:
         """Calcula score raw do LGBM (0-1)."""
@@ -329,30 +480,67 @@ class PixDecisionEngine:
         proba = self.lgbm_model.predict_proba(X)[:, 1]
         return float(np.clip(proba[0], 0.0, 1.0))
 
-    def _score_if(self, features: Dict[str, Any]) -> Tuple[float, float, bool]:
+    # ==========================================================
+    # SCORING — IF v4 (complementar, não restrito a 1ª tx)
+    # ==========================================================
+    def _create_if_interaction_features(self, features: Dict[str, Any]) -> Dict[str, float]:
+        """Cria features de interação necessárias pelo IF v4 inline."""
+        tx_30m = _safe_float(features.get("tx_count_prev_30m"), 0)
+        vl_pix = _safe_float(features.get("vl_pix"), 0)
+        nr_idade = _safe_float(features.get("nr_idade"), 0)
+        first_recv = _safe_float(features.get("first_receiver_flag"), 0)
+        distinct_recv = _safe_float(features.get("distinct_receivers_so_far"), 1)
+        mediana = _safe_float(features.get("vl_mediana_pix_trimestre"), 0)
+        qt_total = max(_safe_float(features.get("qt_total_pix_trimestre"), 1), 1)
+
+        total_esperado = mediana * qt_total
+
+        return {
+            "valor_x_burst": vl_pix * (tx_30m + 1),
+            "idade_x_first_recv": nr_idade * first_recv,
+            "valor_x_first_recv": vl_pix * first_recv,
+            "burst_x_distinct_recv": tx_30m * distinct_recv,
+            "valor_over_trimestre_avg": (vl_pix / total_esperado) if total_esperado > 0 else 0,
+        }
+
+    def _score_if(self, features: Dict[str, Any], lgbm_raw: float) -> Tuple[float, float, bool, float]:
         """
-        Calcula score do Isolation Forest.
+        Calcula score do Isolation Forest v4.
+
+        O IF v4 ativa quando LGBM < lgbm_threshold (complementar).
+        Retorna boost condicional baseado no score IF.
 
         Returns:
-            (percentile_score, raw_score, is_active)
+            (percentile_score, raw_score, is_active, boost_amount)
         """
         if self.if_model is None or not self.if_features:
-            return 0.0, 0.0, False
+            return 0.0, 0.0, False, 0.0
 
-        # IF só ativa para primeiras transações
-        is_first = bool(_safe_int(features.get("is_first_tx_trimestre"), 0))
-        if not is_first:
-            return 0.0, 0.0, False
+        # IF só ativa quando LGBM não confia (abaixo do threshold)
+        if lgbm_raw >= self.config.lgbm_threshold:
+            return 0.0, 0.0, False, 0.0
 
         import pandas as pd
 
+        # Criar features de interação
+        interaction_features = self._create_if_interaction_features(features)
+
+        # Montar row com todas as features do IF
         row = {}
         for feat in self.if_features:
-            val = features.get(feat)
-            try:
-                row[feat] = float(val) if val is not None and str(val) != "nan" else self.if_medians.get(feat, 0)
-            except (ValueError, TypeError):
-                row[feat] = self.if_medians.get(feat, 0)
+            # Primeiro tentar features diretas, depois interações
+            if feat in interaction_features:
+                row[feat] = interaction_features[feat]
+            else:
+                val = features.get(feat)
+                try:
+                    fval = float(val) if val is not None and str(val) != "nan" else None
+                    if fval is None or np.isinf(fval):
+                        row[feat] = self.if_medians.get(feat, 0)
+                    else:
+                        row[feat] = fval
+                except (ValueError, TypeError):
+                    row[feat] = self.if_medians.get(feat, 0)
 
         X = pd.DataFrame([row])[self.if_features]
 
@@ -362,35 +550,60 @@ class PixDecisionEngine:
         else:
             X_scaled = X.values
 
-        # Score raw
+        # Score raw (decision_function)
         raw = float(self.if_model.decision_function(X_scaled)[0])
 
-        # Percentile scoring
+        # Percentile scoring (invertido: mais negativo = mais anômalo)
         if self.if_ref_scores is not None and len(self.if_ref_scores) > 0:
-            percentile = float(np.mean(self.if_ref_scores <= raw))
+            inverted = -raw
+            ref_inverted = -self.if_ref_scores
+            percentile = float(np.mean(ref_inverted <= inverted))
         else:
             percentile = float(1.0 / (1.0 + np.exp(raw * 5)))
 
-        return float(np.clip(percentile, 0, 1)), raw, True
+        percentile = float(np.clip(percentile, 0, 1))
 
+        # Boost condicional baseado no score IF
+        cfg = self.config
+        if percentile >= cfg.if_very_high_threshold:
+            boost = cfg.if_boost_very_high
+        elif percentile >= cfg.if_high_threshold:
+            boost = cfg.if_boost_high
+        else:
+            boost = 0.0
+
+        return percentile, raw, True, boost
+
+    # ==========================================================
+    # ENSEMBLE v2.1 — Boost condicional
+    # ==========================================================
     def _calculate_ensemble(
-        self, lgbm_raw: float, if_score: float, if_active: bool
+        self,
+        lgbm_raw: float,
+        if_score: float,
+        if_active: bool,
+        if_boost: float,
+        cascade_triggered: bool,
     ) -> float:
         """
-        Calcula ensemble raw (0-1).
+        Calcula ensemble raw (0-1) com boost condicional.
 
-        IF só contribui quando LGBM está na zona cinzenta.
+        Estratégia v2.1:
+          - Se cascade triggered: força score mínimo = lgbm_threshold
+          - Se IF ativo com boost: lgbm_raw + boost
+          - Senão: lgbm_raw puro
         """
-        cfg = self.config
-        if (
-            if_active
-            and cfg.if_lgbm_raw_low <= lgbm_raw <= cfg.if_lgbm_raw_high
-        ):
-            return float(np.clip(
-                cfg.w_lgbm_with_if * lgbm_raw + cfg.w_if * if_score,
-                0.0, 1.0,
-            ))
-        return lgbm_raw
+        score = lgbm_raw
+
+        # Cascade: garante que a tx seja flaggada
+        if cascade_triggered:
+            score = max(score, self.config.lgbm_threshold)
+
+        # IF boost: adiciona ao score quando LGBM incerto
+        if if_active and if_boost > 0:
+            score = score + if_boost
+
+        return float(np.clip(score, 0.0, 1.0))
 
     def _map_to_score(self, raw: float) -> float:
         """Mapeamento não-linear: raw (0-1) → score (0-100)."""
@@ -400,7 +613,7 @@ class PixDecisionEngine:
         ))
 
     # ==========================================================
-    # AGRAVANTES (6 fases)
+    # AGRAVANTES (7 fases)
     # ==========================================================
     def _score_to_peso(self, score: float) -> int:
         """Converte score 0-1 em peso de agravante."""
@@ -418,16 +631,17 @@ class PixDecisionEngine:
         features: Dict[str, Any],
         lgbm_raw: float,
         if_score: float,
+        if_active: bool,
+        cascade_results: List[CascadeResult],
         se_score: float,
         se_patterns: List[str],
         behavioral_score: float,
     ) -> List[AgravanteFator]:
-        """Calcula todos os agravantes (Fases 1-6 + SE + Behavioral)."""
+        """Calcula todos os agravantes (Fases 1-7 + SE + Behavioral)."""
         agravantes = []
-        f = features  # alias
+        f = features
 
         # ─── FASE 1: Scores de Modelo ────────────────────────
-        # 1. LGBM
         peso_lgbm = self._score_to_peso(lgbm_raw)
         if peso_lgbm > 0:
             agravantes.append(AgravanteFator(
@@ -436,17 +650,29 @@ class PixDecisionEngine:
                 peso_lgbm, lgbm_raw,
             ))
 
-        # 2. IF
-        peso_if = self._score_to_peso(if_score)
-        if peso_if > 0:
+        if if_active:
+            peso_if = self._score_to_peso(if_score)
+            if peso_if > 0:
+                agravantes.append(AgravanteFator(
+                    "IF_SCORE",
+                    f"Score anomalia IF: {if_score*100:.1f}%",
+                    peso_if, if_score,
+                ))
+
+        # ─── FASE 1b: Cascade Rules ─────────────────────────
+        cascade_triggered = [c for c in cascade_results if c.triggered]
+        if cascade_triggered:
+            worst = cascade_triggered[0]
+            peso_cascade = min(4, len(cascade_triggered) + 1)
+            names = ", ".join(c.rule_name for c in cascade_triggered[:3])
             agravantes.append(AgravanteFator(
-                "IF_SCORE",
-                f"Score anomalia IF: {if_score*100:.1f}%",
-                peso_if, if_score,
+                f"CASCADE_{worst.rule_name}",
+                f"Regra cascade: {names} — {worst.reason}",
+                peso_cascade,
+                {"rules": [c.rule_name for c in cascade_triggered]},
             ))
 
         # ─── FASE 2: Regras Clássicas ───────────────────────
-        # 3. Intervalo curto
         intervalo = _safe_float(f.get("qt_intervalo_transacao_minuto"))
         qt_total = _safe_int(f.get("qt_total_pix_trimestre"), 0)
         if intervalo is not None and 0 <= intervalo <= 30:
@@ -463,7 +689,6 @@ class PixDecisionEngine:
                     self.config.peso_intervalo_30min_1tx, intervalo,
                 ))
 
-        # 4. Idade
         idade = _safe_int(f.get("nr_idade"), 0)
         if idade >= 76:
             agravantes.append(AgravanteFator("IDADE", f"Cliente idoso vulnerável ({idade} anos)", 3, idade))
@@ -472,7 +697,6 @@ class PixDecisionEngine:
         elif idade >= 60:
             agravantes.append(AgravanteFator("IDADE", f"Cliente sênior ({idade} anos)", 1, idade))
 
-        # 5. Tempo de relacionamento
         tempo_rel = _safe_float(f.get("qt_tempo_relacionamento_mes"), 999)
         if tempo_rel <= 1:
             agravantes.append(AgravanteFator("RELACIONAMENTO", f"Cliente muito novo ({tempo_rel:.1f} meses)", 3, tempo_rel))
@@ -481,16 +705,13 @@ class PixDecisionEngine:
         elif tempo_rel <= 3:
             agravantes.append(AgravanteFator("RELACIONAMENTO", f"Cliente recente ({tempo_rel:.1f} meses)", 1, tempo_rel))
 
-        # 6. Chave aleatória
         chave_random = _safe_int(f.get("pix_key_random_flag"), 0)
         if chave_random == 1:
             agravantes.append(AgravanteFator(
-                "CHAVE_ALEATORIA",
-                "Transação para chave PIX aleatória",
+                "CHAVE_ALEATORIA", "Transação para chave PIX aleatória",
                 self.config.peso_chave_aleatoria, 1,
             ))
 
-        # 7. Horário noturno
         hour = _safe_int(f.get("hour"), -1)
         if hour >= 0 and (hour >= 22 or hour < 6):
             agravantes.append(AgravanteFator(
@@ -500,7 +721,6 @@ class PixDecisionEngine:
             ))
 
         # ─── FASE 3: Topaz ──────────────────────────────────
-        # 8. Topaz
         topaz_rejeitada = _safe_int(f.get("topaz_rejeitada_flag"), 0)
         topaz_score = _safe_float(f.get("topaz_score_filled"), 0)
 
@@ -518,7 +738,6 @@ class PixDecisionEngine:
             agravantes.append(AgravanteFator("TOPAZ_RISCO_MODERADO", f"Score Topaz moderado: {topaz_score:.0f}/5", 2, topaz_score))
 
         # ─── FASE 4: Velocity ────────────────────────────────
-        # 9. Velocity (burst + frequência)
         burst = _safe_int(f.get("burst_30m_flag"), 0)
         tx_30m = _safe_int(f.get("tx_count_prev_30m"), 0)
         qt_dia_max = _safe_int(f.get("qt_pix_dia_maximo_trimestre"), 0)
@@ -531,7 +750,7 @@ class PixDecisionEngine:
         ):
             agravantes.append(AgravanteFator(
                 "VELOCITY_ESVAZIAMENTO_CRITICO",
-                f"CRÍTICO: Esvaziamento de conta — {qt_dia_max} PIX/dia máx, intervalo {intervalo:.0f}min, valor {ratio_valor:.1f}x mediana",
+                f"CRÍTICO: Esvaziamento — {qt_dia_max} PIX/dia máx, intervalo {intervalo:.0f}min, valor {ratio_valor:.1f}x mediana",
                 4, {"intervalo": intervalo, "max_dia": qt_dia_max, "ratio": ratio_valor},
             ))
         elif (
@@ -553,7 +772,6 @@ class PixDecisionEngine:
                 ))
 
         # ─── FASE 5: Agravantes Estratégicos ─────────────────
-        # 10. Valor atípico
         vl_pix = _safe_float(f.get("vl_pix"), 0)
         mediana = _safe_float(f.get("vl_mediana_pix_trimestre"), 0)
 
@@ -561,41 +779,40 @@ class PixDecisionEngine:
             if ratio_valor >= 10.0:
                 agravantes.append(AgravanteFator(
                     "VALOR_ATIPICO",
-                    f"CRÍTICO: Valor {ratio_valor:.1f}x acima da mediana pessoal (R${vl_pix:,.2f} vs R${mediana:,.2f})",
+                    f"CRÍTICO: Valor {ratio_valor:.1f}x acima da mediana (R${vl_pix:,.2f} vs R${mediana:,.2f})",
                     4, ratio_valor,
                 ))
             elif ratio_valor >= 5.0:
                 agravantes.append(AgravanteFator(
                     "VALOR_ATIPICO",
-                    f"Valor muito alto: {ratio_valor:.1f}x acima da mediana (R${vl_pix:,.2f} vs R${mediana:,.2f})",
+                    f"Valor muito alto: {ratio_valor:.1f}x acima da mediana",
                     3, ratio_valor,
                 ))
             elif ratio_valor >= 3.0:
                 agravantes.append(AgravanteFator(
                     "VALOR_ATIPICO",
-                    f"Valor alto: {ratio_valor:.1f}x acima da mediana (R${vl_pix:,.2f} vs R${mediana:,.2f})",
+                    f"Valor alto: {ratio_valor:.1f}x acima da mediana",
                     2, ratio_valor,
                 ))
 
-        # 11. Primeiro envio + valor alto
         first_receiver = _safe_int(f.get("first_receiver_flag"), 0)
         if first_receiver == 1 and ratio_valor is not None:
             if ratio_valor >= 5.0:
                 agravantes.append(AgravanteFator(
                     "PRIMEIRO_ENVIO_ALTO",
-                    f"CRÍTICO: Primeiro envio para recebedor desconhecido com valor {ratio_valor:.1f}x mediana",
+                    f"CRÍTICO: Primeiro envio para recebedor com valor {ratio_valor:.1f}x mediana",
                     4, ratio_valor,
                 ))
             elif ratio_valor >= 3.0:
                 agravantes.append(AgravanteFator(
                     "PRIMEIRO_ENVIO_ALTO",
-                    f"Primeiro envio para recebedor desconhecido com valor alto ({ratio_valor:.1f}x mediana)",
+                    f"Primeiro envio com valor alto ({ratio_valor:.1f}x mediana)",
                     3, ratio_valor,
                 ))
             elif ratio_valor >= 1.5:
                 agravantes.append(AgravanteFator(
                     "PRIMEIRO_ENVIO_ALTO",
-                    "Primeiro envio para recebedor desconhecido (valor acima do normal)",
+                    "Primeiro envio (valor acima do normal)",
                     2, ratio_valor,
                 ))
             else:
@@ -605,7 +822,6 @@ class PixDecisionEngine:
                     1, ratio_valor,
                 ))
 
-        # 12. Volume trimestral anormal
         if qt_dia_max >= 10:
             media_diaria = qt_total / 90.0 if qt_total > 0 else 1
             if qt_dia_max >= media_diaria * 5:
@@ -617,18 +833,17 @@ class PixDecisionEngine:
             elif qt_dia_max >= media_diaria * 3:
                 agravantes.append(AgravanteFator(
                     "VOLUME_TRIMESTRAL",
-                    f"Volume elevado: {qt_dia_max} PIX em 1 dia (média {media_diaria:.1f}/dia)",
+                    f"Volume elevado: {qt_dia_max} PIX em 1 dia",
                     2, qt_dia_max,
                 ))
 
-        # 13. Intervalo relativo ao histórico pessoal
         mediana_intervalo = _safe_float(f.get("qt_intervalo_mediana_trimestre"), 0)
         if intervalo is not None and mediana_intervalo > 0 and intervalo >= 0:
             razao_int = intervalo / mediana_intervalo
             if razao_int <= 0.05:
                 agravantes.append(AgravanteFator(
                     "INTERVALO_RELATIVO",
-                    f"Velocidade crítica: {intervalo:.0f}min vs mediana {mediana_intervalo:.0f}min ({razao_int*100:.0f}% do normal)",
+                    f"Velocidade crítica: {intervalo:.0f}min vs mediana {mediana_intervalo:.0f}min",
                     3, razao_int,
                 ))
             elif razao_int <= 0.15:
@@ -640,19 +855,18 @@ class PixDecisionEngine:
             elif razao_int <= 0.30:
                 agravantes.append(AgravanteFator(
                     "INTERVALO_RELATIVO",
-                    f"Intervalo abaixo do padrão pessoal ({intervalo:.0f}min vs {mediana_intervalo:.0f}min)",
+                    f"Intervalo abaixo do padrão pessoal",
                     1, razao_int,
                 ))
 
         # ─── FASE 6: Renda e Perfil (v2.1b) ─────────────────
-        # 14. Renda incompatível
         pix_over_100 = _safe_int(f.get("pix_over_100pct_renda_flag"), 0)
         ratio_renda = _safe_float(f.get("ratio_pix_renda"))
         vl_renda = _safe_float(f.get("vl_renda_cliente"), 0)
         if pix_over_100 == 1 and ratio_renda is not None:
             agravantes.append(AgravanteFator(
                 "RENDA_INCOMPATIVEL",
-                f"PIX de R${vl_pix:,.2f} equivale a {ratio_renda:.0%} da renda mensal (R${vl_renda:,.2f})",
+                f"PIX de R${vl_pix:,.2f} = {ratio_renda:.0%} da renda (R${vl_renda:,.2f})",
                 4, ratio_renda,
             ))
         elif _safe_int(f.get("pix_over_50pct_renda_flag"), 0) == 1 and ratio_renda is not None:
@@ -662,21 +876,19 @@ class PixDecisionEngine:
                 2, ratio_renda,
             ))
 
-        # 15. Perfil vulnerável (viúvo + idoso + sem dependentes)
         if _safe_int(f.get("perfil_vulneravel_se_flag"), 0) == 1:
             agravantes.append(AgravanteFator(
                 "PERFIL_VULNERAVEL",
-                f"Perfil de alta vulnerabilidade: viúvo(a), {idade} anos, sem dependentes",
+                f"Alta vulnerabilidade: viúvo(a), {idade} anos, sem dependentes",
                 3, 1,
             ))
 
-        # 16. Latência de rede elevada
         latencia = _safe_float(f.get("latencia_rede_ms_final"))
         if latencia is not None:
             if latencia >= 5000:
                 agravantes.append(AgravanteFator(
                     "LATENCIA_REDE_ALTA",
-                    f"CRÍTICO: Latência muito alta ({latencia:.0f}ms) — possível acesso remoto",
+                    f"CRÍTICO: Latência {latencia:.0f}ms — possível acesso remoto",
                     4, latencia,
                 ))
             elif latencia >= 2000:
@@ -692,58 +904,54 @@ class PixDecisionEngine:
                     2, latencia,
                 ))
 
-        # 17. Interação automatizada
         tempo_interacao = _safe_float(f.get("tempo_interacao_ms_final"))
         if tempo_interacao is not None:
             if tempo_interacao < 60:
                 agravantes.append(AgravanteFator(
                     "INTERACAO_AUTOMATIZADA",
-                    f"CRÍTICO: Interação automatizada ({tempo_interacao:.0f}ms — abaixo do mínimo humano)",
+                    f"CRÍTICO: Automatizada ({tempo_interacao:.0f}ms)",
                     4, tempo_interacao,
                 ))
             elif tempo_interacao < 80:
                 agravantes.append(AgravanteFator(
                     "INTERACAO_AUTOMATIZADA",
-                    f"Interação suspeita ({tempo_interacao:.0f}ms — padrão de script/bot)",
+                    f"Interação suspeita ({tempo_interacao:.0f}ms — padrão bot)",
                     3, tempo_interacao,
                 ))
 
-        # 18. Login por senha + idoso
         login_senha = _safe_int(f.get("is_login_senha_flag"), 0)
         if login_senha == 1 and idade >= 60 and vl_pix >= 1000:
             agravantes.append(AgravanteFator(
                 "LOGIN_SENHA_IDOSO",
-                f"Idoso ({idade} anos) usando senha (não biometria) em PIX de R${vl_pix:,.2f}",
+                f"Idoso ({idade}a) usando senha em PIX R${vl_pix:,.2f}",
                 2, {"idade": idade, "vl_pix": vl_pix},
             ))
 
-        # ─── SE + BEHAVIORAL (scores recebidos do orquestrador) ──
-        # 19. Engenharia Social
+        # ─── FASE 7: SE + BEHAVIORAL ────────────────────────
         if se_score >= 40 and se_patterns:
-            peso_se = 4 if se_score >= 60 else 3 if se_score >= 40 else 2
+            peso_se = 4 if se_score >= 60 else 3
             agravantes.append(AgravanteFator(
                 f"ENG_SOCIAL_{se_patterns[0]}",
-                f"Padrão de engenharia social detectado: {', '.join(se_patterns[:2])}",
+                f"Engenharia social: {', '.join(se_patterns[:2])}",
                 peso_se,
                 {"se_score": se_score, "patterns": se_patterns},
             ))
 
-        # 20. Comportamental
         if behavioral_score >= 20:
             peso_beh = 3 if behavioral_score >= 50 else 2 if behavioral_score >= 30 else 1
             agravantes.append(AgravanteFator(
                 "BEHAVIORAL_ANOMALO",
-                f"Risco comportamental: score {behavioral_score:.0f}/100",
+                f"Risco comportamental: {behavioral_score:.0f}/100",
                 peso_beh,
                 behavioral_score,
             ))
 
-        # 21. Agendamento recorrente (ATENUANTE — peso negativo conceitual)
+        # ─── ATENUANTE ──────────────────────────────────────
         if _safe_int(f.get("is_agendamento_recorrente_flag"), 0) == 1:
             agravantes.append(AgravanteFator(
                 "AGENDAMENTO_RECORRENTE",
                 "PIX recorrente agendado — risco atenuado",
-                -1, 1,  # Peso negativo = atenuante
+                -1, 1,
             ))
 
         return agravantes
@@ -752,16 +960,19 @@ class PixDecisionEngine:
     # VETO
     # ==========================================================
     def _aplicar_veto(
-        self, score_mapped: float, lgbm_raw: float, if_score: float, if_active: bool
+        self,
+        score_mapped: float,
+        lgbm_raw: float,
+        if_score: float,
+        if_active: bool,
+        cascade_triggered: bool,
     ) -> Tuple[float, Optional[str]]:
         """
         Aplica regras de veto.
 
+        - Cascade triggered: mínimo CONFIRMAR
         - 1 modelo ≥ veto_threshold: mínimo CONFIRMAR
         - 2 modelos ≥ veto_threshold: mínimo BLOQUEAR
-
-        Returns:
-            (score_ajustado, descricao_veto)
         """
         threshold = self.config.veto_threshold
         vetos = []
@@ -783,13 +994,19 @@ class PixDecisionEngine:
             logger.info(f"{desc} | Score: {score_mapped:.1f} → {score_ajustado:.1f}")
             return score_ajustado, desc
 
+        # Cascade veto: garante ao menos CONFIRMAR
+        if cascade_triggered:
+            score_ajustado = max(score_mapped, self.config.threshold_confirmar)
+            desc = "VETO CONFIRMAR: Cascade rule triggered"
+            logger.info(f"{desc} | Score: {score_mapped:.1f} → {score_ajustado:.1f}")
+            return score_ajustado, desc
+
         return score_mapped, None
 
     # ==========================================================
     # DECISÃO
     # ==========================================================
     def _classificar(self, score: float) -> str:
-        """Classifica score 0-100 em decisão."""
         if score >= self.config.threshold_bloquear:
             return "BLOQUEAR"
         if score >= self.config.threshold_confirmar:
@@ -808,16 +1025,15 @@ class PixDecisionEngine:
         """
         Executa a decisão completa para uma transação.
 
-        Args:
-            features: Dict com TODAS as features processadas
-                      pelo orquestrador (output do preprocessing).
-            se_result: Output de SocialEngineeringDetector.detect_from_pipeline().to_dict()
-                       Se None, SE score = 0.
-            behavioral_result: Output de BehavioralAnalytics.analyze().to_dict()
-                               Se None, behavioral score = 0.
-
-        Returns:
-            DecisionResult completo.
+        Fluxo v2.1:
+          1. LGBM Score
+          2. Cascade Rules (se LGBM < threshold)
+          3. IF Score + Boost (se LGBM < threshold)
+          4. Ensemble (LGBM + boost + cascade)
+          5. Mapeamento 0-100
+          6. Agravantes (24 fatores, 7 fases)
+          7. Vetos
+          8. Decisão final
         """
         t0 = time.perf_counter()
 
@@ -827,7 +1043,6 @@ class PixDecisionEngine:
         if se_result:
             se_score = float(se_result.get("se_score", 0))
             se_patterns = se_result.get("patterns", [])
-            # Extrair nomes se são dicts
             if se_patterns and isinstance(se_patterns[0], dict):
                 se_patterns = [p.get("pattern_name", "") for p in se_patterns]
 
@@ -837,23 +1052,37 @@ class PixDecisionEngine:
             behavioral_score = float(behavioral_result.get("behavioral_score", 0))
             behavioral_factors = behavioral_result.get("risk_factors", [])
 
-        # --- 1. Scoring ---
+        # --- 1. LGBM Scoring ---
         lgbm_raw = self._score_lgbm(features)
-        if_score, if_raw, if_active = self._score_if(features)
 
-        # --- 2. Ensemble ---
-        ensemble_raw = self._calculate_ensemble(lgbm_raw, if_score, if_active)
+        # --- 2. Cascade Rules (quando LGBM não flagga) ---
+        cascade_results: List[CascadeResult] = []
+        cascade_triggered = False
+        cascade_rule_names: List[str] = []
 
-        # --- 3. Mapeamento 0-100 ---
+        if self.config.cascade_enabled and lgbm_raw < self.config.lgbm_threshold:
+            cascade_results = self.cascade_engine.evaluate(features, lgbm_raw)
+            cascade_triggered = any(c.triggered for c in cascade_results)
+            cascade_rule_names = [c.rule_name for c in cascade_results if c.triggered]
+
+        # --- 3. IF Score + Boost (complementar) ---
+        if_score, if_raw, if_active, if_boost = self._score_if(features, lgbm_raw)
+
+        # --- 4. Ensemble ---
+        ensemble_raw = self._calculate_ensemble(
+            lgbm_raw, if_score, if_active, if_boost, cascade_triggered
+        )
+
+        # --- 5. Mapeamento 0-100 ---
         score_mapped = self._map_to_score(ensemble_raw)
         lgbm_mapped = self._map_to_score(lgbm_raw)
 
-        # --- 4. Agravantes ---
+        # --- 6. Agravantes ---
         agravantes = self._calcular_agravantes(
-            features, lgbm_raw, if_score, se_score, se_patterns, behavioral_score
+            features, lgbm_raw, if_score, if_active,
+            cascade_results, se_score, se_patterns, behavioral_score
         )
 
-        # Separar atenuantes
         atenuantes = []
         agravantes_positivos = []
         for a in agravantes:
@@ -864,22 +1093,20 @@ class PixDecisionEngine:
 
         peso_total = sum(a.peso for a in agravantes_positivos)
 
-        # --- 5. Ajuste por agravantes ---
-        # Agravantes adicionam até +15 pontos ao score (proporcional ao peso)
+        # Agravantes adicionam até +15 pontos ao score
         peso_normalizado = peso_total / max(self.config.peso_maximo, 1)
         bonus_agravantes = peso_normalizado * 15.0
         score_com_agravantes = min(100.0, score_mapped + bonus_agravantes)
 
-        # Atenuantes reduzem
         if atenuantes:
             score_com_agravantes = max(0.0, score_com_agravantes - 5.0)
 
-        # --- 6. Veto ---
+        # --- 7. Veto ---
         score_final, veto_desc = self._aplicar_veto(
-            score_com_agravantes, lgbm_raw, if_score, if_active
+            score_com_agravantes, lgbm_raw, if_score, if_active, cascade_triggered
         )
 
-        # --- 7. Decisão ---
+        # --- 8. Decisão ---
         decisao = self._classificar(score_final)
 
         latency = (time.perf_counter() - t0) * 1000
@@ -893,6 +1120,9 @@ class PixDecisionEngine:
             score_if=if_score,
             score_if_raw=if_raw,
             if_active=if_active,
+            if_boost_applied=if_boost,
+            cascade_triggered=cascade_triggered,
+            cascade_rules=cascade_rule_names,
             rule_score_raw=_safe_float(features.get("rule_score_raw"), 0),
             rule_score_normalized=_safe_float(features.get("rule_score_normalized"), 0),
             peso_total=peso_total,
@@ -916,13 +1146,22 @@ class PixDecisionEngine:
         """Retorna status do engine para health check."""
         metricas = self.scoring_config.get("metricas_teste", {})
         return {
-            "engine_version": "2.0",
+            "engine_version": "2.1",
             "available": self.available,
             "load_time_ms": round(self._load_time, 1) if self._load_time else None,
             "lgbm": self.lgbm_model is not None,
             "lgbm_features": len(self.lgbm_features),
+            "lgbm_threshold": self.config.lgbm_threshold,
             "if_enabled": self.if_model is not None,
             "if_features": len(self.if_features),
+            "if_ensemble": {
+                "high_threshold": self.config.if_high_threshold,
+                "very_high_threshold": self.config.if_very_high_threshold,
+                "boost_high": self.config.if_boost_high,
+                "boost_very_high": self.config.if_boost_very_high,
+            },
+            "cascade_enabled": self.config.cascade_enabled,
+            "cascade_rules": len(self.cascade_rules_config),
             "scoring_anchors": len(self.anchors_raw),
             "scoring_version": self.scoring_config.get("versao", "N/A"),
             "thresholds": {
@@ -947,7 +1186,7 @@ def _safe_float(val: Any, default: Optional[float] = None) -> Optional[float]:
         return default
     try:
         v = float(val)
-        return default if v != v else v  # NaN check
+        return default if v != v else v
     except (ValueError, TypeError):
         return default
 

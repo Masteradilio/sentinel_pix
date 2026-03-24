@@ -1,30 +1,40 @@
 """
-core/behavioral_analytics.py v2.0 — Análise Comportamental Real para MVP Fraude PIX
+core/behavioral_analytics.py v2.1 — Análise Comportamental Real para MVP Fraude PIX
 
-Mudanças v2.0 (reescrita completa):
-  1. ELIMINADO mock mode — só análise real
-  2. REMOVIDAS dependências externas: app.core.ip_service, app.core.user_profile_manager
-  3. UserProfileManager EMBUTIDO inline (cache em memória com dict)
-  4. REMOVIDOS fatores Topaz (já contabilizados no LGBM via topaz_score_filled,
-     topaz_rejeitada_flag, rule_topaz_score — evita contagem dupla)
-  5. REMOVIDO touch_pressure_score (dado não existe na base real)
-  6. REMOVIDO GeoIP lookup (latência de rede externa inaceitável em RT;
-     mover para fase de investigação pós-alerta)
-  7. REAPROVEITADAS features do pipeline: rule_age_score, burst_30m_flag,
-     first_receiver_flag, ratio_tempo_interacao_cliente, etc.
-  8. FOCADO nos 12 fatores viáveis em RT com dados reais disponíveis
-  9. OUTPUT PADRONIZADO para integração com pipeline (to_dict + to_features)
+Mudanças v2.0 → v2.1:
+  1. NOVO fator: BURST_CONTA_COMPROMETIDA — 3+ tx em 30min para recebedores novos
+     (cenário exato dos 18 FN residuais do LGBM: contas antigas com burst súbito)
+  2. NOVO fator: MULTIPLOS_RECEBEDORES_BURST — burst + 3+ recebedores distintos
+     (usa distinct_receivers_so_far do pipeline)
+  3. FIX: is_agendamento_recorrente agora usa flag int do orquestrador
+     (antes comparava string "true", atenuante nunca ativava)
+  4. NOVO fator: VALOR_CONCENTRADO_TRIMESTRE — valor_over_trimestre_avg alto
+     (feature do IF v4, indica concentração anormal de valor)
+  5. AJUSTE: RENDA_INCOMPATIVEL combinado com ratio_valor_mediana
+     (contexto mais rico para o fator)
+  6. Total de fatores: 12 → 15
 
-Novos fatores v2.0 (com dados v2.1b do Big Data):
-  - PERFIL_VULNERAVEL_SE: viúvo + idoso + sem dependentes
-  - RENDA_INCOMPATIVEL: PIX > 100% da renda mensal
-  - SEGMENTO_PREMIUM_DEVICE_NOVO: cliente premium em device desconhecido
-  - LOGIN_SENHA_IDOSO: idoso autenticando por senha (não biometria)
-
-Integração com pipeline:
-  - Recebe dict de features já processadas pelo preprocessing.py
-  - Retorna BehavioralAnalysisResult com score, fatores e dict para o orquestrador
-  - Não faz I/O externo (sem rede, sem banco) — tudo em memória
+Fatores v2.1:
+─────────────────────────────────────────────────────────
+#   Código                          Source       Score
+1   DEVICE_NOVO                     device       +25
+2   DEVICE_NOVO_IDOSO               device       +20
+3   DEVICE_NOVO_PREMIUM             device       +15
+4   LOGIN_SENHA_ALTO_VALOR          session      +10
+5   LOGIN_SENHA_IDOSO               session      +15
+6   LOGIN_METODO_DIFERENTE          session      +15
+7   SESSAO_RAPIDA_ALTO_VALOR        session      +15
+8   TEMPO_INTERACAO_ANORMAL         behavioral   +15
+9   FREQUENCIA_BURST                behavioral   +20
+10  PERFIL_VULNERAVEL_SE            profile      +20
+11  RENDA_INCOMPATIVEL              value        +25
+12  PRIMEIRO_PIX_CLIENTE_NOVO       profile      +30
+13  BURST_CONTA_COMPROMETIDA        behavioral   +25  ← NOVO
+14  MULTIPLOS_RECEBEDORES_BURST     behavioral   +20  ← NOVO
+15  VALOR_CONCENTRADO_TRIMESTRE     value        +15  ← NOVO
+─────────────────────────────────────────────────────────
+Atenuante: AGENDAMENTO_RECORRENTE   session      -10
+Máximo teórico: ~285 (capped em 100)
 """
 
 from __future__ import annotations
@@ -152,11 +162,7 @@ class _InlineProfileManager:
     """
     Gerenciador de perfis comportamentais em memória.
 
-    Mantém histórico leve por CPF para comparação intra-sessão:
-    - Devices conhecidos
-    - Método de login habitual
-    - Timestamps de transações recentes (para burst detection)
-
+    Mantém histórico leve por CPF para comparação intra-sessão.
     Em produção, substituir por Redis/DynamoDB.
     """
 
@@ -169,7 +175,6 @@ class _InlineProfileManager:
     def get_or_create(self, cpf: str) -> Dict[str, Any]:
         if cpf not in self._profiles:
             if len(self._profiles) >= self._max_profiles:
-                # Evict mais antigo (LRU simplificado)
                 oldest_cpf = next(iter(self._profiles))
                 del self._profiles[oldest_cpf]
                 self._tx_history.pop(oldest_cpf, None)
@@ -194,13 +199,12 @@ class _InlineProfileManager:
         profile = self.get_or_create(cpf)
         principal = profile["metodo_login_principal"]
         if principal == "desconhecido" or profile["total_tx"] < 3:
-            return False  # Sem histórico suficiente
+            return False
         return metodo_atual != principal
 
     def register_login(self, cpf: str, metodo: str) -> None:
         profile = self.get_or_create(cpf)
         profile["login_counts"][metodo] += 1
-        # Atualizar principal
         if profile["login_counts"]:
             profile["metodo_login_principal"] = max(
                 profile["login_counts"], key=profile["login_counts"].get
@@ -224,33 +228,15 @@ class _InlineProfileManager:
 # =========================================================
 class BehavioralAnalytics:
     """
-    Motor de análise comportamental em tempo real.
+    Motor de análise comportamental em tempo real v2.1.
 
-    12 fatores de risco viáveis com dados reais disponíveis:
-    ─────────────────────────────────────────────────────────
-    #   Código                          Source       Score
-    1   DEVICE_NOVO                     device       +25
-    2   DEVICE_NOVO_IDOSO               device       +20
-    3   DEVICE_NOVO_PREMIUM             device       +15
-    4   LOGIN_SENHA_ALTO_VALOR          session      +10
-    5   LOGIN_SENHA_IDOSO               session      +15
-    6   LOGIN_METODO_DIFERENTE          session      +15
-    7   SESSAO_RAPIDA_ALTO_VALOR        session      +15
-    8   TEMPO_INTERACAO_ANORMAL         behavioral   +15
-    9   FREQUENCIA_BURST                behavioral   +20
-    10  PERFIL_VULNERAVEL_SE            profile      +20
-    11  RENDA_INCOMPATIVEL              value        +25
-    12  PRIMEIRO_PIX_CLIENTE_NOVO       profile      +30
-    ─────────────────────────────────────────────────────────
-    Atenuante: AGENDAMENTO_RECORRENTE   session      -10
-
-    Máximo teórico: ~225 (capped em 100)
+    15 fatores de risco viáveis com dados reais disponíveis.
     """
 
     def __init__(self):
         self._profile_mgr = _InlineProfileManager()
         self._device_history: Dict[str, DeviceInfo] = {}
-        logger.info("BehavioralAnalytics v2.0 inicializado (modo real, sem mock)")
+        logger.info("BehavioralAnalytics v2.1 inicializado (15 fatores, sem mock)")
 
     # ---------------------------------------------------------
     # PUBLIC API
@@ -261,7 +247,6 @@ class BehavioralAnalytics:
 
         Args:
             features: Dict com features processadas pelo pipeline.
-                      Espera campos do preprocessing.py v3.1.
 
         Returns:
             BehavioralAnalysisResult com score 0-100 e fatores de risco.
@@ -342,7 +327,7 @@ class BehavioralAnalytics:
         # 7. SESSAO_RAPIDA_ALTO_VALOR
         if (
             session_metrics.tempo_interacao_ms is not None
-            and session_metrics.tempo_interacao_ms < 30_000  # < 30 segundos
+            and session_metrics.tempo_interacao_ms < 30_000
             and extracted["vl_pix"] >= 1000
         ):
             tempo_s = session_metrics.tempo_interacao_ms / 1000
@@ -399,9 +384,17 @@ class BehavioralAnalytics:
         # 11. RENDA_INCOMPATIVEL
         if extracted["pix_over_100pct_renda"]:
             ratio_renda = extracted["ratio_pix_renda"]
+            ratio_mediana = extracted["ratio_valor_mediana"]
+            desc_extra = ""
+            if ratio_mediana is not None and ratio_mediana >= 3.0:
+                desc_extra = f" + {ratio_mediana:.1f}x acima da mediana pessoal"
             rf = BehavioralRiskFactor(
                 codigo="RENDA_INCOMPATIVEL",
-                descricao=f"PIX de R${extracted['vl_pix']:,.2f} equivale a {ratio_renda:.0%} da renda mensal (R${extracted['vl_renda']:,.2f})",
+                descricao=(
+                    f"PIX de R${extracted['vl_pix']:,.2f} = "
+                    f"{ratio_renda:.0%} da renda mensal (R${extracted['vl_renda']:,.2f})"
+                    f"{desc_extra}"
+                ),
                 peso=4, score_add=25, source="value",
             )
             risk_factors.append(rf)
@@ -415,13 +408,72 @@ class BehavioralAnalytics:
         ):
             rf = BehavioralRiskFactor(
                 codigo="PRIMEIRO_PIX_CLIENTE_NOVO",
-                descricao=f"Cliente novo ({extracted['qt_tempo_relacionamento_mes']} meses), primeiro envio ao destinatário, PIX de R${extracted['vl_pix']:,.2f}",
+                descricao=(
+                    f"Cliente novo ({extracted['qt_tempo_relacionamento_mes']} meses), "
+                    f"primeiro envio ao destinatário, PIX de R${extracted['vl_pix']:,.2f}"
+                ),
                 peso=5, score_add=30, source="profile",
             )
             risk_factors.append(rf)
             score += rf.score_add
 
+        # ─── NOVOS FATORES v2.1 ─────────────────────────────
+
+        # 13. BURST_CONTA_COMPROMETIDA
+        # Cenário exato dos 18 FN: conta antiga (> 12 meses) com burst súbito
+        # para recebedor novo — padrão de conta comprometida por engenharia social
+        if (
+            extracted["qt_tempo_relacionamento_mes"] >= 12
+            and tx_count_30m >= 2
+            and extracted["first_receiver_flag"]
+            and extracted["vl_pix"] >= 500
+        ):
+            rf = BehavioralRiskFactor(
+                codigo="BURST_CONTA_COMPROMETIDA",
+                descricao=(
+                    f"Conta antiga ({extracted['qt_tempo_relacionamento_mes']} meses) "
+                    f"com burst súbito ({tx_count_30m + 1} tx em 30min) "
+                    f"para recebedor novo — possível conta comprometida"
+                ),
+                peso=4, score_add=25, source="behavioral",
+            )
+            risk_factors.append(rf)
+            score += rf.score_add
+
+        # 14. MULTIPLOS_RECEBEDORES_BURST
+        # Burst + múltiplos recebedores distintos = esvaziamento com pulverização
+        distinct_receivers = extracted["distinct_receivers_so_far"]
+        if burst_flag and distinct_receivers >= 3:
+            rf = BehavioralRiskFactor(
+                codigo="MULTIPLOS_RECEBEDORES_BURST",
+                descricao=(
+                    f"Burst com {distinct_receivers} recebedores distintos — "
+                    f"padrão de esvaziamento pulverizado"
+                ),
+                peso=4, score_add=20, source="behavioral",
+            )
+            risk_factors.append(rf)
+            score += rf.score_add
+
+        # 15. VALOR_CONCENTRADO_TRIMESTRE
+        # valor_over_trimestre_avg alto indica que esta tx concentra
+        # uma fração desproporcional do volume do trimestre
+        valor_over_avg = extracted["valor_over_trimestre_avg"]
+        if valor_over_avg is not None and valor_over_avg >= 0.10:
+            # Esta tx sozinha representa >= 10% do volume total do trimestre
+            rf = BehavioralRiskFactor(
+                codigo="VALOR_CONCENTRADO_TRIMESTRE",
+                descricao=(
+                    f"Transação concentra {valor_over_avg:.1%} do volume total do trimestre "
+                    f"— concentração anormal de valor"
+                ),
+                peso=3, score_add=15, source="value",
+            )
+            risk_factors.append(rf)
+            score += rf.score_add
+
         # --- Atenuante: AGENDAMENTO_RECORRENTE ---
+        # FIX v2.1: usa flag int do orquestrador (não string)
         if session_metrics.is_agendamento_recorrente:
             atenuantes.append("AGENDAMENTO_RECORRENTE: PIX recorrente agendado — risco atenuado")
             score = max(0.0, score - 10)
@@ -463,14 +515,11 @@ class BehavioralAnalytics:
         device_model = str(device_name).strip() if device_name else "Desconhecido"
         device_type = self._infer_device_type(device_model)
 
-        # Gerar device_id determinístico
         device_id_seed = f"{cpf}|{device_model}|{app_version or ''}"
         device_id = hashlib.sha256(device_id_seed.encode()).hexdigest()[:16]
 
-        # Verificar se é conhecido
         is_known = self._profile_mgr.is_device_known(cpf, device_id)
 
-        # Atualizar histórico global de devices
         if device_id in self._device_history:
             existing = self._device_history[device_id]
             existing.last_seen = now
@@ -501,23 +550,25 @@ class BehavioralAnalytics:
     # PRIVATE: Build session metrics
     # ---------------------------------------------------------
     def _build_session_metrics(self, features: Dict[str, Any]) -> SessionMetrics:
-        # Tempo de interação
         tempo_raw = features.get("tempo_interacao_ms") or features.get("tempo_interacao_ms_final")
         tempo_ms = self._safe_float(tempo_raw)
 
-        # Latência
         latencia_raw = features.get("latencia_rede_ms") or features.get("latencia_rede_ms_final")
         latencia_ms = self._safe_float(latencia_raw)
 
-        # Método de login
         metodo_raw = features.get("metodo_autenticacao")
         metodo = self._normalize_login_method(metodo_raw)
 
-        # Agendamento recorrente
-        is_recorrente_raw = features.get("is_agendamento_recorrente", "")
-        is_recorrente = str(is_recorrente_raw).strip().lower() == "true"
+        # FIX v2.1: verifica TANTO a flag int quanto a string
+        is_recorrente_raw = features.get("is_agendamento_recorrente_flag")
+        if is_recorrente_raw is not None:
+            # Flag int do orquestrador v1.1
+            is_recorrente = bool(self._safe_int(is_recorrente_raw, 0))
+        else:
+            # Fallback: string legada
+            is_recorrente_str = features.get("is_agendamento_recorrente", "")
+            is_recorrente = str(is_recorrente_str).strip().lower() in ("true", "1", "sim")
 
-        # Estimativa de duração da sessão
         duration_s = int(tempo_ms / 1000) if tempo_ms and tempo_ms > 0 else None
 
         return SessionMetrics(
@@ -561,6 +612,14 @@ class BehavioralAnalytics:
             "ratio_tempo_interacao": self._safe_float(
                 features.get("ratio_tempo_interacao_cliente")
             ),
+            # Novas features v2.1
+            "ratio_valor_mediana": self._safe_float(features.get("ratio_valor_mediana")),
+            "distinct_receivers_so_far": self._safe_int(
+                features.get("distinct_receivers_so_far"), 1
+            ),
+            "valor_over_trimestre_avg": self._safe_float(
+                features.get("valor_over_trimestre_avg")
+            ),
         }
 
     # ---------------------------------------------------------
@@ -600,7 +659,7 @@ class BehavioralAnalytics:
             return default
         try:
             v = float(val)
-            if v != v:  # NaN check
+            if v != v:
                 return default
             return v
         except (ValueError, TypeError):
@@ -612,7 +671,7 @@ class BehavioralAnalytics:
             return default
         try:
             v = float(val)
-            if v != v:  # NaN check
+            if v != v:
                 return default
             return int(v)
         except (ValueError, TypeError):

@@ -1,72 +1,75 @@
-# Rebuild PIX Fraud Detection
+# Rebuild PIX Fraud Detection (v2.1)
 
-Este repositório contém os scripts e artefatos necessários para construir um MVP de detecção de fraude/anomalia em transações PIX.
+Este repositório contém os scripts, a API e os artefatos necessários para construir e operar um Motor Híbrido de Detecção de Fraudes em transações PIX, focado em atingir Falsos Negativos Zero com Alta Explicabilidade.
 
 ## Estrutura do projeto
 
 ```
-backend/               # código de engenharia de features e treino
-  feature_engineering.py
-  preprocessing.py
-  artefatos/            # modelos, métricas e artefatos salvos
-  modelos/
+backend/               
+  api.py                # API REST FastAPI para inferência em tempo real
+  pipeline_orquestrador.py # Orquestrador principal do fluxo de decisão
+  core/                 # Lógica de negócio e detecção
+    behavioral_analytics.py # Análise de perfil, dispositivo e sessão
+    social_engineering.py   # Detecção de padrões de golpes e vulnerabilidade
+    decision_engine.py      # Motor de regras, ensemble e cálculo de score final
+    preprocessing.py        # Limpeza e normalização de features
+  modelos/              # Scripts de treinamento
     train_lgbm.py
-dados/                  # arquivos CSV de entrada e saída
-  dados_pix_normais.csv
-  dados_fraudes_pix.csv
-  dados_features_mobile.csv
-  base_mvp_features.csv
-  base_mvp_model_ready.csv
-docs/                   # documentação projetual
-    lista_de_features.md
-    PRD.md
-requirements.txt        # dependências Python
-venv/                   # ambiente virtual (não comitado)
-README.md               # este arquivo
-CHANGELOG.md            # histórico de versões
+  artefatos/            # Modelos salvos (LightGBM, IF) e JSONs de configuração
+dados/                  # Arquivos CSV de entrada e saída
+docs/                   # Documentação projetual e de arquitetura
+  PRD.md
+  behavioral_analytics_v2.md
+  engenharia_social.md
+relatorio/              # Relatórios de performance e dashboards gerados
+requirements.txt        # Dependências Python
+README.md               # Este arquivo
+CHANGELOG.md            # Histórico de versões
 ```
 
-## Visão geral
+## Visão Geral do Sistema (v2.1)
 
-- **Objetivo**: montar um motor híbrido de detecção de fraude em tempo real, combinando regras, modelos supervisionados, anomalia e behavioral analytics.
-- **Fontes**: bases de PIX normais, fraudes e dados mobile/app.
-- **Pipeline**:
-  1. Carregar e padronizar CSVs brutos.
-  2. Marcar `is_fraud` e unir datasets.
-  3. Engenharia de features conforme lista do MVP (veja `docs/lista_de_features.md`).
-  4. Salvar bases consolidadas em `/dados`.
-  5. Treinar modelo (LightGBM) e gerar artefatos.
+- **Objetivo**: Proteger transações PIX em tempo real através de um motor híbrido de decisão que garanta a detecção de 100% das fraudes conhecidas (FNR = 0) mantendo a taxa de Falsos Positivos sob controle estrito (< 0,3%).
+- **Componentes do Motor Híbrido**:
+  1. **LightGBM**: Modelo preditivo principal (Supervisionado).
+  2. **Cascade Rules**: Regras determinísticas de fallback para capturar falsos negativos residuais do modelo.
+  3. **Isolation Forest (IF Boost)**: Modelo não-supervisionado de anomalias com atuação condicional (boost).
+  4. **Engenharia Social (SE)**: Detector de 12 padrões de golpes mapeados no Brasil.
+  5. **Behavioral Analytics**: Detector de 15 fatores de risco de dispositivo, rede e sessão (integrado com Risk Score do Topaz).
+- **Explicabilidade**: A API fornece uma saída estruturada e amigável (CX-Friendly) detalhando exatamente o motivo de bloqueio ou confirmação adicional de cada transação.
 
-## Como executar
+## Como Executar a API
 
-Ative o ambiente virtual e instale dependências:
+Ative o ambiente virtual e inicie o servidor:
 
 ```powershell
 python -m venv venv
 venv\Scripts\activate
 pip install -r requirements.txt
+
+# Iniciar a API REST
+uvicorn backend.api:app --host 0.0.0.0 --port 8000 --reload
 ```
 
-Execute os scripts em ordem:
+Endpoints disponíveis (Swagger UI disponível em `/docs`):
+- `POST /api/v1/analyze`: Inferência em tempo real de uma única transação
+- `POST /api/v1/batch`: Inferência em lote
+- `GET /api/v1/health`: Monitoramento dos componentes
+
+## Como Avaliar o Pipeline
+
+Para gerar o dashboard de métricas e testar toda a lógica contra o dataset de testes:
 
 ```powershell
-python backend\feature_engineering.py
-python backend\preprocessing.py
-python backend\modelos\train_lgbm.py
+python backend\teste_pipeline_relatorio.py
 ```
+Outputs serão salvos em `/relatorio/`.
 
-Outputs:
-- `/dados/base_mvp_features.csv` (features brutas)
-- `/dados/base_mvp_model_ready.csv` (dados prontos para modelo)
-- artefatos em `/backend/artefatos/`
+## Documentação Adicional
 
-## Features
-
-A lista completa e a priorização estão documentadas em `docs/lista_de_features.md`.
-
-## Visão de arquitetura
-
-Consulte `docs/PRD.md` para entender a estratégia geral, ensemble híbrido e recomendações de produção.
+- Para entender a estratégia do Ensemble, veja `docs/PRD.md`.
+- Para os detalhes dos padrões de golpes detectados, veja `docs/engenharia_social.md`.
+- Para detalhes dos parâmetros de dispositivo e sessão, veja `docs/behavioral_analytics_v2.md`.
 
 ## Notas
 

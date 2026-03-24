@@ -1,0 +1,15 @@
+{
+  "threshold_f1_best": 0.08000000000000002,
+  "threshold_recall_100": 0.001,
+  "threshold_recall_99": 0.001,
+  "threshold_recall_98": 0.001,
+  "threshold_recall_95": 0.001,
+  "threshold_oof_f1": 0.9000000000000002,
+  "threshold_oof_recall_99": 0.001,
+  "recommended_production": {
+    "lgbm_threshold": 0.08000000000000002,
+    "cascade_enabled": true,
+    "strategy": "LGBM @ best_F1 + cascade rules para bursts",
+    "note": "Se FN combinado ainda > 0, reduzir lgbm_threshold para th_recall95"
+  }
+}

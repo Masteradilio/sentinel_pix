@@ -1,5 +1,13 @@
 """
-pipeline_orquestrador.py v1.0 — Orquestrador de Inferência PIX Antifraude
+pipeline_orquestrador.py v1.1 — Orquestrador de Inferência PIX Antifraude
+
+Mudanças v1.0 → v1.1:
+  1. _build_response: inclui cascade_triggered, cascade_rules, if_boost_applied
+  2. _print_result: exibe cascade rules e IF boost no output
+  3. get_status: engine_version 2.1, cascade info, IF ensemble params
+  4. _create_features: cria qt_envio_recebedor_trimestre (feature LGBM)
+  5. _create_sequential_features: cria qt_envio_recebedor_trimestre do cache
+  6. Compatível com DecisionResult v2.1 (if_boost_applied, cascade_*)
 
 Ponto de entrada único para inferência em tempo real e batch.
 Coordena todas as camadas sem duplicar lógica:
@@ -17,15 +25,16 @@ Coordena todas as camadas sem duplicar lógica:
   ┌─────────┐ ┌────────┐ ┌────────┐
   │ Decision│ │ Social │ │Behav.  │  ← 3 engines independentes
   │ Engine  │ │ Eng.   │ │Analyt. │
+  │ v2.1    │ │        │ │        │
   └────┬────┘ └───┬────┘ └───┬────┘
        │          │          │
        └──────────┼──────────┘
                   ▼
   ┌─────────────────────────────────┐
   │  2. Consolidação                │
+  │     LGBM + Cascade + IF Boost   │
   │     Score final + Decisão       │
   │     Agravantes + Vetos          │
-  │     Resposta padronizada        │
   └─────────────────────────────────┘
 
 Uso:
@@ -41,13 +50,6 @@ Uso:
 
     # Health check
     status = pipeline.get_status()
-
-Dependências:
-    - preprocessing.py          → PixPreprocessor + funções de FE
-    - core/decision_engine.py   → PixDecisionEngine (scoring + agravantes + vetos)
-    - core/behavioral_analytics.py → BehavioralAnalytics (12 fatores RT)
-    - core/social_engineering.py   → SocialEngineeringDetector (11 padrões)
-    - artefatos/                → Modelos treinados (.joblib, .json)
 """
 
 from __future__ import annotations
@@ -121,7 +123,6 @@ from core.social_engineering import SocialEngineeringDetector, SEAnalysisResult
 # CONFIGURAÇÃO DE COLUNAS (única fonte de verdade)
 # =========================================================
 
-# Colunas que chegam do banco/API (dados brutos)
 RAW_INPUT_COLUMNS = [
     "cd_pix", "dt_pix", "cd_cpf_pagador", "cd_cpf_cnpj_recebedor",
     "ds_chave_pix", "ds_tipo_chave", "vl_pix",
@@ -179,7 +180,7 @@ class PipelineOrquestrador:
 
     Responsabilidades:
         1. Feature engineering (usa preprocessing.py — sem duplicação)
-        2. Coordenar os 3 engines (Decision, SE, Behavioral)
+        2. Coordenar os 3 engines (Decision v2.1, SE, Behavioral)
         3. Consolidar resposta final padronizada
         4. Manter cache de histórico por cliente (features sequenciais)
 
@@ -194,23 +195,15 @@ class PipelineOrquestrador:
         artefatos_dir: Optional[str] = None,
         engine_config: Optional[EngineConfig] = None,
     ):
-        """
-        Inicializa o orquestrador carregando todos os componentes.
-
-        Args:
-            artefatos_dir: Caminho para pasta de artefatos.
-            engine_config: Config do decision engine (thresholds, pesos).
-        """
         self.artefatos_dir = Path(artefatos_dir) if artefatos_dir else ARTEFATOS_DIR
 
-        # Timers
         t0 = time.perf_counter()
 
         # --- 1. Preprocessor ---
         self.preprocessor: Optional[PixPreprocessor] = None
         self._load_preprocessor()
 
-        # --- 2. Decision Engine ---
+        # --- 2. Decision Engine v2.1 ---
         config = engine_config or EngineConfig(artefatos_dir=str(self.artefatos_dir))
         self.engine = PixDecisionEngine(config)
 
@@ -228,9 +221,11 @@ class PipelineOrquestrador:
         self.available = self.engine.available
 
         logger.info(
-            f"PipelineOrquestrador v1.0 inicializado em {self._load_time_ms:.0f}ms | "
+            f"PipelineOrquestrador v1.1 inicializado em {self._load_time_ms:.0f}ms | "
             f"Engine={'OK' if self.engine.available else 'DEGRADED'} | "
             f"Preprocessor={'OK' if self.preprocessor else 'PASSTHROUGH'} | "
+            f"Cascade={'ON' if self.engine.config.cascade_enabled else 'OFF'} | "
+            f"IF={'OK' if self.engine.if_model else 'OFF'} | "
             f"SE=OK | Behavioral=OK"
         )
 
@@ -299,6 +294,7 @@ class PipelineOrquestrador:
         df["host_time_missing_flag"] = df["tempo_processamento_host_ms"].isna().astype(int)
         df["latencia_missing_flag"] = df["latencia_rede_ms"].isna().astype(int)
         df["renda_missing_flag"] = df["vl_renda_cliente"].isna().astype(int)
+        df["tempo_interacao_missing_flag"] = df["tempo_interacao_ms"].isna().astype(int)
 
         # ─── Latência final ─────────────────────────────────
         df["latencia_rede_ms_final"] = df["latencia_rede_ms"]
@@ -488,6 +484,7 @@ class PipelineOrquestrador:
                 # Contagem de tx para este recebedor
                 receiver_counts = hist.get("receiver_counts", {})
                 df.loc[idx, "receiver_tx_count_prev"] = receiver_counts.get(receiver, 0)
+                df.loc[idx, "qt_envio_recebedor_trimestre"] = receiver_counts.get(receiver, 0)
                 df.loc[idx, "first_receiver_flag"] = 1 if receiver_counts.get(receiver, 0) == 0 else 0
 
                 # Contagem de tx com esta chave
@@ -502,16 +499,23 @@ class PipelineOrquestrador:
                 df.loc[idx, "distinct_keys_so_far"] = len(key_counts) + (
                     1 if pix_key not in key_counts else 0
                 )
+
+                # Primeiro envio para recebedor neste trimestre (flag tp_primeiro_envio)
+                df.loc[idx, "tp_primeiro_envio_recebedor_trimestre"] = (
+                    1 if receiver_counts.get(receiver, 0) == 0 else 0
+                )
             else:
                 # Primeira transação conhecida deste cliente
                 df.loc[idx, "minutes_since_prev_tx"] = np.nan
                 df.loc[idx, "tx_count_prev_30m"] = 0
                 df.loc[idx, "receiver_tx_count_prev"] = 0
+                df.loc[idx, "qt_envio_recebedor_trimestre"] = 0
                 df.loc[idx, "first_receiver_flag"] = 1
                 df.loc[idx, "key_tx_count_prev"] = 0
                 df.loc[idx, "first_key_flag"] = 1
                 df.loc[idx, "distinct_receivers_so_far"] = 1
                 df.loc[idx, "distinct_keys_so_far"] = 1
+                df.loc[idx, "tp_primeiro_envio_recebedor_trimestre"] = 1
 
         # Burst flag
         df["burst_30m_flag"] = (df["tx_count_prev_30m"] >= 1).astype(int)
@@ -663,7 +667,6 @@ class PipelineOrquestrador:
         result = {}
         for col in df.columns:
             val = row[col]
-            # Converter numpy types para Python native
             if isinstance(val, (np.integer,)):
                 result[col] = int(val)
             elif isinstance(val, (np.floating,)):
@@ -692,17 +695,6 @@ class PipelineOrquestrador:
 
         Returns:
             Dict padronizado com decisão, scores, agravantes e metadata.
-
-        Exemplo:
-            resultado = pipeline.analisar({
-                "cd_pix": "E00000208...",
-                "dt_pix": "2026-03-19 14:30:00",
-                "vl_pix": 5000.00,
-                "nr_idade": 72,
-                ...
-            })
-            print(resultado["decisao"])       # "BLOQUEAR"
-            print(resultado["score_final"])   # 89.3
         """
         t0 = time.perf_counter()
         timings: Dict[str, float] = {}
@@ -723,11 +715,9 @@ class PipelineOrquestrador:
         timings["transform_ms"] = (time.perf_counter() - t1) * 1000
 
         # ─── 4. Converter para dict (para os engines) ───────
-        # Merge: features originais + transformadas
         features_dict = self._row_to_dict(df_features)
         if isinstance(df_transformed, pd.DataFrame) and len(df_transformed) > 0:
             transformed_dict = self._row_to_dict(df_transformed)
-            # Features transformadas sobrescrevem (mais tratadas)
             for k, v in transformed_dict.items():
                 if k not in ("transaction_id", "customer_id", "event_datetime"):
                     features_dict[k] = v
@@ -742,7 +732,7 @@ class PipelineOrquestrador:
         behavioral_result: BehavioralAnalysisResult = self.behavioral.analyze(features_dict)
         timings["behavioral_ms"] = (time.perf_counter() - t1) * 1000
 
-        # ─── 7. Decision Engine ─────────────────────────────
+        # ─── 7. Decision Engine v2.1 ────────────────────────
         t1 = time.perf_counter()
         decision: DecisionResult = self.engine.decide(
             features=features_dict,
@@ -767,13 +757,17 @@ class PipelineOrquestrador:
         )
 
         # Log resumido
+        cascade_info = f" CASCADE={','.join(decision.cascade_rules)}" if decision.cascade_triggered else ""
+        if_info = f" IF_boost={decision.if_boost_applied:.2f}" if decision.if_active else ""
         logger.info(
             f"TX {decision.transaction_id} | "
             f"{decision.decisao} | "
             f"Score={decision.score_final:.1f} | "
+            f"LGBM={decision.score_lgbm_raw:.4f} | "
             f"SE={se_result.se_score:.0f} | "
             f"BEH={behavioral_result.behavioral_score:.0f} | "
-            f"Agr={decision.peso_total}/{decision.peso_maximo} | "
+            f"Agr={decision.peso_total}/{decision.peso_maximo}"
+            f"{cascade_info}{if_info} | "
             f"{total_ms:.0f}ms"
         )
 
@@ -792,7 +786,7 @@ class PipelineOrquestrador:
 
         Args:
             data: Lista de dicts ou DataFrame com múltiplas linhas.
-            max_workers: Reservado para paralelismo futuro (atualmente sequencial).
+            max_workers: Reservado para paralelismo futuro.
 
         Returns:
             Lista de resultados (um por transação).
@@ -858,9 +852,17 @@ class PipelineOrquestrador:
                 "lgbm_raw": round(decision.score_lgbm_raw, 8),
                 "lgbm_mapped": round(decision.score_lgbm_mapped, 2),
                 "if_score": round(decision.score_if, 6),
+                "if_raw": round(decision.score_if_raw, 6),
                 "if_active": decision.if_active,
+                "if_boost_applied": round(decision.if_boost_applied, 4),
                 "rule_score_raw": round(decision.rule_score_raw, 2),
                 "rule_score_normalized": round(decision.rule_score_normalized, 4),
+            },
+
+            # ─── Cascade ────────────────────────────────────
+            "cascade": {
+                "triggered": decision.cascade_triggered,
+                "rules": decision.cascade_rules,
             },
 
             # ─── Agravantes ─────────────────────────────────
@@ -928,9 +930,11 @@ class PipelineOrquestrador:
 
             # ─── Metadata ──────────────────────────────────
             "metadata": {
-                "pipeline_version": "1.0",
-                "engine_version": "2.0",
+                "pipeline_version": "1.1",
+                "engine_version": "2.1",
                 "scoring_version": self.engine.scoring_config.get("versao", "N/A"),
+                "cascade_enabled": self.engine.config.cascade_enabled,
+                "lgbm_threshold": self.engine.config.lgbm_threshold,
                 "timings": {k: round(v, 1) for k, v in timings.items()},
                 "timestamp_inferencia": datetime.utcnow().isoformat() + "Z",
             },
@@ -944,7 +948,7 @@ class PipelineOrquestrador:
         engine_status = self.engine.get_status()
         return {
             "status": "healthy" if self.available else "degraded",
-            "pipeline_version": "1.0",
+            "pipeline_version": "1.1",
             "load_time_ms": round(self._load_time_ms, 1),
             "components": {
                 "preprocessor": self.preprocessor is not None,
@@ -959,6 +963,7 @@ class PipelineOrquestrador:
                 "confirmar": self.engine.config.threshold_confirmar,
                 "bloquear": self.engine.config.threshold_bloquear,
                 "veto": self.engine.config.veto_threshold,
+                "lgbm": self.engine.config.lgbm_threshold,
             },
         }
 
@@ -975,8 +980,8 @@ def main():
     """Teste completo do pipeline orquestrador."""
     print("\n")
     print("█" * 70)
-    print("  TESTE DO PIPELINE ORQUESTRADOR v1.0")
-    print("  Feature Engineering → SE + Behavioral + Engine → Decisão")
+    print("  TESTE DO PIPELINE ORQUESTRADOR v1.1")
+    print("  FE → SE + Behavioral + Engine v2.1 (LGBM+Cascade+IF) → Decisão")
     print("█" * 70)
 
     pipeline = PipelineOrquestrador()
@@ -986,7 +991,9 @@ def main():
     print(f"     Preprocessor: {'✅' if status['components']['preprocessor'] else '⚠️'}")
     engine = status['components']['decision_engine']
     print(f"     LGBM: {'✅' if engine['lgbm'] else '❌'} ({engine['lgbm_features']} features)")
+    print(f"     LGBM threshold: {engine.get('lgbm_threshold', 'N/A')}")
     print(f"     IF: {'✅' if engine['if_enabled'] else '—'} ({engine['if_features']} features)")
+    print(f"     Cascade: {'✅' if engine.get('cascade_enabled', False) else '—'} ({engine.get('cascade_rules', 0)} rules)")
 
     # ─── Teste 1: Transação Normal ───
     tx_normal = {
@@ -1142,16 +1149,17 @@ def main():
         beh = r["behavioral"]["behavioral_score"]
         agr = r["peso_total"]
         ms = r["metadata"]["timings"]["total_ms"]
+        cascade = " 🔗CASCADE" if r["cascade"]["triggered"] else ""
         print(
             f"  {i}. {label:15} → {icon} {r['decisao']:10} | "
             f"Score={r['score_final']:5.1f} | "
             f"SE={se:4.0f} | BEH={beh:4.0f} | "
-            f"Agr={agr:2d}/{r['peso_maximo']} | "
+            f"Agr={agr:2d}/{r['peso_maximo']}{cascade} | "
             f"{ms:.0f}ms"
         )
 
-    print(f"\n  ✅ Pipeline Orquestrador v1.0 funcionando!")
-    print(f"  💡 Próximo: criar api.py (FastAPI)")
+    print(f"\n  ✅ Pipeline Orquestrador v1.1 funcionando!")
+    print(f"  💡 Engine v2.1: LGBM + Cascade + IF Boost")
 
 
 def _print_result(r: Dict):
@@ -1169,8 +1177,17 @@ def _print_result(r: Dict):
     print(f"  │ LGBM Raw:        {comp['lgbm_raw']:.8f} → {comp['lgbm_mapped']:5.1f}   │")
     print(f"  │ IF Score:        {comp['if_score']:.6f}  "
           f"({'✅' if comp['if_active'] else '—':2})              │")
+    if comp.get("if_boost_applied", 0) > 0:
+        print(f"  │ IF Boost:        +{comp['if_boost_applied']:.4f}                       │")
     print(f"  │ Rules:           {comp['rule_score_raw']:.0f}/21 "
           f"({comp['rule_score_normalized']:.1%})                  │")
+
+    # Cascade
+    cascade = r.get("cascade", {})
+    if cascade.get("triggered"):
+        print(f"  ├─────────────────────────────────────────────────┤")
+        rules_str = ", ".join(cascade.get("rules", [])[:3])
+        print(f"  │ 🔗 CASCADE: {rules_str:36} │")
 
     # Agravantes
     agr_ativos = [a for a in r["agravantes"] if a["peso"] > 0]
