@@ -1,0 +1,111 @@
+======================================================================
+  RELATÓRIO DE RELEVÂNCIA DE FEATURES
+  26/03/2026 17:45
+======================================================================
+
+Total de features analisadas: 80
+
+RECOMENDAÇÕES:
+
+  MANTER (11 features):
+    • vl_mediana_pix_trimestre (score=0.9951)
+    • qt_intervalo_desvio_padrao_trimestre (score=0.6711)
+    • qt_total_pix_trimestre (score=0.5673)
+    • vl_pix (score=0.5531)
+    • qt_intervalo_mediana_trimestre (score=0.4801)
+    • log_vl_pix (score=0.3465)
+    • nr_idade (score=0.2594)
+    • qt_intervalo_transacao_minuto (score=0.2233)
+    • qt_pix_dia_maximo_trimestre (score=0.2169)
+    • ratio_valor_desvio_padrao (score=0.2120)
+    • minutes_since_prev_tx (score=0.2068)
+
+  MANTER_BAIXA (12 features):
+    • vl_pix_over_1000_flag (score=0.1881)
+    • qt_tempo_relacionamento_mes (score=0.1749)
+    • diff_intervalo_vs_mediana (score=0.1568)
+    • vl_desvio_padrao_pix_trimestre (score=0.1544)
+    • burst_30m_flag (score=0.1451)
+    • ratio_pix_renda (score=0.1443)
+    • receiver_tx_count_prev (score=0.1237)
+    • ratio_latencia_cliente (score=0.1180)
+    • vl_latencia_rede_media_trimestre (score=0.1164)
+    • diff_latencia_cliente (score=0.1115)
+    • ratio_intervalo_vs_mediana (score=0.1085)
+    • rule_score_raw (score=0.1056)
+
+  AVALIAR (21 features):
+    • qt_aparelhos_distintos_trimestre (score=0.0996)
+    • rule_age_score (score=0.0995)
+    • zscore_intervalo_aprox (score=0.0928)
+    • rule_score_normalized (score=0.0926)
+    • ratio_valor_mediana (score=0.0886)
+    • is_segmento_premium_flag (score=0.0834)
+    • rule_relationship_score (score=0.0827)
+    • renda_missing_flag (score=0.0817)
+    • vl_renda_cliente (score=0.0804)
+    • topaz_risk_score (score=0.0800)
+    • zscore_valor_aprox (score=0.0788)
+    • rule_topaz_score (score=0.0775)
+    • topaz_score_filled (score=0.0642)
+    • diff_valor_mediana (score=0.0611)
+    • pix_over_50pct_renda_flag (score=0.0504)
+    • distinct_receivers_so_far (score=0.0478)
+    • device_missing_flag (score=0.0459)
+    • distinct_keys_so_far (score=0.0414)
+    • host_time_missing_flag (score=0.0413)
+    • hour (score=0.0342)
+    • qt_envio_recebedor_trimestre (score=0.0277)
+
+  REMOVER (36 features):
+    • tx_count_prev_30m (score=0.1547)
+    • rule_velocity_score (score=0.1510)
+    • rule_mule_account_score (score=0.1327)
+    • first_key_flag (score=0.1277)
+    • first_receiver_flag (score=0.1276)
+    • is_first_tx_trimestre (score=0.1160)
+    • key_tx_count_prev (score=0.1070)
+    • is_business_hours (score=0.0494)
+    • receiver_document_same_as_customer_flag (score=0.0489)
+    • latencia_host_ratio (score=0.0480)
+    • is_sexo_feminino_flag (score=0.0470)
+    • tp_primeiro_envio_recebedor_trimestre (score=0.0433)
+    • latencia_missing_flag (score=0.0428)
+    • topaz_missing_flag (score=0.0412)
+    • latencia_rede_ms_final (score=0.0397)
+    • tempo_processamento_host_ms (score=0.0368)
+    • pix_over_100pct_renda_flag (score=0.0367)
+    • tempo_interacao_missing_flag (score=0.0346)
+    • pix_key_document_flag (score=0.0319)
+    • app_version_missing_flag (score=0.0319)
+    • metodo_auth_encoded (score=0.0312)
+    • app_version_minor (score=0.0284)
+    • auth_method_missing_flag (score=0.0274)
+    • rule_random_key_score (score=0.0272)
+    • pix_key_other_flag (score=0.0249)
+    • day_of_week (score=0.0216)
+    • pix_key_random_flag (score=0.0200)
+    • pix_key_email_flag (score=0.0140)
+    • pix_key_missing_flag_derived (score=0.0085)
+    • perfil_vulneravel_se_flag (score=0.0065)
+    • is_viuvo_flag (score=0.0058)
+    • is_login_senha_flag (score=0.0043)
+    • is_agendamento_recorrente_flag (score=0.0028)
+    • qt_dependentes (score=0.0000)
+    • is_login_biometria_flag (score=0.0000)
+    • topaz_rejeitada_flag (score=0.0000)
+
+PCA — 90% variância: 36 componentes
+PCA — 95% variância: 42 componentes
+
+Pares altamente correlacionados (|r| ≥ 0.90): 36
+  vl_pix ↔ log_vl_pix: 1.0000
+  topaz_risk_score ↔ topaz_score_filled: 1.0000
+  receiver_tx_count_prev ↔ first_receiver_flag: -1.0000
+  tx_count_prev_30m ↔ burst_30m_flag: 1.0000
+  host_time_missing_flag ↔ latencia_missing_flag: 1.0000
+  rule_score_raw ↔ rule_score_normalized: 1.0000
+  burst_30m_flag ↔ rule_velocity_score: 1.0000
+  first_receiver_flag ↔ rule_mule_account_score: 1.0000
+  receiver_tx_count_prev ↔ rule_mule_account_score: -1.0000
+  tx_count_prev_30m ↔ rule_velocity_score: 1.0000

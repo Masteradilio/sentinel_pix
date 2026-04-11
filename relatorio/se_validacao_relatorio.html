@@ -1,0 +1,635 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Validação Retroativa — Módulo de Engenharia Social</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', Tahoma, sans-serif; background: #0e1117; color: #e0e0e0;
+               padding: 30px 50px; line-height: 1.6; }
+        .header { text-align: center; margin-bottom: 40px; border-bottom: 3px solid #ff9f43;
+                   padding-bottom: 20px; }
+        .header h1 { color: #ff9f43; font-size: 28px; }
+        .header .subtitle { color: #888; font-size: 14px; margin-top: 8px; }
+        .kpi-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px;
+                     margin-bottom: 30px; }
+        .kpi { background: #1a1d23; border-radius: 12px; padding: 20px; text-align: center;
+                border: 2px solid #333; }
+        .kpi .value { font-size: 36px; font-weight: 800; }
+        .kpi .label { font-size: 12px; color: #888; margin-top: 6px; text-transform: uppercase; }
+        .kpi .detail { font-size: 11px; color: #666; margin-top: 4px; }
+        .section { background: #1a1d23; border-radius: 12px; padding: 24px; margin-bottom: 20px;
+                    border: 1px solid #2a2d33; }
+        .section h2 { color: #ff9f43; margin-bottom: 16px; font-size: 18px;
+                       border-bottom: 1px solid #333; padding-bottom: 8px; }
+        table { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 13px; }
+        th { color: #ff9f43; font-size: 11px; text-transform: uppercase; padding: 10px 12px;
+              text-align: left; border-bottom: 2px solid #333; }
+        td { padding: 8px 12px; border-bottom: 1px solid #2a2d33; }
+        tr:hover { background: rgba(255,159,67,0.05); }
+        .highlight { color: #00d4aa; font-weight: bold; }
+        .warning { color: #ffd93d; }
+        .danger { color: #ff6b6b; font-weight: bold; }
+        .callout { background: rgba(255,159,67,0.08); border-left: 4px solid #ff9f43;
+                    padding: 14px 18px; margin: 14px 0; border-radius: 0 8px 8px 0; }
+        .callout.success { border-left-color: #00d4aa; background: rgba(0,212,170,0.08); }
+        .callout.orange { border-left-color: #ff9f43; }
+        .footer { text-align: center; color: #555; font-size: 11px; margin-top: 40px;
+                   padding-top: 16px; border-top: 1px solid #333; }
+    </style>
+</head>
+<body>
+
+<div class="header">
+    <h1>🎭 Validação Retroativa — Módulo de Engenharia Social v2.1</h1>
+    <p class="subtitle">
+        Frente 1 do Plano de Melhoria | Gerado em 2026-04-10T19:35:34 |
+        100,355 transações (355 fraudes)
+    </p>
+</div>
+
+<!-- KPIs -->
+<div class="kpi-grid">
+    <div class="kpi" style="border-color: #ff9f43;">
+        <div class="value" style="color: #ff9f43;">68.73%</div>
+        <div class="label">Fraudes com SE Ativo</div>
+        <div class="detail">244 de 355</div>
+    </div>
+    <div class="kpi" style="border-color: #ffd93d;">
+        <div class="value" style="color: #ffd93d;">0.335%</div>
+        <div class="label">FPR do SE</div>
+        <div class="detail">335 normais flaggadas</div>
+    </div>
+    <div class="kpi" style="border-color: #6c5ce7;">
+        <div class="value" style="color: #6c5ce7;">47.01</div>
+        <div class="label">Score Médio Fraudes</div>
+        <div class="detail">vs 0.16 em normais</div>
+    </div>
+</div>
+
+<!-- Score Distribution -->
+<div class="section">
+    <h2>📊 Distribuição do SE Score</h2>
+    <table>
+        <tr><th>Métrica</th><th>Fraudes</th><th>Normais</th><th>Separação</th></tr>
+        <tr><td>Média</td><td class="highlight">47.01</td>
+            <td>0.16</td>
+            <td>46.9 pts</td></tr>
+        <tr><td>Mediana</td><td>55.0</td>
+            <td>0.0</td><td>—</td></tr>
+        <tr><td>% com score = 0</td><td>31.27%</td>
+            <td>99.67%</td><td>—</td></tr>
+        <tr><td>% com score &gt; 20</td><td class="highlight">68.73%</td>
+            <td>0.34%</td><td>—</td></tr>
+        <tr><td>% com score &gt; 40</td><td class="highlight">53.8%</td>
+            <td>0.08%</td><td>—</td></tr>
+        <tr><td>% com score &gt; 60</td><td>38.59%</td>
+            <td>0.05%</td><td>—</td></tr>
+    </table>
+</div>
+
+<!-- Threshold Analysis -->
+<div class="section">
+    <h2>🎯 Performance do SE por Threshold</h2>
+    <p style="color:#888;margin-bottom:12px;">
+        Se usássemos o SE como detector isolado, qual seria a performance em cada threshold?
+    </p>
+    <table>
+        <tr><th>Threshold</th><th>TP</th><th>FP</th><th>FN</th>
+            <th>Recall</th><th>Precision</th><th>F1</th><th>FPR</th></tr>
+        
+        <tr>
+            <td>0</td>
+            <td class="highlight">244</td>
+            <td class="warning">335</td>
+            <td>111</td>
+            <td>0.6873</td>
+            <td>0.4214</td>
+            <td>0.5225</td>
+            <td>0.003350</td>
+        </tr>
+        <tr>
+            <td>10</td>
+            <td class="highlight">244</td>
+            <td class="warning">335</td>
+            <td>111</td>
+            <td>0.6873</td>
+            <td>0.4214</td>
+            <td>0.5225</td>
+            <td>0.003350</td>
+        </tr>
+        <tr>
+            <td>15</td>
+            <td class="highlight">244</td>
+            <td class="warning">335</td>
+            <td>111</td>
+            <td>0.6873</td>
+            <td>0.4214</td>
+            <td>0.5225</td>
+            <td>0.003350</td>
+        </tr>
+        <tr>
+            <td>20</td>
+            <td class="highlight">244</td>
+            <td class="warning">335</td>
+            <td>111</td>
+            <td>0.6873</td>
+            <td>0.4214</td>
+            <td>0.5225</td>
+            <td>0.003350</td>
+        </tr>
+        <tr>
+            <td>25</td>
+            <td class="highlight">229</td>
+            <td class="warning">335</td>
+            <td>126</td>
+            <td>0.6451</td>
+            <td>0.4060</td>
+            <td>0.4984</td>
+            <td>0.003350</td>
+        </tr>
+        <tr>
+            <td>30</td>
+            <td class="highlight">229</td>
+            <td class="warning">335</td>
+            <td>126</td>
+            <td>0.6451</td>
+            <td>0.4060</td>
+            <td>0.4984</td>
+            <td>0.003350</td>
+        </tr>
+        <tr>
+            <td>40</td>
+            <td class="highlight">191</td>
+            <td class="warning">80</td>
+            <td>164</td>
+            <td>0.5380</td>
+            <td>0.7048</td>
+            <td>0.6102</td>
+            <td>0.000800</td>
+        </tr>
+        <tr>
+            <td>50</td>
+            <td class="highlight">191</td>
+            <td class="warning">80</td>
+            <td>164</td>
+            <td>0.5380</td>
+            <td>0.7048</td>
+            <td>0.6102</td>
+            <td>0.000800</td>
+        </tr>
+        <tr>
+            <td>60</td>
+            <td class="highlight">137</td>
+            <td class="warning">50</td>
+            <td>218</td>
+            <td>0.3859</td>
+            <td>0.7326</td>
+            <td>0.5055</td>
+            <td>0.000500</td>
+        </tr>
+        <tr>
+            <td>80</td>
+            <td class="highlight">82</td>
+            <td class="warning">6</td>
+            <td>273</td>
+            <td>0.2310</td>
+            <td>0.9318</td>
+            <td>0.3702</td>
+            <td>0.000060</td>
+        </tr>
+    </table>
+</div>
+
+<!-- Per-Pattern -->
+<div class="section">
+    <h2>🎭 Performance por Padrão de Golpe</h2>
+    <table>
+        <tr><th>Padrão</th><th>Ativações</th><th>TP</th><th>FP</th>
+            <th>Precision</th><th>Recall</th><th>F1</th><th>% Fraude</th></tr>
+        
+        <tr>
+            <td><strong>BURST_VALOR_ALTO</strong></td>
+            <td>132</td>
+            <td class="highlight">105</td>
+            <td class="warning">27</td>
+            <td style="color:#00d4aa">0.7955</td>
+            <td>0.2958</td>
+            <td>0.4312</td>
+            <td>79.5%</td>
+        </tr>
+        <tr>
+            <td><strong>ESVAZIAMENTO_CONTA</strong></td>
+            <td>142</td>
+            <td class="highlight">98</td>
+            <td class="warning">44</td>
+            <td style="color:#00d4aa">0.6901</td>
+            <td>0.2761</td>
+            <td>0.3944</td>
+            <td>69.0%</td>
+        </tr>
+        <tr>
+            <td><strong>COACAO_FISICA</strong></td>
+            <td>123</td>
+            <td class="highlight">89</td>
+            <td class="warning">34</td>
+            <td style="color:#00d4aa">0.7236</td>
+            <td>0.2507</td>
+            <td>0.3724</td>
+            <td>72.4%</td>
+        </tr>
+        <tr>
+            <td><strong>PRIMEIRA_TX_SUSPEITA</strong></td>
+            <td>123</td>
+            <td class="highlight">89</td>
+            <td class="warning">34</td>
+            <td style="color:#00d4aa">0.7236</td>
+            <td>0.2507</td>
+            <td>0.3724</td>
+            <td>72.4%</td>
+        </tr>
+        <tr>
+            <td><strong>FALSO_FUNCIONARIO_BANCO</strong></td>
+            <td>247</td>
+            <td class="highlight">83</td>
+            <td class="warning">164</td>
+            <td style="color:#ffd93d">0.3360</td>
+            <td>0.2338</td>
+            <td>0.2757</td>
+            <td>33.6%</td>
+        </tr>
+        <tr>
+            <td><strong>IDOSO_VULNERAVEL_70</strong></td>
+            <td>189</td>
+            <td class="highlight">71</td>
+            <td class="warning">118</td>
+            <td style="color:#ffd93d">0.3757</td>
+            <td>0.2000</td>
+            <td>0.2610</td>
+            <td>37.6%</td>
+        </tr>
+        <tr>
+            <td><strong>BURST_INTENSO_RAPIDO</strong></td>
+            <td>48</td>
+            <td class="highlight">48</td>
+            <td class="warning">0</td>
+            <td style="color:#00d4aa">1.0000</td>
+            <td>0.1352</td>
+            <td>0.2382</td>
+            <td>100.0%</td>
+        </tr>
+        <tr>
+            <td><strong>BURST_ESVAZIAMENTO_CONTA</strong></td>
+            <td>42</td>
+            <td class="highlight">16</td>
+            <td class="warning">26</td>
+            <td style="color:#ffd93d">0.3810</td>
+            <td>0.0451</td>
+            <td>0.0806</td>
+            <td>38.1%</td>
+        </tr>
+        <tr>
+            <td><strong>IDOSO_VULNERAVEL_80</strong></td>
+            <td>24</td>
+            <td class="highlight">11</td>
+            <td class="warning">13</td>
+            <td style="color:#ffd93d">0.4583</td>
+            <td>0.0310</td>
+            <td>0.0580</td>
+            <td>45.8%</td>
+        </tr>
+    </table>
+</div>
+
+<!-- Indicators -->
+<div class="section">
+    <h2>🔍 Top 25 Indicadores por Poder Discriminativo (Lift)</h2>
+    <p style="color:#888;margin-bottom:12px;">
+        Lift = (taxa em fraudes) / (taxa em normais). Lift alto = indicador discriminativo.
+    </p>
+    <table>
+        <tr><th>Indicador</th><th>Ativações</th><th>Em Fraudes</th>
+            <th>Taxa Fraude</th><th>Taxa Normal</th><th>Lift</th><th>Info Gain</th></tr>
+        
+        <tr>
+            <td>burst_intenso</td>
+            <td>48</td>
+            <td>48</td>
+            <td>13.5%</td>
+            <td>0.000%</td>
+            <td style="color:#00d4aa;font-weight:bold">135211267.6x</td>
+            <td>0.003944</td>
+        </tr>
+        <tr>
+            <td>burst_30m</td>
+            <td>314</td>
+            <td>145</td>
+            <td>40.8%</td>
+            <td>0.169%</td>
+            <td style="color:#00d4aa;font-weight:bold">241.7x</td>
+            <td>0.009153</td>
+        </tr>
+        <tr>
+            <td>multiplos_pix_rapidos</td>
+            <td>287</td>
+            <td>118</td>
+            <td>33.2%</td>
+            <td>0.169%</td>
+            <td style="color:#00d4aa;font-weight:bold">196.7x</td>
+            <td>0.007105</td>
+        </tr>
+        <tr>
+            <td>primeira_tx_trimestre</td>
+            <td>313</td>
+            <td>107</td>
+            <td>30.1%</td>
+            <td>0.206%</td>
+            <td style="color:#00d4aa;font-weight:bold">146.3x</td>
+            <td>0.006058</td>
+        </tr>
+        <tr>
+            <td>burst_conta_antiga</td>
+            <td>153</td>
+            <td>22</td>
+            <td>6.2%</td>
+            <td>0.131%</td>
+            <td style="color:#00d4aa;font-weight:bold">47.3x</td>
+            <td>0.000896</td>
+        </tr>
+        <tr>
+            <td>valor_absoluto_alto</td>
+            <td>1,031</td>
+            <td>112</td>
+            <td>31.6%</td>
+            <td>0.919%</td>
+            <td style="color:#00d4aa;font-weight:bold">34.3x</td>
+            <td>0.004312</td>
+        </tr>
+        <tr>
+            <td>valor_absoluto_muito_alto</td>
+            <td>465</td>
+            <td>44</td>
+            <td>12.4%</td>
+            <td>0.421%</td>
+            <td style="color:#00d4aa;font-weight:bold">29.4x</td>
+            <td>0.001537</td>
+        </tr>
+        <tr>
+            <td>aproximando_esgotamento</td>
+            <td>23</td>
+            <td>2</td>
+            <td>0.6%</td>
+            <td>0.021%</td>
+            <td style="color:#00d4aa;font-weight:bold">26.8x</td>
+            <td>0.000066</td>
+        </tr>
+        <tr>
+            <td>renda_desconhecida_valor_alto</td>
+            <td>718</td>
+            <td>55</td>
+            <td>15.5%</td>
+            <td>0.663%</td>
+            <td style="color:#00d4aa;font-weight:bold">23.4x</td>
+            <td>0.001765</td>
+        </tr>
+        <tr>
+            <td>pix_acima_1000</td>
+            <td>5,615</td>
+            <td>275</td>
+            <td>77.5%</td>
+            <td>5.340%</td>
+            <td style="color:#00d4aa;font-weight:bold">14.5x</td>
+            <td>0.008832</td>
+        </tr>
+        <tr>
+            <td>idade_70_plus</td>
+            <td>4,089</td>
+            <td>119</td>
+            <td>33.5%</td>
+            <td>3.970%</td>
+            <td style="color:#ffd93d;font-weight:bold">8.4x</td>
+            <td>0.002381</td>
+        </tr>
+        <tr>
+            <td>intervalo_muito_curto</td>
+            <td>11,017</td>
+            <td>254</td>
+            <td>71.5%</td>
+            <td>10.763%</td>
+            <td style="color:#ffd93d;font-weight:bold">6.7x</td>
+            <td>0.005223</td>
+        </tr>
+        <tr>
+            <td>renda_metade_comprometida</td>
+            <td>8,189</td>
+            <td>131</td>
+            <td>36.9%</td>
+            <td>8.058%</td>
+            <td style="color:#ffd93d;font-weight:bold">4.6x</td>
+            <td>0.001643</td>
+        </tr>
+        <tr>
+            <td>idade_80_plus</td>
+            <td>1,080</td>
+            <td>17</td>
+            <td>4.8%</td>
+            <td>1.063%</td>
+            <td style="color:#ffd93d;font-weight:bold">4.5x</td>
+            <td>0.000180</td>
+        </tr>
+        <tr>
+            <td>idade_60_plus</td>
+            <td>13,832</td>
+            <td>187</td>
+            <td>52.7%</td>
+            <td>13.645%</td>
+            <td style="color:#ffd93d;font-weight:bold">3.9x</td>
+            <td>0.002167</td>
+        </tr>
+        <tr>
+            <td>intervalo_curto</td>
+            <td>23,942</td>
+            <td>319</td>
+            <td>89.9%</td>
+            <td>23.623%</td>
+            <td style="color:#ffd93d;font-weight:bold">3.8x</td>
+            <td>0.005060</td>
+        </tr>
+        <tr>
+            <td>conta_recem_aberta</td>
+            <td>233</td>
+            <td>3</td>
+            <td>0.9%</td>
+            <td>0.230%</td>
+            <td style="color:#ffd93d;font-weight:bold">3.7x</td>
+            <td>0.000025</td>
+        </tr>
+        <tr>
+            <td>valor_redondo</td>
+            <td>12,064</td>
+            <td>126</td>
+            <td>35.5%</td>
+            <td>11.938%</td>
+            <td style="color:#ccc;font-weight:bold">3.0x</td>
+            <td>0.000944</td>
+        </tr>
+        <tr>
+            <td>cliente_muito_novo</td>
+            <td>935</td>
+            <td>8</td>
+            <td>2.2%</td>
+            <td>0.927%</td>
+            <td style="color:#ccc;font-weight:bold">2.4x</td>
+            <td>0.000035</td>
+        </tr>
+        <tr>
+            <td>multiplos_recebedores_distintos</td>
+            <td>5,472</td>
+            <td>34</td>
+            <td>9.6%</td>
+            <td>5.438%</td>
+            <td style="color:#ccc;font-weight:bold">1.8x</td>
+            <td>0.000070</td>
+        </tr>
+        <tr>
+            <td>is_segmento_premium</td>
+            <td>50,152</td>
+            <td>282</td>
+            <td>79.4%</td>
+            <td>49.870%</td>
+            <td style="color:#ccc;font-weight:bold">1.6x</td>
+            <td>0.000949</td>
+        </tr>
+        <tr>
+            <td>perfil_vulneravel_se</td>
+            <td>1,678</td>
+            <td>9</td>
+            <td>2.5%</td>
+            <td>1.669%</td>
+            <td style="color:#ccc;font-weight:bold">1.5x</td>
+            <td>0.000010</td>
+        </tr>
+        <tr>
+            <td>chave_aleatoria</td>
+            <td>42,805</td>
+            <td>137</td>
+            <td>38.6%</td>
+            <td>42.668%</td>
+            <td style="color:#ccc;font-weight:bold">0.9x</td>
+            <td>0.000017</td>
+        </tr>
+    </table>
+</div>
+
+<!-- Overlap -->
+<div class="section">
+    <h2>🔄 Overlap entre Padrões (Jaccard Similarity)</h2>
+    <p style="color:#888;margin-bottom:12px;">
+        Jaccard &gt; 0.7 = padrões quase idênticos (candidatos a merge).
+        Jaccard &lt; 0.3 = padrões independentes (bom).
+    </p>
+    <table>
+        <tr><th>Padrão A</th><th>Padrão B</th><th>Co-ocorrência</th><th>Jaccard</th></tr>
+        
+        <tr>
+            <td>COACAO_FISICA</td>
+            <td>PRIMEIRA_TX_SUSPEITA</td>
+            <td>123</td>
+            <td style="color:#ff6b6b;font-weight:bold">1.0000</td>
+        </tr>
+        <tr>
+            <td>BURST_VALOR_ALTO</td>
+            <td>ESVAZIAMENTO_CONTA</td>
+            <td>98</td>
+            <td style="color:#ffd93d;font-weight:bold">0.5868</td>
+        </tr>
+        <tr>
+            <td>BURST_INTENSO_RAPIDO</td>
+            <td>ESVAZIAMENTO_CONTA</td>
+            <td>47</td>
+            <td style="color:#ccc;font-weight:bold">0.3507</td>
+        </tr>
+        <tr>
+            <td>BURST_ESVAZIAMENTO_CONTA</td>
+            <td>BURST_VALOR_ALTO</td>
+            <td>42</td>
+            <td style="color:#ccc;font-weight:bold">0.3182</td>
+        </tr>
+        <tr>
+            <td>BURST_ESVAZIAMENTO_CONTA</td>
+            <td>ESVAZIAMENTO_CONTA</td>
+            <td>33</td>
+            <td style="color:#ccc;font-weight:bold">0.2324</td>
+        </tr>
+        <tr>
+            <td>BURST_INTENSO_RAPIDO</td>
+            <td>BURST_VALOR_ALTO</td>
+            <td>30</td>
+            <td style="color:#ccc;font-weight:bold">0.2000</td>
+        </tr>
+        <tr>
+            <td>FALSO_FUNCIONARIO_BANCO</td>
+            <td>IDOSO_VULNERAVEL_70</td>
+            <td>53</td>
+            <td style="color:#ccc;font-weight:bold">0.1384</td>
+        </tr>
+        <tr>
+            <td>BURST_VALOR_ALTO</td>
+            <td>IDOSO_VULNERAVEL_70</td>
+            <td>37</td>
+            <td style="color:#ccc;font-weight:bold">0.1303</td>
+        </tr>
+        <tr>
+            <td>IDOSO_VULNERAVEL_70</td>
+            <td>IDOSO_VULNERAVEL_80</td>
+            <td>24</td>
+            <td style="color:#ccc;font-weight:bold">0.1270</td>
+        </tr>
+        <tr>
+            <td>COACAO_FISICA</td>
+            <td>FALSO_FUNCIONARIO_BANCO</td>
+            <td>33</td>
+            <td style="color:#ccc;font-weight:bold">0.0979</td>
+        </tr>
+    </table>
+</div>
+
+
+    <div class="section">
+        <h2>🔗 Complementaridade SE × LGBM (Holdout)</h2>
+        <div class="kpi-grid" style="grid-template-columns: repeat(4, 1fr);">
+            <div class="kpi"><div class="value" style="color:#00d4aa">60</div>
+                <div class="label">Ambos detectaram</div></div>
+            <div class="kpi"><div class="value" style="color:#6c5ce7">19</div>
+                <div class="label">Só LGBM</div></div>
+            <div class="kpi"><div class="value" style="color:#ff9f43">0</div>
+                <div class="label">Só SE</div></div>
+            <div class="kpi"><div class="value" style="color:#ff6b6b">1</div>
+                <div class="label">Nenhum</div></div>
+        </div>
+        <div class="callout orange">
+            <strong>Valor incremental do SE:</strong>
+            No holdout, o LGBM+Cascade já capturou todas as fraudes. O SE funciona como rede de segurança para cenários futuros.
+        </div>
+    </div>
+
+<div class="section">
+    <h2>📋 Conclusões e Próximos Passos</h2>
+    <div class="callout orange">
+        <strong>Este relatório é a Frente 1 do plano de melhoria do módulo SE.</strong><br>
+        Com estes dados, as próximas frentes são:<br>
+        • <strong>Frente 2:</strong> Calibrar min_score de cada padrão usando curvas precision-recall<br>
+        • <strong>Frente 3:</strong> Desduplicar padrões com Jaccard &gt; 0.7<br>
+        • <strong>Frente 4:</strong> Documentar cada regra com evidência + referência regulatória
+    </div>
+</div>
+
+<div class="footer">
+    Frente 1 — Validação Retroativa do Módulo SE v2.1 |
+    100,355 transações analisadas |
+    Gerado automaticamente por avaliar_se_retroativo.py
+</div>
+
+</body>
+</html>

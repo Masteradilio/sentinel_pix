@@ -1,0 +1,1148 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Calibração min_score — Módulo SE v3.0</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', Tahoma, sans-serif; background: #0e1117; color: #e0e0e0;
+               padding: 30px 50px; line-height: 1.6; }
+        .header { text-align: center; margin-bottom: 40px; border-bottom: 3px solid #6c5ce7;
+                   padding-bottom: 20px; }
+        .header h1 { color: #6c5ce7; font-size: 28px; }
+        .header .subtitle { color: #888; font-size: 14px; margin-top: 8px; }
+        .kpi-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px;
+                     margin-bottom: 30px; }
+        .kpi { background: #1a1d23; border-radius: 12px; padding: 20px; text-align: center;
+                border: 2px solid #333; }
+        .kpi .value { font-size: 32px; font-weight: 800; }
+        .kpi .label { font-size: 11px; color: #888; margin-top: 6px; text-transform: uppercase; }
+        .kpi .detail { font-size: 11px; color: #666; margin-top: 4px; }
+        .section { background: #1a1d23; border-radius: 12px; padding: 24px; margin-bottom: 20px;
+                    border: 1px solid #2a2d33; }
+        .section h2 { color: #6c5ce7; margin-bottom: 16px; font-size: 18px;
+                       border-bottom: 1px solid #333; padding-bottom: 8px; }
+        table { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 13px; }
+        th { color: #6c5ce7; font-size: 11px; text-transform: uppercase; padding: 10px 12px;
+              text-align: left; border-bottom: 2px solid #333; }
+        td { padding: 8px 12px; border-bottom: 1px solid #2a2d33; }
+        tr:hover { background: rgba(108,92,231,0.05); }
+        .highlight { color: #00d4aa; font-weight: bold; }
+        .warning { color: #ffd93d; }
+        .callout { background: rgba(108,92,231,0.08); border-left: 4px solid #6c5ce7;
+                    padding: 14px 18px; margin: 14px 0; border-radius: 0 8px 8px 0; }
+        .callout.success { border-left-color: #00d4aa; background: rgba(0,212,170,0.08); }
+        .footer { text-align: center; color: #555; font-size: 11px; margin-top: 40px;
+                   padding-top: 16px; border-top: 1px solid #333; }
+    </style>
+</head>
+<body>
+
+<div class="header">
+    <h1>🎯 Calibração de min_score — SE v3.0</h1>
+    <p class="subtitle">
+        Frente 2 | Critério: max_f1 |
+        Gerado em 2026-04-10 18:59
+    </p>
+</div>
+
+<!-- KPIs: Impacto Global -->
+<div class="kpi-grid">
+    <div class="kpi" style="border-color:#ff6b6b">
+        <div class="value" style="color:#ff6b6b">214</div>
+        <div class="label">TP (novo)</div>
+        <div class="detail">era 219 (-5)</div>
+    </div>
+    <div class="kpi" style="border-color:#00d4aa">
+        <div class="value" style="color:#00d4aa">641</div>
+        <div class="label">FP (novo)</div>
+        <div class="detail">era 957 (-316)</div>
+    </div>
+    <div class="kpi" style="border-color:#6c5ce7">
+        <div class="value" style="color:#6c5ce7">25.03%</div>
+        <div class="label">Precision</div>
+        <div class="detail">era 18.62%</div>
+    </div>
+    <div class="kpi" style="border-color:#ff9f43">
+        <div class="value" style="color:#ff9f43">60.28%</div>
+        <div class="label">Recall</div>
+        <div class="detail">era 61.69%</div>
+    </div>
+</div>
+
+<!-- Recomendações -->
+<div class="section">
+    <h2>📋 Recomendações de min_score</h2>
+    <table>
+        <tr><th>Padrão</th><th>Atual</th><th>Novo</th><th>Δ</th>
+            <th>TP</th><th>FP</th><th>Prec</th><th>Recall</th>
+            <th>F1</th><th>Razão</th></tr>
+        
+        <tr style="background:rgba(0,212,170,0.05)">
+            <td><strong>ESVAZIAMENTO_CONTA</strong></td>
+            <td>4</td>
+            <td style="color:#00d4aa;font-weight:bold">3</td>
+            <td style="color:#00d4aa">→</td>
+            <td>107</td>
+            <td>107</td>
+            <td>0.5000</td>
+            <td>0.3014</td>
+            <td>0.3761</td>
+            <td style="font-size:11px;color:#888">max F1 = 0.3761</td>
+        </tr>
+        <tr style="">
+            <td><strong>COACAO_FISICA</strong></td>
+            <td>5</td>
+            <td style="color:#888;font-weight:bold">5</td>
+            <td style="color:#888">=</td>
+            <td>122</td>
+            <td>303</td>
+            <td>0.2871</td>
+            <td>0.3437</td>
+            <td>0.3128</td>
+            <td style="font-size:11px;color:#888">max F1 = 0.3128</td>
+        </tr>
+        <tr style="">
+            <td><strong>BURST_ESVAZIAMENTO_CONTA</strong></td>
+            <td>3</td>
+            <td style="color:#888;font-weight:bold">3</td>
+            <td style="color:#888">=</td>
+            <td>16</td>
+            <td>26</td>
+            <td>0.3810</td>
+            <td>0.0451</td>
+            <td>0.0806</td>
+            <td style="font-size:11px;color:#888">max F1 = 0.0806</td>
+        </tr>
+        <tr style="">
+            <td><strong>FALSO_FUNCIONARIO_BANCO</strong></td>
+            <td>7</td>
+            <td style="color:#888;font-weight:bold">7</td>
+            <td style="color:#888">=</td>
+            <td>83</td>
+            <td>164</td>
+            <td>0.3360</td>
+            <td>0.2338</td>
+            <td>0.2757</td>
+            <td style="font-size:11px;color:#888">max F1 = 0.2757</td>
+        </tr>
+        <tr style="">
+            <td><strong>IDOSO_VULNERAVEL_70</strong></td>
+            <td>7</td>
+            <td style="color:#888;font-weight:bold">7</td>
+            <td style="color:#888">=</td>
+            <td>71</td>
+            <td>118</td>
+            <td>0.3757</td>
+            <td>0.2000</td>
+            <td>0.2610</td>
+            <td style="font-size:11px;color:#888">max F1 = 0.2610</td>
+        </tr>
+        <tr style="background:rgba(0,212,170,0.05)">
+            <td><strong>IDOSO_VULNERAVEL_80</strong></td>
+            <td>6</td>
+            <td style="color:#00d4aa;font-weight:bold">5</td>
+            <td style="color:#00d4aa">→</td>
+            <td>13</td>
+            <td>74</td>
+            <td>0.1494</td>
+            <td>0.0366</td>
+            <td>0.0588</td>
+            <td style="font-size:11px;color:#888">max F1 = 0.0588</td>
+        </tr>
+    </table>
+</div>
+
+<!-- Simulação por padrão -->
+<div class="section">
+    <h2>🔄 Simulação com novos min_scores</h2>
+    <table>
+        <tr><th>Padrão</th><th>TP</th><th>FP</th>
+            <th>Precision</th><th>Recall</th><th>F1</th></tr>
+        
+        <tr>
+            <td><strong>ESVAZIAMENTO_CONTA</strong></td>
+            <td class="highlight">113</td>
+            <td class="warning">107</td>
+            <td>0.5136</td>
+            <td>0.3183</td>
+            <td>0.3930</td>
+        </tr>
+        <tr>
+            <td><strong>COACAO_FISICA</strong></td>
+            <td class="highlight">122</td>
+            <td class="warning">303</td>
+            <td>0.2871</td>
+            <td>0.3437</td>
+            <td>0.3128</td>
+        </tr>
+        <tr>
+            <td><strong>BURST_ESVAZIAMENTO_CONTA</strong></td>
+            <td class="highlight">16</td>
+            <td class="warning">26</td>
+            <td>0.3810</td>
+            <td>0.0451</td>
+            <td>0.0806</td>
+        </tr>
+        <tr>
+            <td><strong>FALSO_FUNCIONARIO_BANCO</strong></td>
+            <td class="highlight">83</td>
+            <td class="warning">164</td>
+            <td>0.3360</td>
+            <td>0.2338</td>
+            <td>0.2757</td>
+        </tr>
+        <tr>
+            <td><strong>IDOSO_VULNERAVEL_70</strong></td>
+            <td class="highlight">71</td>
+            <td class="warning">118</td>
+            <td>0.3757</td>
+            <td>0.2000</td>
+            <td>0.2610</td>
+        </tr>
+        <tr>
+            <td><strong>IDOSO_VULNERAVEL_80</strong></td>
+            <td class="highlight">13</td>
+            <td class="warning">74</td>
+            <td>0.1494</td>
+            <td>0.0366</td>
+            <td>0.0588</td>
+        </tr>
+    </table>
+</div>
+
+<!-- Curvas por padrão -->
+
+        <div class="section">
+            <h2>📈 ESVAZIAMENTO_CONTA</h2>
+            <table>
+                <tr><th>min_score</th><th>TP</th><th>FP</th>
+                    <th>Precision</th><th>Recall</th><th>F1</th>
+                    <th>F2</th><th>FPR</th><th></th></tr>
+                
+            <tr style="background:rgba(0,212,170,0.1)">
+                <td>3</td>
+                <td class="highlight">107</td>
+                <td class="warning">107</td>
+                <td>0.5000</td>
+                <td>0.3014</td>
+                <td><strong>0.3761</strong></td>
+                <td>0.3274</td>
+                <td>0.001070</td>
+                <td style="font-size:11px;color:#00d4aa">◄ RECOMENDADO</td>
+            </tr>
+            <tr style="background:rgba(255,159,67,0.08)">
+                <td>4</td>
+                <td class="highlight">90</td>
+                <td class="warning">43</td>
+                <td>0.6767</td>
+                <td>0.2535</td>
+                <td><strong>0.3689</strong></td>
+                <td>0.2898</td>
+                <td>0.000430</td>
+                <td style="font-size:11px;color:#00d4aa">◄ atual</td>
+            </tr>
+            <tr style="">
+                <td>5</td>
+                <td class="highlight">52</td>
+                <td class="warning">21</td>
+                <td>0.7123</td>
+                <td>0.1465</td>
+                <td><strong>0.2430</strong></td>
+                <td>0.1741</td>
+                <td>0.000210</td>
+                <td style="font-size:11px;color:#00d4aa"></td>
+            </tr>
+            <tr style="">
+                <td>6</td>
+                <td class="highlight">18</td>
+                <td class="warning">8</td>
+                <td>0.6923</td>
+                <td>0.0507</td>
+                <td><strong>0.0945</strong></td>
+                <td>0.0622</td>
+                <td>0.000080</td>
+                <td style="font-size:11px;color:#00d4aa"></td>
+            </tr>
+            <tr style="">
+                <td>7</td>
+                <td class="highlight">4</td>
+                <td class="warning">2</td>
+                <td>0.6667</td>
+                <td>0.0113</td>
+                <td><strong>0.0222</strong></td>
+                <td>0.0140</td>
+                <td>0.000020</td>
+                <td style="font-size:11px;color:#00d4aa"></td>
+            </tr>
+            <tr style="">
+                <td>8</td>
+                <td class="highlight">0</td>
+                <td class="warning">0</td>
+                <td>0.0000</td>
+                <td>0.0000</td>
+                <td><strong>0.0000</strong></td>
+                <td>0.0000</td>
+                <td>0.000000</td>
+                <td style="font-size:11px;color:#00d4aa"></td>
+            </tr>
+            <tr style="">
+                <td>9</td>
+                <td class="highlight">0</td>
+                <td class="warning">0</td>
+                <td>0.0000</td>
+                <td>0.0000</td>
+                <td><strong>0.0000</strong></td>
+                <td>0.0000</td>
+                <td>0.000000</td>
+                <td style="font-size:11px;color:#00d4aa"></td>
+            </tr>
+            <tr style="">
+                <td>10</td>
+                <td class="highlight">0</td>
+                <td class="warning">0</td>
+                <td>0.0000</td>
+                <td>0.0000</td>
+                <td><strong>0.0000</strong></td>
+                <td>0.0000</td>
+                <td>0.000000</td>
+                <td style="font-size:11px;color:#00d4aa"></td>
+            </tr>
+            <tr style="">
+                <td>11</td>
+                <td class="highlight">0</td>
+                <td class="warning">0</td>
+                <td>0.0000</td>
+                <td>0.0000</td>
+                <td><strong>0.0000</strong></td>
+                <td>0.0000</td>
+                <td>0.000000</td>
+                <td style="font-size:11px;color:#00d4aa"></td>
+            </tr>
+            <tr style="">
+                <td>12</td>
+                <td class="highlight">0</td>
+                <td class="warning">0</td>
+                <td>0.0000</td>
+                <td>0.0000</td>
+                <td><strong>0.0000</strong></td>
+                <td>0.0000</td>
+                <td>0.000000</td>
+                <td style="font-size:11px;color:#00d4aa"></td>
+            </tr>
+            <tr style="">
+                <td>13</td>
+                <td class="highlight">0</td>
+                <td class="warning">0</td>
+                <td>0.0000</td>
+                <td>0.0000</td>
+                <td><strong>0.0000</strong></td>
+                <td>0.0000</td>
+                <td>0.000000</td>
+                <td style="font-size:11px;color:#00d4aa"></td>
+            </tr>
+            <tr style="">
+                <td>14</td>
+                <td class="highlight">0</td>
+                <td class="warning">0</td>
+                <td>0.0000</td>
+                <td>0.0000</td>
+                <td><strong>0.0000</strong></td>
+                <td>0.0000</td>
+                <td>0.000000</td>
+                <td style="font-size:11px;color:#00d4aa"></td>
+            </tr>
+            <tr style="">
+                <td>15</td>
+                <td class="highlight">0</td>
+                <td class="warning">0</td>
+                <td>0.0000</td>
+                <td>0.0000</td>
+                <td><strong>0.0000</strong></td>
+                <td>0.0000</td>
+                <td>0.000000</td>
+                <td style="font-size:11px;color:#00d4aa"></td>
+            </tr>
+            </table>
+        </div>
+        <div class="section">
+            <h2>📈 COACAO_FISICA</h2>
+            <table>
+                <tr><th>min_score</th><th>TP</th><th>FP</th>
+                    <th>Precision</th><th>Recall</th><th>F1</th>
+                    <th>F2</th><th>FPR</th><th></th></tr>
+                
+            <tr style="">
+                <td>3</td>
+                <td class="highlight">199</td>
+                <td class="warning">1210</td>
+                <td>0.1412</td>
+                <td>0.5606</td>
+                <td><strong>0.2256</strong></td>
+                <td>0.3517</td>
+                <td>0.012100</td>
+                <td style="font-size:11px;color:#00d4aa"></td>
+            </tr>
+            <tr style="">
+                <td>4</td>
+                <td class="highlight">199</td>
+                <td class="warning">1210</td>
+                <td>0.1412</td>
+                <td>0.5606</td>
+                <td><strong>0.2256</strong></td>
+                <td>0.3517</td>
+                <td>0.012100</td>
+                <td style="font-size:11px;color:#00d4aa"></td>
+            </tr>
+            <tr style="background:rgba(0,212,170,0.08)">
+                <td>5</td>
+                <td class="highlight">122</td>
+                <td class="warning">303</td>
+                <td>0.2871</td>
+                <td>0.3437</td>
+                <td><strong>0.3128</strong></td>
+                <td>0.3306</td>
+                <td>0.003030</td>
+                <td style="font-size:11px;color:#00d4aa">◄ atual + recomendado</td>
+            </tr>
+            <tr style="">
+                <td>6</td>
+                <td class="highlight">98</td>
+                <td class="warning">222</td>
+                <td>0.3063</td>
+                <td>0.2761</td>
+                <td><strong>0.2904</strong></td>
+                <td>0.2816</td>
+                <td>0.002220</td>
+                <td style="font-size:11px;color:#00d4aa"></td>
+            </tr>
+            <tr style="">
+                <td>7</td>
+                <td class="highlight">46</td>
+                <td class="warning">117</td>
+                <td>0.2822</td>
+                <td>0.1296</td>
+                <td><strong>0.1776</strong></td>
+                <td>0.1453</td>
+                <td>0.001170</td>
+                <td style="font-size:11px;color:#00d4aa"></td>
+            </tr>
+            <tr style="">
+                <td>8</td>
+                <td class="highlight">17</td>
+                <td class="warning">16</td>
+                <td>0.5152</td>
+                <td>0.0479</td>
+                <td><strong>0.0876</strong></td>
+                <td>0.0585</td>
+                <td>0.000160</td>
+                <td style="font-size:11px;color:#00d4aa"></td>
+            </tr>
+            <tr style="">
+                <td>9</td>
+                <td class="highlight">8</td>
+                <td class="warning">1</td>
+                <td>0.8889</td>
+                <td>0.0225</td>
+                <td><strong>0.0440</strong></td>
+                <td>0.0280</td>
+                <td>0.000010</td>
+                <td style="font-size:11px;color:#00d4aa"></td>
+            </tr>
+            <tr style="">
+                <td>10</td>
+                <td class="highlight">3</td>
+                <td class="warning">0</td>
+                <td>1.0000</td>
+                <td>0.0085</td>
+                <td><strong>0.0168</strong></td>
+                <td>0.0105</td>
+                <td>0.000000</td>
+                <td style="font-size:11px;color:#00d4aa"></td>
+            </tr>
+            <tr style="">
+                <td>11</td>
+                <td class="highlight">0</td>
+                <td class="warning">0</td>
+                <td>0.0000</td>
+                <td>0.0000</td>
+                <td><strong>0.0000</strong></td>
+                <td>0.0000</td>
+                <td>0.000000</td>
+                <td style="font-size:11px;color:#00d4aa"></td>
+            </tr>
+            <tr style="">
+                <td>12</td>
+                <td class="highlight">0</td>
+                <td class="warning">0</td>
+                <td>0.0000</td>
+                <td>0.0000</td>
+                <td><strong>0.0000</strong></td>
+                <td>0.0000</td>
+                <td>0.000000</td>
+                <td style="font-size:11px;color:#00d4aa"></td>
+            </tr>
+            <tr style="">
+                <td>13</td>
+                <td class="highlight">0</td>
+                <td class="warning">0</td>
+                <td>0.0000</td>
+                <td>0.0000</td>
+                <td><strong>0.0000</strong></td>
+                <td>0.0000</td>
+                <td>0.000000</td>
+                <td style="font-size:11px;color:#00d4aa"></td>
+            </tr>
+            <tr style="">
+                <td>14</td>
+                <td class="highlight">0</td>
+                <td class="warning">0</td>
+                <td>0.0000</td>
+                <td>0.0000</td>
+                <td><strong>0.0000</strong></td>
+                <td>0.0000</td>
+                <td>0.000000</td>
+                <td style="font-size:11px;color:#00d4aa"></td>
+            </tr>
+            <tr style="">
+                <td>15</td>
+                <td class="highlight">0</td>
+                <td class="warning">0</td>
+                <td>0.0000</td>
+                <td>0.0000</td>
+                <td><strong>0.0000</strong></td>
+                <td>0.0000</td>
+                <td>0.000000</td>
+                <td style="font-size:11px;color:#00d4aa"></td>
+            </tr>
+            </table>
+        </div>
+        <div class="section">
+            <h2>📈 BURST_ESVAZIAMENTO_CONTA</h2>
+            <table>
+                <tr><th>min_score</th><th>TP</th><th>FP</th>
+                    <th>Precision</th><th>Recall</th><th>F1</th>
+                    <th>F2</th><th>FPR</th><th></th></tr>
+                
+            <tr style="background:rgba(0,212,170,0.08)">
+                <td>3</td>
+                <td class="highlight">16</td>
+                <td class="warning">26</td>
+                <td>0.3810</td>
+                <td>0.0451</td>
+                <td><strong>0.0806</strong></td>
+                <td>0.0547</td>
+                <td>0.000260</td>
+                <td style="font-size:11px;color:#00d4aa">◄ atual + recomendado</td>
+            </tr>
+            <tr style="">
+                <td>4</td>
+                <td class="highlight">16</td>
+                <td class="warning">26</td>
+                <td>0.3810</td>
+                <td>0.0451</td>
+                <td><strong>0.0806</strong></td>
+                <td>0.0547</td>
+                <td>0.000260</td>
+                <td style="font-size:11px;color:#00d4aa"></td>
+            </tr>
+            <tr style="">
+                <td>5</td>
+                <td class="highlight">10</td>
+                <td class="warning">25</td>
+                <td>0.2857</td>
+                <td>0.0282</td>
+                <td><strong>0.0513</strong></td>
+                <td>0.0344</td>
+                <td>0.000250</td>
+                <td style="font-size:11px;color:#00d4aa"></td>
+            </tr>
+            <tr style="">
+                <td>6</td>
+                <td class="highlight">5</td>
+                <td class="warning">19</td>
+                <td>0.2083</td>
+                <td>0.0141</td>
+                <td><strong>0.0264</strong></td>
+                <td>0.0173</td>
+                <td>0.000190</td>
+                <td style="font-size:11px;color:#00d4aa"></td>
+            </tr>
+            <tr style="">
+                <td>7</td>
+                <td class="highlight">2</td>
+                <td class="warning">8</td>
+                <td>0.2000</td>
+                <td>0.0056</td>
+                <td><strong>0.0110</strong></td>
+                <td>0.0070</td>
+                <td>0.000080</td>
+                <td style="font-size:11px;color:#00d4aa"></td>
+            </tr>
+            <tr style="">
+                <td>8</td>
+                <td class="highlight">0</td>
+                <td class="warning">2</td>
+                <td>0.0000</td>
+                <td>0.0000</td>
+                <td><strong>0.0000</strong></td>
+                <td>0.0000</td>
+                <td>0.000020</td>
+                <td style="font-size:11px;color:#00d4aa"></td>
+            </tr>
+            <tr style="">
+                <td>9</td>
+                <td class="highlight">0</td>
+                <td class="warning">0</td>
+                <td>0.0000</td>
+                <td>0.0000</td>
+                <td><strong>0.0000</strong></td>
+                <td>0.0000</td>
+                <td>0.000000</td>
+                <td style="font-size:11px;color:#00d4aa"></td>
+            </tr>
+            <tr style="">
+                <td>10</td>
+                <td class="highlight">0</td>
+                <td class="warning">0</td>
+                <td>0.0000</td>
+                <td>0.0000</td>
+                <td><strong>0.0000</strong></td>
+                <td>0.0000</td>
+                <td>0.000000</td>
+                <td style="font-size:11px;color:#00d4aa"></td>
+            </tr>
+            <tr style="">
+                <td>11</td>
+                <td class="highlight">0</td>
+                <td class="warning">0</td>
+                <td>0.0000</td>
+                <td>0.0000</td>
+                <td><strong>0.0000</strong></td>
+                <td>0.0000</td>
+                <td>0.000000</td>
+                <td style="font-size:11px;color:#00d4aa"></td>
+            </tr>
+            <tr style="">
+                <td>12</td>
+                <td class="highlight">0</td>
+                <td class="warning">0</td>
+                <td>0.0000</td>
+                <td>0.0000</td>
+                <td><strong>0.0000</strong></td>
+                <td>0.0000</td>
+                <td>0.000000</td>
+                <td style="font-size:11px;color:#00d4aa"></td>
+            </tr>
+            <tr style="">
+                <td>13</td>
+                <td class="highlight">0</td>
+                <td class="warning">0</td>
+                <td>0.0000</td>
+                <td>0.0000</td>
+                <td><strong>0.0000</strong></td>
+                <td>0.0000</td>
+                <td>0.000000</td>
+                <td style="font-size:11px;color:#00d4aa"></td>
+            </tr>
+            <tr style="">
+                <td>14</td>
+                <td class="highlight">0</td>
+                <td class="warning">0</td>
+                <td>0.0000</td>
+                <td>0.0000</td>
+                <td><strong>0.0000</strong></td>
+                <td>0.0000</td>
+                <td>0.000000</td>
+                <td style="font-size:11px;color:#00d4aa"></td>
+            </tr>
+            <tr style="">
+                <td>15</td>
+                <td class="highlight">0</td>
+                <td class="warning">0</td>
+                <td>0.0000</td>
+                <td>0.0000</td>
+                <td><strong>0.0000</strong></td>
+                <td>0.0000</td>
+                <td>0.000000</td>
+                <td style="font-size:11px;color:#00d4aa"></td>
+            </tr>
+            </table>
+        </div>
+        <div class="section">
+            <h2>📈 FALSO_FUNCIONARIO_BANCO</h2>
+            <table>
+                <tr><th>min_score</th><th>TP</th><th>FP</th>
+                    <th>Precision</th><th>Recall</th><th>F1</th>
+                    <th>F2</th><th>FPR</th><th></th></tr>
+                
+            <tr style="">
+                <td>3</td>
+                <td class="highlight">107</td>
+                <td class="warning">969</td>
+                <td>0.0994</td>
+                <td>0.3014</td>
+                <td><strong>0.1495</strong></td>
+                <td>0.2143</td>
+                <td>0.009690</td>
+                <td style="font-size:11px;color:#00d4aa"></td>
+            </tr>
+            <tr style="">
+                <td>4</td>
+                <td class="highlight">107</td>
+                <td class="warning">969</td>
+                <td>0.0994</td>
+                <td>0.3014</td>
+                <td><strong>0.1495</strong></td>
+                <td>0.2143</td>
+                <td>0.009690</td>
+                <td style="font-size:11px;color:#00d4aa"></td>
+            </tr>
+            <tr style="">
+                <td>5</td>
+                <td class="highlight">107</td>
+                <td class="warning">836</td>
+                <td>0.1135</td>
+                <td>0.3014</td>
+                <td><strong>0.1649</strong></td>
+                <td>0.2264</td>
+                <td>0.008360</td>
+                <td style="font-size:11px;color:#00d4aa"></td>
+            </tr>
+            <tr style="">
+                <td>6</td>
+                <td class="highlight">99</td>
+                <td class="warning">409</td>
+                <td>0.1949</td>
+                <td>0.2789</td>
+                <td><strong>0.2294</strong></td>
+                <td>0.2567</td>
+                <td>0.004090</td>
+                <td style="font-size:11px;color:#00d4aa"></td>
+            </tr>
+            <tr style="background:rgba(0,212,170,0.08)">
+                <td>7</td>
+                <td class="highlight">83</td>
+                <td class="warning">164</td>
+                <td>0.3360</td>
+                <td>0.2338</td>
+                <td><strong>0.2757</strong></td>
+                <td>0.2490</td>
+                <td>0.001640</td>
+                <td style="font-size:11px;color:#00d4aa">◄ atual + recomendado</td>
+            </tr>
+            <tr style="">
+                <td>8</td>
+                <td class="highlight">63</td>
+                <td class="warning">49</td>
+                <td>0.5625</td>
+                <td>0.1775</td>
+                <td><strong>0.2698</strong></td>
+                <td>0.2056</td>
+                <td>0.000490</td>
+                <td style="font-size:11px;color:#00d4aa"></td>
+            </tr>
+            <tr style="">
+                <td>9</td>
+                <td class="highlight">48</td>
+                <td class="warning">11</td>
+                <td>0.8136</td>
+                <td>0.1352</td>
+                <td><strong>0.2319</strong></td>
+                <td>0.1623</td>
+                <td>0.000110</td>
+                <td style="font-size:11px;color:#00d4aa"></td>
+            </tr>
+            <tr style="">
+                <td>10</td>
+                <td class="highlight">18</td>
+                <td class="warning">1</td>
+                <td>0.9474</td>
+                <td>0.0507</td>
+                <td><strong>0.0963</strong></td>
+                <td>0.0625</td>
+                <td>0.000010</td>
+                <td style="font-size:11px;color:#00d4aa"></td>
+            </tr>
+            <tr style="">
+                <td>11</td>
+                <td class="highlight">4</td>
+                <td class="warning">0</td>
+                <td>1.0000</td>
+                <td>0.0113</td>
+                <td><strong>0.0223</strong></td>
+                <td>0.0140</td>
+                <td>0.000000</td>
+                <td style="font-size:11px;color:#00d4aa"></td>
+            </tr>
+            <tr style="">
+                <td>12</td>
+                <td class="highlight">0</td>
+                <td class="warning">0</td>
+                <td>0.0000</td>
+                <td>0.0000</td>
+                <td><strong>0.0000</strong></td>
+                <td>0.0000</td>
+                <td>0.000000</td>
+                <td style="font-size:11px;color:#00d4aa"></td>
+            </tr>
+            <tr style="">
+                <td>13</td>
+                <td class="highlight">0</td>
+                <td class="warning">0</td>
+                <td>0.0000</td>
+                <td>0.0000</td>
+                <td><strong>0.0000</strong></td>
+                <td>0.0000</td>
+                <td>0.000000</td>
+                <td style="font-size:11px;color:#00d4aa"></td>
+            </tr>
+            <tr style="">
+                <td>14</td>
+                <td class="highlight">0</td>
+                <td class="warning">0</td>
+                <td>0.0000</td>
+                <td>0.0000</td>
+                <td><strong>0.0000</strong></td>
+                <td>0.0000</td>
+                <td>0.000000</td>
+                <td style="font-size:11px;color:#00d4aa"></td>
+            </tr>
+            <tr style="">
+                <td>15</td>
+                <td class="highlight">0</td>
+                <td class="warning">0</td>
+                <td>0.0000</td>
+                <td>0.0000</td>
+                <td><strong>0.0000</strong></td>
+                <td>0.0000</td>
+                <td>0.000000</td>
+                <td style="font-size:11px;color:#00d4aa"></td>
+            </tr>
+            </table>
+        </div>
+        <div class="section">
+            <h2>📈 IDOSO_VULNERAVEL_70</h2>
+            <table>
+                <tr><th>min_score</th><th>TP</th><th>FP</th>
+                    <th>Precision</th><th>Recall</th><th>F1</th>
+                    <th>F2</th><th>FPR</th><th></th></tr>
+                
+            <tr style="">
+                <td>3</td>
+                <td class="highlight">98</td>
+                <td class="warning">423</td>
+                <td>0.1881</td>
+                <td>0.2761</td>
+                <td><strong>0.2237</strong></td>
+                <td>0.2524</td>
+                <td>0.004230</td>
+                <td style="font-size:11px;color:#00d4aa"></td>
+            </tr>
+            <tr style="">
+                <td>4</td>
+                <td class="highlight">98</td>
+                <td class="warning">423</td>
+                <td>0.1881</td>
+                <td>0.2761</td>
+                <td><strong>0.2237</strong></td>
+                <td>0.2524</td>
+                <td>0.004230</td>
+                <td style="font-size:11px;color:#00d4aa"></td>
+            </tr>
+            <tr style="">
+                <td>5</td>
+                <td class="highlight">98</td>
+                <td class="warning">413</td>
+                <td>0.1918</td>
+                <td>0.2761</td>
+                <td><strong>0.2263</strong></td>
+                <td>0.2538</td>
+                <td>0.004130</td>
+                <td style="font-size:11px;color:#00d4aa"></td>
+            </tr>
+            <tr style="">
+                <td>6</td>
+                <td class="highlight">95</td>
+                <td class="warning">316</td>
+                <td>0.2311</td>
+                <td>0.2676</td>
+                <td><strong>0.2480</strong></td>
+                <td>0.2594</td>
+                <td>0.003160</td>
+                <td style="font-size:11px;color:#00d4aa"></td>
+            </tr>
+            <tr style="background:rgba(0,212,170,0.08)">
+                <td>7</td>
+                <td class="highlight">71</td>
+                <td class="warning">118</td>
+                <td>0.3757</td>
+                <td>0.2000</td>
+                <td><strong>0.2610</strong></td>
+                <td>0.2206</td>
+                <td>0.001180</td>
+                <td style="font-size:11px;color:#00d4aa">◄ atual + recomendado</td>
+            </tr>
+            <tr style="">
+                <td>8</td>
+                <td class="highlight">40</td>
+                <td class="warning">19</td>
+                <td>0.6780</td>
+                <td>0.1127</td>
+                <td><strong>0.1932</strong></td>
+                <td>0.1352</td>
+                <td>0.000190</td>
+                <td style="font-size:11px;color:#00d4aa"></td>
+            </tr>
+            <tr style="">
+                <td>9</td>
+                <td class="highlight">13</td>
+                <td class="warning">0</td>
+                <td>1.0000</td>
+                <td>0.0366</td>
+                <td><strong>0.0707</strong></td>
+                <td>0.0454</td>
+                <td>0.000000</td>
+                <td style="font-size:11px;color:#00d4aa"></td>
+            </tr>
+            <tr style="">
+                <td>10</td>
+                <td class="highlight">1</td>
+                <td class="warning">0</td>
+                <td>1.0000</td>
+                <td>0.0028</td>
+                <td><strong>0.0056</strong></td>
+                <td>0.0035</td>
+                <td>0.000000</td>
+                <td style="font-size:11px;color:#00d4aa"></td>
+            </tr>
+            <tr style="">
+                <td>11</td>
+                <td class="highlight">0</td>
+                <td class="warning">0</td>
+                <td>0.0000</td>
+                <td>0.0000</td>
+                <td><strong>0.0000</strong></td>
+                <td>0.0000</td>
+                <td>0.000000</td>
+                <td style="font-size:11px;color:#00d4aa"></td>
+            </tr>
+            <tr style="">
+                <td>12</td>
+                <td class="highlight">0</td>
+                <td class="warning">0</td>
+                <td>0.0000</td>
+                <td>0.0000</td>
+                <td><strong>0.0000</strong></td>
+                <td>0.0000</td>
+                <td>0.000000</td>
+                <td style="font-size:11px;color:#00d4aa"></td>
+            </tr>
+            <tr style="">
+                <td>13</td>
+                <td class="highlight">0</td>
+                <td class="warning">0</td>
+                <td>0.0000</td>
+                <td>0.0000</td>
+                <td><strong>0.0000</strong></td>
+                <td>0.0000</td>
+                <td>0.000000</td>
+                <td style="font-size:11px;color:#00d4aa"></td>
+            </tr>
+            <tr style="">
+                <td>14</td>
+                <td class="highlight">0</td>
+                <td class="warning">0</td>
+                <td>0.0000</td>
+                <td>0.0000</td>
+                <td><strong>0.0000</strong></td>
+                <td>0.0000</td>
+                <td>0.000000</td>
+                <td style="font-size:11px;color:#00d4aa"></td>
+            </tr>
+            <tr style="">
+                <td>15</td>
+                <td class="highlight">0</td>
+                <td class="warning">0</td>
+                <td>0.0000</td>
+                <td>0.0000</td>
+                <td><strong>0.0000</strong></td>
+                <td>0.0000</td>
+                <td>0.000000</td>
+                <td style="font-size:11px;color:#00d4aa"></td>
+            </tr>
+            </table>
+        </div>
+        <div class="section">
+            <h2>📈 IDOSO_VULNERAVEL_80</h2>
+            <table>
+                <tr><th>min_score</th><th>TP</th><th>FP</th>
+                    <th>Precision</th><th>Recall</th><th>F1</th>
+                    <th>F2</th><th>FPR</th><th></th></tr>
+                
+            <tr style="">
+                <td>3</td>
+                <td class="highlight">13</td>
+                <td class="warning">147</td>
+                <td>0.0813</td>
+                <td>0.0366</td>
+                <td><strong>0.0505</strong></td>
+                <td>0.0411</td>
+                <td>0.001470</td>
+                <td style="font-size:11px;color:#00d4aa"></td>
+            </tr>
+            <tr style="">
+                <td>4</td>
+                <td class="highlight">13</td>
+                <td class="warning">147</td>
+                <td>0.0813</td>
+                <td>0.0366</td>
+                <td><strong>0.0505</strong></td>
+                <td>0.0411</td>
+                <td>0.001470</td>
+                <td style="font-size:11px;color:#00d4aa"></td>
+            </tr>
+            <tr style="background:rgba(0,212,170,0.1)">
+                <td>5</td>
+                <td class="highlight">13</td>
+                <td class="warning">74</td>
+                <td>0.1494</td>
+                <td>0.0366</td>
+                <td><strong>0.0588</strong></td>
+                <td>0.0431</td>
+                <td>0.000740</td>
+                <td style="font-size:11px;color:#00d4aa">◄ RECOMENDADO</td>
+            </tr>
+            <tr style="background:rgba(255,159,67,0.08)">
+                <td>6</td>
+                <td class="highlight">11</td>
+                <td class="warning">13</td>
+                <td>0.4583</td>
+                <td>0.0310</td>
+                <td><strong>0.0580</strong></td>
+                <td>0.0381</td>
+                <td>0.000130</td>
+                <td style="font-size:11px;color:#00d4aa">◄ atual</td>
+            </tr>
+            <tr style="">
+                <td>7</td>
+                <td class="highlight">3</td>
+                <td class="warning">0</td>
+                <td>1.0000</td>
+                <td>0.0085</td>
+                <td><strong>0.0168</strong></td>
+                <td>0.0105</td>
+                <td>0.000000</td>
+                <td style="font-size:11px;color:#00d4aa"></td>
+            </tr>
+            <tr style="">
+                <td>8</td>
+                <td class="highlight">0</td>
+                <td class="warning">0</td>
+                <td>0.0000</td>
+                <td>0.0000</td>
+                <td><strong>0.0000</strong></td>
+                <td>0.0000</td>
+                <td>0.000000</td>
+                <td style="font-size:11px;color:#00d4aa"></td>
+            </tr>
+            <tr style="">
+                <td>9</td>
+                <td class="highlight">0</td>
+                <td class="warning">0</td>
+                <td>0.0000</td>
+                <td>0.0000</td>
+                <td><strong>0.0000</strong></td>
+                <td>0.0000</td>
+                <td>0.000000</td>
+                <td style="font-size:11px;color:#00d4aa"></td>
+            </tr>
+            <tr style="">
+                <td>10</td>
+                <td class="highlight">0</td>
+                <td class="warning">0</td>
+                <td>0.0000</td>
+                <td>0.0000</td>
+                <td><strong>0.0000</strong></td>
+                <td>0.0000</td>
+                <td>0.000000</td>
+                <td style="font-size:11px;color:#00d4aa"></td>
+            </tr>
+            <tr style="">
+                <td>11</td>
+                <td class="highlight">0</td>
+                <td class="warning">0</td>
+                <td>0.0000</td>
+                <td>0.0000</td>
+                <td><strong>0.0000</strong></td>
+                <td>0.0000</td>
+                <td>0.000000</td>
+                <td style="font-size:11px;color:#00d4aa"></td>
+            </tr>
+            <tr style="">
+                <td>12</td>
+                <td class="highlight">0</td>
+                <td class="warning">0</td>
+                <td>0.0000</td>
+                <td>0.0000</td>
+                <td><strong>0.0000</strong></td>
+                <td>0.0000</td>
+                <td>0.000000</td>
+                <td style="font-size:11px;color:#00d4aa"></td>
+            </tr>
+            <tr style="">
+                <td>13</td>
+                <td class="highlight">0</td>
+                <td class="warning">0</td>
+                <td>0.0000</td>
+                <td>0.0000</td>
+                <td><strong>0.0000</strong></td>
+                <td>0.0000</td>
+                <td>0.000000</td>
+                <td style="font-size:11px;color:#00d4aa"></td>
+            </tr>
+            <tr style="">
+                <td>14</td>
+                <td class="highlight">0</td>
+                <td class="warning">0</td>
+                <td>0.0000</td>
+                <td>0.0000</td>
+                <td><strong>0.0000</strong></td>
+                <td>0.0000</td>
+                <td>0.000000</td>
+                <td style="font-size:11px;color:#00d4aa"></td>
+            </tr>
+            <tr style="">
+                <td>15</td>
+                <td class="highlight">0</td>
+                <td class="warning">0</td>
+                <td>0.0000</td>
+                <td>0.0000</td>
+                <td><strong>0.0000</strong></td>
+                <td>0.0000</td>
+                <td>0.000000</td>
+                <td style="font-size:11px;color:#00d4aa"></td>
+            </tr>
+            </table>
+        </div>
+
+<div class="section">
+    <h2>📋 Próximos Passos</h2>
+    <div class="callout success">
+        <strong>Frente 2 concluída.</strong><br>
+        Aplicar os min_scores recomendados no social_engineering.py v3.0 e
+        re-rodar a validação retroativa para confirmar.<br><br>
+        Próximas frentes:<br>
+        • <strong>Frente 3:</strong> Expandir padrões com novos indicadores de alta discriminação<br>
+        • <strong>Frente 4:</strong> Documentar cada regra com evidência + referência regulatória
+    </div>
+</div>
+
+<div class="footer">
+    Frente 2 — Calibração min_score | SE v3.0 |
+    100,355 transações | Critério: max_f1
+</div>
+
+</body>
+</html>

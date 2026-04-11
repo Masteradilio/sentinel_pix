@@ -3,3 +3,8 @@ numpy
 pandas
 lightgbm
 scikit-learn
+matplotlib
+uvicorn
+fastapi
+pydantic
+requests

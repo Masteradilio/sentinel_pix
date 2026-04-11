@@ -1,5 +1,13 @@
 """
-api.py v1.0 — API REST para Detecção de Fraude PIX
+api.py v1.1 — API REST para Detecção de Fraude PIX
+
+Mudanças v1.0 → v1.1:
+  1. AnalyzeResponse atualizado para pipeline v1.2 (sem score_raw, com SHAP)
+  2. Endpoint /analyze preserva bloco explicabilidade SHAP do orquestrador
+  3. Adicionado campo cx (mensagem cliente + motivo) sem sobrescrever SHAP
+  4. peso_maximo removido do response (está no metadata.faixas)
+  5. faixas removido do response (está no metadata)
+  6. Campos opcionais alinhados com _build_response condicional
 
 Camada HTTP fina sobre o PipelineOrquestrador.
 Responsabilidades:
@@ -29,6 +37,8 @@ Endpoints:
   POST /api/v1/batch         → Analisa N transações (lote)
   GET  /api/v1/health        → Health check completo
   GET  /api/v1/status        → Status detalhado dos componentes
+  GET  /api/v1/metrics       → Métricas da API
+  POST /api/v1/cache/reset   → Reseta cache de histórico
   GET  /                     → Info básica da API
 """
 
@@ -59,49 +69,120 @@ logger = logging.getLogger("api")
 
 
 # =========================================================
-# FUNÇÕES DE EXPLICABILIDADE
+# FUNÇÕES DE EXPLICABILIDADE (CX — mensagem ao cliente)
 # =========================================================
 def _identificar_fator_predominante(result: Dict[str, Any]) -> str:
     """Identifica qual foi a principal dimensão que motivou o bloqueio/confirmação."""
     if result.get("veto_aplicado"):
         return "Regra de Veto de Negócio"
-    
+
     if result.get("cascade", {}).get("triggered"):
         return "Padrão Crítico de Movimentação (Cascade)"
-        
+
     se_score = result.get("social_engineering", {}).get("se_score", 0)
     beh_score = result.get("behavioral", {}).get("behavioral_score", 0)
-    
+
     if se_score >= 60:
         return "Engenharia Social / Golpe"
     if beh_score >= 60:
         return "Anomalia Comportamental / Dispositivo"
-        
+
     lgbm_mapped = result.get("componentes", {}).get("lgbm_mapped", 0)
     if lgbm_mapped >= 85:
         return "Modelo Preditivo (Machine Learning)"
-        
+
     return "Múltiplos Fatores de Risco Combinados"
 
+
 def _gerar_mensagem_cliente(decisao: str, result: Dict[str, Any]) -> str:
-    """Gera uma mensagem amigável (orientada a CX) que o app/front pode mostrar ao usuário."""
+    """Gera mensagem amigável (CX) que o app/front pode mostrar ao usuário."""
     fator = _identificar_fator_predominante(result)
-    
+
     if decisao == "CONFIRMAR":
         if fator == "Engenharia Social / Golpe":
-            return "Para sua segurança, notamos um padrão incomum nesta transferência. Por favor, confirme a identidade do recebedor antes de prosseguir usando sua biometria facial."
+            return (
+                "Para sua segurança, notamos um padrão incomum nesta transferência. "
+                "Por favor, confirme a identidade do recebedor antes de prosseguir "
+                "usando sua biometria facial."
+            )
         if fator == "Anomalia Comportamental / Dispositivo":
-            return "Identificamos um acesso a partir de um novo dispositivo ou local. Confirme que é você mesmo(a) realizando esta transação."
-        return "Transação em análise de segurança. Por favor, valide sua identidade para aprovação imediata."
-        
+            return (
+                "Identificamos um acesso a partir de um novo dispositivo ou local. "
+                "Confirme que é você mesmo(a) realizando esta transação."
+            )
+        return (
+            "Transação em análise de segurança. Por favor, valide sua identidade "
+            "para aprovação imediata."
+        )
+
     if decisao == "BLOQUEAR":
         if fator == "Engenharia Social / Golpe":
-            return "Transação bloqueada preventivamente. Este recebedor possui histórico associado a possíveis golpes. Se você não conhece a pessoa, não prossiga. Central de atendimento foi acionada."
+            return (
+                "Transação bloqueada preventivamente. Este padrão é associado a "
+                "possíveis golpes. Se você não conhece o recebedor, não prossiga. "
+                "Nossa central de atendimento foi acionada."
+            )
         if fator == "Anomalia Comportamental / Dispositivo":
-            return "Bloqueio preventivo de segurança: Suspeita de acesso não autorizado à sua conta. Por favor, entre em contato com nossa central telefônica."
-        return "Transação retida pelo nosso sistema de prevenção a fraudes para análise humana. Entraremos em contato em breve."
-        
+            return (
+                "Bloqueio preventivo de segurança: Suspeita de acesso não autorizado "
+                "à sua conta. Por favor, entre em contato com nossa central telefônica."
+            )
+        return (
+            "Transação retida pelo nosso sistema de prevenção a fraudes para "
+            "análise humana. Entraremos em contato em breve."
+        )
+
     return "Transação processada com sucesso."
+
+
+def _build_motivos(result: Dict[str, Any]) -> List[str]:
+    """Extrai motivos estruturados da resposta do pipeline."""
+    motivos = []
+
+    # 1. Veto
+    veto = result.get("veto_aplicado")
+    if veto:
+        motivos.append(veto)
+
+    # 2. Cascade
+    cascade = result.get("cascade", {})
+    if cascade.get("triggered"):
+        regras = ", ".join(cascade.get("rules", []))
+        motivos.append(f"Regra de bloqueio em cascata acionada: {regras}")
+
+    # 3. Engenharia Social
+    se = result.get("social_engineering", {})
+    se_patterns = se.get("patterns", [])
+    if se_patterns:
+        padroes_str = ", ".join([
+            p if isinstance(p, str) else p.get("pattern_name", "")
+            for p in se_patterns
+        ])
+        motivos.append(f"Padrão de Engenharia Social detectado: {padroes_str}")
+
+    # 4. Behavioral
+    beh = result.get("behavioral", {})
+    beh_factors = beh.get("risk_factors", [])
+    if beh_factors:
+        fatores = [
+            f.get("descricao", f.get("codigo", ""))
+            for f in beh_factors[:3]
+        ]
+        motivos.append(f"Anomalia comportamental: {'; '.join(fatores)}")
+
+    # 5. Fallback — principais agravantes
+    if not motivos:
+        agravantes = result.get("agravantes", [])
+        agravantes_sorted = sorted(
+            agravantes, key=lambda x: x.get("peso", 0), reverse=True
+        )
+        if agravantes_sorted:
+            top = agravantes_sorted[0]
+            motivos.append(
+                f"Alto risco detectado: {top.get('descricao', top.get('codigo'))}"
+            )
+
+    return motivos
 
 
 # =========================================================
@@ -114,25 +195,50 @@ def _load_pipeline():
     """Carrega o pipeline orquestrador."""
     global pipeline
     import sys
-    import os
-    
-    # Adicionar o diretório backend ao sys.path para imports corretos
-    backend_dir = os.path.dirname(os.path.abspath(__file__))
-    if backend_dir not in sys.path:
-        sys.path.insert(0, backend_dir)
-        
+    from pathlib import Path
+
+    # Detectar onde a api.py está
+    api_file = Path(__file__).resolve()
+    api_dir = api_file.parent
+
+    # Se api.py está em backend/core/, o backend_dir é o pai
+    if api_dir.name == "core":
+        backend_dir = api_dir.parent
+    else:
+        backend_dir = api_dir
+
+    core_dir = backend_dir / "core"
+    project_root = backend_dir.parent
+
+    # Garantir TODOS os diretórios necessários no sys.path
+    for p in [str(backend_dir), str(core_dir), str(project_root)]:
+        if p not in sys.path:
+            sys.path.insert(0, p)
+
     from core.pipeline_orquestrador import PipelineOrquestrador
     from core.decision_engine import EngineConfig
 
-    artefatos_dir = os.getenv("ARTEFATOS_DIR", "backend/artefatos")
+    # Artefatos — detectar automaticamente
+    artefatos_dir = os.getenv("ARTEFATOS_DIR", "")
+    if not artefatos_dir:
+        artefatos_path = backend_dir / "artefatos"
+        if artefatos_path.exists():
+            artefatos_dir = str(artefatos_path)
+        else:
+            artefatos_dir = "backend/artefatos"
 
     config_overrides = {}
-    if os.getenv("THRESHOLD_CONFIRMAR"):
-        config_overrides["threshold_confirmar"] = float(os.getenv("THRESHOLD_CONFIRMAR"))
-    if os.getenv("THRESHOLD_BLOQUEAR"):
-        config_overrides["threshold_bloquear"] = float(os.getenv("THRESHOLD_BLOQUEAR"))
-    if os.getenv("VETO_THRESHOLD"):
-        config_overrides["veto_threshold"] = float(os.getenv("VETO_THRESHOLD"))
+    _env_confirmar = os.getenv("THRESHOLD_CONFIRMAR")
+    if _env_confirmar:
+        config_overrides["threshold_confirmar"] = float(_env_confirmar)
+
+    _env_bloquear = os.getenv("THRESHOLD_BLOQUEAR")
+    if _env_bloquear:
+        config_overrides["threshold_bloquear"] = float(_env_bloquear)
+
+    _env_veto = os.getenv("VETO_THRESHOLD")
+    if _env_veto:
+        config_overrides["veto_threshold"] = float(_env_veto)
 
     engine_config = EngineConfig(artefatos_dir=artefatos_dir, **config_overrides)
     pipeline = PipelineOrquestrador(
@@ -142,8 +248,10 @@ def _load_pipeline():
     return pipeline
 
 
+
+
 # =========================================================
-# MÉTRICAS SIMPLES (in-memory — substituir por Prometheus em prod)
+# MÉTRICAS SIMPLES (in-memory)
 # =========================================================
 class Metrics:
     """Contadores simples de métricas da API."""
@@ -199,7 +307,10 @@ class Metrics:
             "latency_max_ms": round(self.latency_max_ms, 1),
             "started_at": self.started_at,
             "uptime_seconds": round(
-                (datetime.utcnow() - datetime.fromisoformat(self.started_at.replace("Z", ""))).total_seconds()
+                (
+                    datetime.utcnow()
+                    - datetime.fromisoformat(self.started_at.replace("Z", ""))
+                ).total_seconds()
             ),
         }
 
@@ -214,13 +325,21 @@ class TransactionInput(BaseModel):
     """Dados brutos de uma transação PIX para análise."""
 
     # Obrigatórios
-    cd_pix: str = Field(..., description="Identificador único da transação PIX", min_length=1)
-    dt_pix: str = Field(..., description="Data/hora da transação (ISO 8601)", min_length=10)
-    cd_cpf_pagador: str = Field(..., description="CPF do pagador", min_length=11)
+    cd_pix: str = Field(
+        ..., description="Identificador único da transação PIX", min_length=1
+    )
+    dt_pix: str = Field(
+        ..., description="Data/hora da transação (ISO 8601)", min_length=10
+    )
+    cd_cpf_pagador: str = Field(
+        ..., description="CPF do pagador", min_length=11
+    )
     vl_pix: float = Field(..., description="Valor do PIX em reais", gt=0)
 
     # Recebedor
-    cd_cpf_cnpj_recebedor: Optional[str] = Field(None, description="CPF/CNPJ do recebedor")
+    cd_cpf_cnpj_recebedor: Optional[str] = Field(
+        None, description="CPF/CNPJ do recebedor"
+    )
     ds_chave_pix: Optional[str] = Field(None, description="Chave PIX utilizada")
     ds_tipo_chave: Optional[str] = Field(None, description="Tipo da chave PIX")
 
@@ -285,6 +404,7 @@ class TransactionInput(BaseModel):
 
 class BatchInput(BaseModel):
     """Input para análise em lote."""
+
     transactions: List[TransactionInput] = Field(
         ...,
         description="Lista de transações para análise",
@@ -294,30 +414,53 @@ class BatchInput(BaseModel):
 
 
 class AnalyzeResponse(BaseModel):
-    """Response padronizado da análise."""
+    """
+    Response padronizado da análise — alinhado com pipeline v1.2.
+
+    Campos condicionais (só presentes quando relevantes):
+      - cascade: só quando triggered
+      - agravantes/peso_total: só quando há agravantes
+      - explicabilidade: SHAP (só CONFIRMAR/BLOQUEAR)
+      - social_engineering: só quando se_score > 0
+      - behavioral: só quando behavioral_score > 0
+      - veto_aplicado: só quando há veto
+      - atenuantes: só quando presentes
+      - cx: mensagem ao cliente (só CONFIRMAR/BLOQUEAR)
+    """
+
+    # Sempre presentes
     decisao: str
     score_final: float
-    score_raw: float
     transaction_id: Optional[str] = None
     customer_id: Optional[str] = None
     timestamp: Optional[str] = None
     vl_pix: Optional[float] = None
-    motivo_principal: Optional[str] = None
-    explicabilidade: Dict[str, Any] = {}
+
+    # Componentes de score (sempre presente)
     componentes: Dict[str, Any] = {}
-    agravantes: List[Dict[str, Any]] = []
-    peso_total: int = 0
-    peso_maximo: int = 65
-    social_engineering: Dict[str, Any] = {}
-    behavioral: Dict[str, Any] = {}
+
+    # Condicionais — pipeline v1.2 omite quando vazios
+    cascade: Optional[Dict[str, Any]] = None
+    agravantes: Optional[List[Dict[str, Any]]] = None
+    peso_total: Optional[int] = None
+    explicabilidade: Optional[Dict[str, Any]] = None
+    social_engineering: Optional[Dict[str, Any]] = None
+    behavioral: Optional[Dict[str, Any]] = None
     veto_aplicado: Optional[str] = None
-    atenuantes: List[str] = []
-    faixas: Dict[str, Any] = {}
+    atenuantes: Optional[List[str]] = None
+
+    # CX — adicionado pela API (não vem do pipeline)
+    cx: Optional[Dict[str, Any]] = None
+
+    # Metadata (sempre presente)
     metadata: Dict[str, Any] = {}
+
+    model_config = {"extra": "allow"}
 
 
 class BatchResponse(BaseModel):
     """Response do batch."""
+
     total: int
     resultados: List[Dict[str, Any]]
     resumo: Dict[str, Any]
@@ -326,6 +469,7 @@ class BatchResponse(BaseModel):
 
 class HealthResponse(BaseModel):
     """Response do health check."""
+
     status: str
     pipeline_version: str
     components: Dict[str, Any]
@@ -336,6 +480,7 @@ class HealthResponse(BaseModel):
 
 class ErrorResponse(BaseModel):
     """Response de erro padronizado."""
+
     error: str
     detail: Optional[str] = None
     status_code: int
@@ -349,7 +494,7 @@ async def lifespan(app: FastAPI):
     """Gerencia ciclo de vida da aplicação."""
     # --- Startup ---
     logger.info("=" * 60)
-    logger.info("  API Antifraude PIX v1.0 — Iniciando...")
+    logger.info("  API Antifraude PIX v1.1 — Iniciando...")
     logger.info("=" * 60)
 
     t0 = time.perf_counter()
@@ -357,7 +502,9 @@ async def lifespan(app: FastAPI):
         _load_pipeline()
         elapsed = (time.perf_counter() - t0) * 1000
         logger.info(f"  Pipeline carregado em {elapsed:.0f}ms")
-        logger.info(f"  Status: {'✅ HEALTHY' if pipeline.available else '⚠️ DEGRADED'}")
+        logger.info(
+            f"  Status: {'✅ HEALTHY' if pipeline.available else '⚠️ DEGRADED'}"
+        )
     except Exception as e:
         logger.error(f"  ❌ Falha ao carregar pipeline: {e}")
         raise
@@ -379,14 +526,16 @@ app = FastAPI(
     title="API Antifraude PIX",
     description=(
         "API REST para detecção de fraude em transações PIX em tempo real.\n\n"
+        "**Pipeline v2.1 + Orquestrador v1.2:**\n"
+        "LightGBM + Cascade Rules + Isolation Forest + 24 Agravantes + "
+        "Social Engineering (11 padrões) + Behavioral Analytics (12 fatores) + "
+        "SHAP Explicabilidade\n\n"
         "**Faixas de decisão:**\n"
         "- 🟢 **APROVAR** `[0, 60)` — Liberar automaticamente\n"
         "- 🟡 **CONFIRMAR** `[60, 85)` — Autenticação adicional\n"
-        "- 🔴 **BLOQUEAR** `[85, 100]` — Análise humana\n\n"
-        "**Componentes:** LightGBM + Isolation Forest + 21 Agravantes + "
-        "Social Engineering (11 padrões) + Behavioral Analytics (12 fatores)"
+        "- 🔴 **BLOQUEAR** `[85, 100]` — Análise humana\n"
     ),
-    version="1.0.0",
+    version="1.1.0",
     lifespan=lifespan,
     docs_url="/docs",
     redoc_url="/redoc",
@@ -447,7 +596,11 @@ async def generic_exception_handler(request: Request, exc: Exception):
         status_code=500,
         content={
             "error": "Erro interno do servidor",
-            "detail": str(exc) if os.getenv("DEBUG", "").lower() in ("1", "true") else None,
+            "detail": (
+                str(exc)
+                if os.getenv("DEBUG", "").lower() in ("1", "true")
+                else None
+            ),
             "status_code": 500,
         },
     )
@@ -463,7 +616,8 @@ async def root():
     """Informações básicas da API."""
     return {
         "name": "API Antifraude PIX",
-        "version": "1.0.0",
+        "version": "1.1.0",
+        "pipeline": "v2.1 + Orquestrador v1.2",
         "docs": "/docs",
         "health": "/api/v1/health",
         "endpoints": {
@@ -471,6 +625,8 @@ async def root():
             "batch": "POST /api/v1/batch",
             "health": "GET /api/v1/health",
             "status": "GET /api/v1/status",
+            "metrics": "GET /api/v1/metrics",
+            "cache_reset": "POST /api/v1/cache/reset",
         },
     }
 
@@ -483,21 +639,23 @@ async def root():
     summary="Analisa uma transação PIX",
     description=(
         "Recebe dados brutos de uma transação PIX e retorna decisão, "
-        "score (0-100), agravantes, padrões de engenharia social e "
-        "análise comportamental."
+        "score (0-100), explicabilidade SHAP, agravantes, padrões de "
+        "engenharia social e análise comportamental."
     ),
 )
 async def analyze_transaction(transaction: TransactionInput):
     """
     Analisa uma transação PIX em tempo real.
 
-    **Latência esperada:** < 50ms (p95)
+    **Latência esperada:** < 100ms (p95)
 
     **Campos obrigatórios:** cd_pix, dt_pix, cd_cpf_pagador, vl_pix
 
     **Retorna:**
     - `decisao`: APROVAR, CONFIRMAR ou BLOQUEAR
     - `score_final`: 0-100
+    - `explicabilidade`: SHAP top features (CONFIRMAR/BLOQUEAR)
+    - `cx`: Mensagem amigável ao cliente (CONFIRMAR/BLOQUEAR)
     - `agravantes`: Lista de fatores de risco detectados
     - `social_engineering`: Padrões de golpe detectados
     - `behavioral`: Análise comportamental
@@ -508,69 +666,33 @@ async def analyze_transaction(transaction: TransactionInput):
     t0 = time.perf_counter()
 
     try:
+        # Pipeline retorna dict completo (com SHAP, SE, Behavioral, etc.)
         result = pipeline.analisar(transaction.to_dict())
-        
-        # Enriquecer o payload com alta explicabilidade se a decisão não for APROVAR
+
+        # Enriquecer com CX (mensagem ao cliente) — NÃO sobrescreve SHAP
         decisao = result.get("decisao")
-        if decisao in ("BLOQUEAR", "CONFIRMAR"):
-            motivos = []
-            
-            # 1. Checar vetos
-            veto = result.get("veto_aplicado")
-            if veto:
-                motivos.append(veto)
-                
-            # 2. Checar Cascade Rules
-            cascade = result.get("cascade", {})
-            if cascade.get("triggered"):
-                regras = ", ".join(cascade.get("rules", []))
-                motivos.append(f"Regra de bloqueio em cascata acionada: {regras}")
-                
-            # 3. Checar Engenharia Social
-            se = result.get("social_engineering", {})
-            se_patterns = se.get("patterns", [])
-            if se_patterns:
-                padroes_str = ", ".join([p if isinstance(p, str) else p.get("pattern_name", "") for p in se_patterns])
-                motivos.append(f"Padrão de Engenharia Social detectado: {padroes_str}")
-                
-            # 4. Checar Análise Comportamental
-            beh = result.get("behavioral", {})
-            beh_factors = beh.get("risk_factors", [])
-            if beh_factors:
-                fatores = [f.get("descricao", f.get("codigo", "")) for f in beh_factors[:2]]
-                motivos.append(f"Anomalia comportamental: {'; '.join(fatores)}")
-                
-            # 5. Principais Agravantes (se não houver motivos mais fortes)
-            if not motivos:
-                agravantes = result.get("agravantes", [])
-                agravantes_sorted = sorted(agravantes, key=lambda x: x.get("peso", 0), reverse=True)
-                if agravantes_sorted:
-                    top_agravante = agravantes_sorted[0]
-                    motivos.append(f"Alto risco detectado: {top_agravante.get('descricao', top_agravante.get('codigo'))}")
-            
-            # Definir o motivo principal (o mais forte)
-            result["motivo_principal"] = motivos[0] if motivos else "Transação classificada como alto risco pelo modelo preditivo."
-            
-            # Montar bloco de explicabilidade estruturada
-            result["explicabilidade"] = {
+        if decisao in ("CONFIRMAR", "BLOQUEAR"):
+            motivos = _build_motivos(result)
+            result["cx"] = {
                 "mensagem_cliente": _gerar_mensagem_cliente(decisao, result),
-                "detalhes_fraude": motivos,
-                "score_anomalia_percentil": result.get("componentes", {}).get("if_score", 0) * 100,
-                "fator_risco_predominante": _identificar_fator_predominante(result)
+                "motivo_principal": motivos[0] if motivos else (
+                    "Transação classificada como alto risco pelo modelo preditivo."
+                ),
+                "detalhes": motivos,
+                "fator_predominante": _identificar_fator_predominante(result),
             }
-        else:
-            result["motivo_principal"] = None
-            result["explicabilidade"] = {}
 
         elapsed = (time.perf_counter() - t0) * 1000
-
         metrics.record_request(result["decisao"], elapsed)
         return result
 
     except Exception as e:
         elapsed = (time.perf_counter() - t0) * 1000
         metrics.record_error()
-        logger.error(f"Erro ao analisar transação {transaction.cd_pix}: {e}", exc_info=True)
+        logger.error(
+            f"Erro ao analisar transação {transaction.cd_pix}: {e}",
+            exc_info=True,
+        )
         raise HTTPException(
             status_code=500,
             detail=f"Erro ao processar transação: {str(e)}",
@@ -590,7 +712,7 @@ async def analyze_batch(batch: BatchInput):
     Analisa múltiplas transações PIX em lote.
 
     **Limite:** 1000 transações por request.
-    **Processamento:** Sequencial (cada tx ~30-50ms).
+    **Processamento:** Sequencial (cada tx ~50-100ms).
     """
     if pipeline is None:
         raise HTTPException(status_code=503, detail="Pipeline não inicializado")
@@ -614,6 +736,7 @@ async def analyze_batch(batch: BatchInput):
                 scores.append(r["score_final"])
 
         import numpy as np
+
         scores_arr = np.array(scores) if scores else np.array([0])
 
         return {
@@ -636,7 +759,10 @@ async def analyze_batch(batch: BatchInput):
 
     except Exception as e:
         metrics.record_error()
-        logger.error(f"Erro no batch ({len(batch.transactions)} tx): {e}", exc_info=True)
+        logger.error(
+            f"Erro no batch ({len(batch.transactions)} tx): {e}",
+            exc_info=True,
+        )
         raise HTTPException(
             status_code=500,
             detail=f"Erro ao processar batch: {str(e)}",
@@ -700,6 +826,8 @@ async def detailed_status():
             "threshold_bloquear": pipeline.engine.config.threshold_bloquear,
             "veto_threshold": pipeline.engine.config.veto_threshold,
             "peso_maximo": pipeline.engine.config.peso_maximo,
+            "cascade_enabled": pipeline.engine.config.cascade_enabled,
+            "shap_enabled": pipeline.shap_enabled,
         },
         "metrics": metrics.to_dict(),
         "environment": {
@@ -757,7 +885,7 @@ if __name__ == "__main__":
     reload = os.getenv("API_RELOAD", "false").lower() in ("1", "true")
     workers = int(os.getenv("API_WORKERS", "1"))
 
-    print(f"\n🚀 Iniciando API Antifraude PIX v1.0")
+    print(f"\n🚀 Iniciando API Antifraude PIX v1.1")
     print(f"   Host: {host}:{port}")
     print(f"   Workers: {workers}")
     print(f"   Reload: {reload}")

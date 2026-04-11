@@ -1,5 +1,13 @@
 """
-pipeline_orquestrador.py v1.1 — Orquestrador de Inferência PIX Antifraude
+pipeline_orquestrador.py v1.2 — Orquestrador de Inferência PIX Antifraude
+
+Mudanças v1.1 → v1.2:
+  1. SHAP TreeExplainer para explicabilidade por transação (top-10 features)
+  2. _build_response otimizado: remove redundâncias, omite blocos vazios
+  3. score_raw removido (duplicata de componentes.lgbm_raw)
+  4. faixas e peso_maximo movidos para metadata (são constantes)
+  5. cascade e atenuantes omitidos quando vazios
+  6. Compatível com DecisionResult v2.1
 
 Mudanças v1.0 → v1.1:
   1. _build_response: inclui cascade_triggered, cascade_rules, if_boost_applied
@@ -35,6 +43,7 @@ Coordena todas as camadas sem duplicar lógica:
   │     LGBM + Cascade + IF Boost   │
   │     Score final + Decisão       │
   │     Agravantes + Vetos          │
+  │     SHAP Explicabilidade        │  ← NOVO v1.2
   └─────────────────────────────────┘
 
 Uso:
@@ -74,7 +83,7 @@ logger = logging.getLogger(__name__)
 # =========================================================
 
 # Paths
-SCRIPT_DIR = Path(__file__).resolve().parent
+SCRIPT_DIR = Path(__file__).resolve().parent.parent
 
 # Detectar raiz do projeto
 if (SCRIPT_DIR / "backend").exists():
@@ -88,6 +97,14 @@ else:
 
 BACKEND_DIR = PROJECT_ROOT / "backend"
 ARTEFATOS_DIR = BACKEND_DIR / "artefatos"
+
+# DEBUG TEMPORÁRIO — remover depois
+print(f"DEBUG __file__:      {Path(__file__).resolve()}")
+print(f"DEBUG SCRIPT_DIR:    {SCRIPT_DIR}")
+print(f"DEBUG PROJECT_ROOT:  {PROJECT_ROOT}")
+print(f"DEBUG BACKEND_DIR:   {BACKEND_DIR}")
+print(f"DEBUG ARTEFATOS_DIR: {ARTEFATOS_DIR}")
+print(f"DEBUG existe?:       {ARTEFATOS_DIR.exists()}")
 
 # Garantir imports
 import sys
@@ -117,6 +134,14 @@ from preprocessing import (
 from core.decision_engine import PixDecisionEngine, EngineConfig, DecisionResult
 from core.behavioral_analytics import BehavioralAnalytics, BehavioralAnalysisResult
 from core.social_engineering import SocialEngineeringDetector, SEAnalysisResult
+
+# SHAP — explicabilidade v1.2
+try:
+    import shap
+    SHAP_AVAILABLE = True
+except ImportError:
+    SHAP_AVAILABLE = False
+    logger.warning("shap não instalado — explicabilidade SHAP desabilitada")
 
 
 # =========================================================
@@ -170,6 +195,88 @@ SENTINEL_COLUMNS = [
     "topaz_transacao_rejeitada",
 ]
 
+# Features LGBM que têm tradução humana para SHAP
+SHAP_FEATURE_LABELS = {
+    "vl_pix": "Valor do PIX (R$)",
+    "log_vl_pix": "Log do valor do PIX",
+    "ratio_valor_mediana": "Razão valor / mediana trimestral",
+    "diff_valor_mediana": "Diferença valor − mediana (R$)",
+    "ratio_valor_desvio_padrao": "Razão valor / desvio padrão",
+    "zscore_valor_aprox": "Z-score aproximado do valor",
+    "nr_idade": "Idade do cliente (anos)",
+    "qt_tempo_relacionamento_mes": "Tempo de relacionamento (meses)",
+    "qt_total_pix_trimestre": "Total de PIX no trimestre",
+    "vl_mediana_pix_trimestre": "Mediana PIX trimestral (R$)",
+    "vl_desvio_padrao_pix_trimestre": "Desvio padrão PIX trimestral",
+    "qt_intervalo_transacao_minuto": "Intervalo desde última tx (min)",
+    "qt_intervalo_mediana_trimestre": "Mediana do intervalo trimestral (min)",
+    "qt_intervalo_desvio_padrao_trimestre": "Desvio padrão do intervalo",
+    "ratio_intervalo_vs_mediana": "Razão intervalo / mediana intervalo",
+    "diff_intervalo_vs_mediana": "Diferença intervalo − mediana (min)",
+    "zscore_intervalo_aprox": "Z-score do intervalo",
+    "qt_pix_dia_maximo_trimestre": "Máx PIX/dia no trimestre",
+    "latencia_rede_ms_final": "Latência de rede (ms)",
+    "vl_latencia_rede_media_trimestre": "Latência média trimestral (ms)",
+    "ratio_latencia_cliente": "Razão latência / média cliente",
+    "diff_latencia_cliente": "Diferença latência − média (ms)",
+    "latencia_host_ratio": "Razão latência rede / host",
+    "tempo_interacao_ms_final": "Tempo de interação (ms)",
+    "vl_tempo_interacao_medio_trimestre": "Tempo interação médio trimestral",
+    "ratio_tempo_interacao_cliente": "Razão tempo interação / média",
+    "tempo_processamento_host_ms": "Tempo processamento host (ms)",
+    "topaz_score_filled": "Score Topaz (0-5)",
+    "topaz_rejeitada_flag": "Topaz rejeitou a transação",
+    "pix_key_random_flag": "Chave PIX aleatória",
+    "pix_key_email_flag": "Chave PIX é email",
+    "pix_key_document_flag": "Chave PIX é documento/telefone",
+    "receiver_document_same_as_customer_flag": "Recebedor = Pagador (mesmo CPF)",
+    "metodo_auth_encoded": "Método autenticação (1=bio, 2=senha, 3=pin)",
+    "is_agendamento_recorrente_flag": "É agendamento recorrente",
+    "hour": "Hora da transação",
+    "day_of_week": "Dia da semana (0=seg)",
+    "is_business_hours": "Horário comercial (8h-18h)",
+    "device_missing_flag": "Device não informado",
+    "app_version_missing_flag": "Versão app não informada",
+    "auth_method_missing_flag": "Método auth não informado",
+    "topaz_missing_flag": "Score Topaz ausente",
+    "host_time_missing_flag": "Tempo host ausente",
+    "latencia_missing_flag": "Latência ausente",
+    "renda_missing_flag": "Renda não informada",
+    "tempo_interacao_missing_flag": "Tempo interação ausente",
+    "app_version_minor": "Versão minor do app",
+    "vl_pix_over_1000_flag": "Valor ≥ R$1.000",
+    "is_first_tx_trimestre": "Primeira tx do trimestre",
+    "qt_aparelhos_distintos_trimestre": "Aparelhos distintos no trimestre",
+    "minutes_since_prev_tx": "Minutos desde tx anterior",
+    "tx_count_prev_30m": "Transações nos últimos 30min",
+    "receiver_tx_count_prev": "Envios anteriores p/ este recebedor",
+    "qt_envio_recebedor_trimestre": "Envios p/ recebedor no trimestre",
+    "first_receiver_flag": "Primeiro envio p/ este recebedor",
+    "key_tx_count_prev": "Usos anteriores desta chave",
+    "first_key_flag": "Primeira vez usando esta chave",
+    "distinct_receivers_so_far": "Recebedores distintos até agora",
+    "distinct_keys_so_far": "Chaves distintas até agora",
+    "tp_primeiro_envio_recebedor_trimestre": "Primeiro envio ao recebedor (trimestre)",
+    "burst_30m_flag": "Burst: ≥1 tx nos últimos 30min",
+    "rule_age_score": "Score regra: idade",
+    "rule_relationship_score": "Score regra: relacionamento",
+    "rule_mule_account_score": "Score regra: conta laranja",
+    "rule_random_key_score": "Score regra: chave aleatória",
+    "rule_velocity_score": "Score regra: velocidade",
+    "rule_topaz_score": "Score regra: Topaz",
+    "rule_score_raw": "Score total de regras (soma)",
+    "rule_score_normalized": "Score de regras normalizado",
+    "is_sexo_feminino_flag": "Sexo feminino",
+    "is_viuvo_flag": "Estado civil: viúvo(a)",
+    "is_segmento_premium_flag": "Segmento premium/exclusivo",
+    "qt_dependentes": "Quantidade de dependentes",
+    "ratio_pix_renda": "Razão PIX / renda mensal",
+    "pix_over_50pct_renda_flag": "PIX > 50% da renda",
+    "pix_over_100pct_renda_flag": "PIX > 100% da renda",
+    "perfil_vulneravel_se_flag": "Perfil vulnerável (viúvo+idoso+s/ dependentes)",
+    "vl_renda_cliente": "Renda mensal do cliente (R$)",
+}
+
 
 # =========================================================
 # ORQUESTRADOR
@@ -181,8 +288,9 @@ class PipelineOrquestrador:
     Responsabilidades:
         1. Feature engineering (usa preprocessing.py — sem duplicação)
         2. Coordenar os 3 engines (Decision v2.1, SE, Behavioral)
-        3. Consolidar resposta final padronizada
-        4. Manter cache de histórico por cliente (features sequenciais)
+        3. SHAP explicabilidade por transação (v1.2)
+        4. Consolidar resposta final padronizada
+        5. Manter cache de histórico por cliente (features sequenciais)
 
     O que NÃO faz:
         - Servir HTTP (→ api.py)
@@ -194,6 +302,8 @@ class PipelineOrquestrador:
         self,
         artefatos_dir: Optional[str] = None,
         engine_config: Optional[EngineConfig] = None,
+        shap_enabled: bool = True,
+        shap_top_n: int = 10,
     ):
         self.artefatos_dir = Path(artefatos_dir) if artefatos_dir else ARTEFATOS_DIR
 
@@ -213,7 +323,20 @@ class PipelineOrquestrador:
         # --- 4. Behavioral Analytics ---
         self.behavioral = BehavioralAnalytics()
 
-        # --- 5. Cache de histórico por cliente ---
+        # --- 5. SHAP Explainer (v1.2) ---
+        self.shap_enabled = shap_enabled and SHAP_AVAILABLE
+        self.shap_top_n = shap_top_n
+        self._shap_explainer = None
+        if self.shap_enabled and self.engine.lgbm_model is not None:
+            try:
+                self._shap_explainer = shap.TreeExplainer(self.engine.lgbm_model)
+                logger.info("SHAP TreeExplainer inicializado com sucesso")
+            except Exception as e:
+                logger.warning(f"Falha ao inicializar SHAP: {e}")
+                self._shap_explainer = None
+                self.shap_enabled = False
+
+        # --- 6. Cache de histórico por cliente ---
         self._customer_history: Dict[str, Dict[str, Any]] = {}
 
         # Status
@@ -221,11 +344,12 @@ class PipelineOrquestrador:
         self.available = self.engine.available
 
         logger.info(
-            f"PipelineOrquestrador v1.1 inicializado em {self._load_time_ms:.0f}ms | "
+            f"PipelineOrquestrador v1.2 inicializado em {self._load_time_ms:.0f}ms | "
             f"Engine={'OK' if self.engine.available else 'DEGRADED'} | "
             f"Preprocessor={'OK' if self.preprocessor else 'PASSTHROUGH'} | "
             f"Cascade={'ON' if self.engine.config.cascade_enabled else 'OFF'} | "
             f"IF={'OK' if self.engine.if_model else 'OFF'} | "
+            f"SHAP={'OK' if self._shap_explainer else 'OFF'} | "
             f"SE=OK | Behavioral=OK"
         )
 
@@ -237,14 +361,123 @@ class PipelineOrquestrador:
         path = self.artefatos_dir / "preprocessing.joblib"
         if path.exists():
             try:
-                self.preprocessor = joblib.load(path)
-                n_cols = len(getattr(self.preprocessor, "model_columns_", []))
-                logger.info(f"Preprocessor carregado: {n_cols} colunas")
+                from preprocessing import PixPreprocessor
+                import __main__
+                # Registra no __main__ porque o joblib salvou como __main__.PixPreprocessor
+                if not hasattr(__main__, 'PixPreprocessor'):
+                    __main__.PixPreprocessor = PixPreprocessor
+                # Também registra como módulo 'preprocessing' por segurança
+                import core.preprocessing as _prep_mod
+                sys.modules['preprocessing'] = _prep_mod
+
+                self.preprocessor = joblib.load(ARTEFATOS_DIR / "preprocessing.joblib")
+                logger.info("Preprocessor carregado com sucesso")
             except Exception as e:
-                logger.warning(f"Erro ao carregar preprocessor: {e}")
+                logger.warning(f"Erro ao carregar preprocessor: {e} — usando passthrough")
                 self.preprocessor = None
         else:
             logger.warning(f"Preprocessor não encontrado em {path} — usando passthrough")
+
+
+    # ==========================================================
+    # SHAP EXPLICABILIDADE (v1.2)
+    # ==========================================================
+    def _compute_shap_explanation(
+        self,
+        X_row: pd.DataFrame,
+        decisao: str,
+        top_n: Optional[int] = None,
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Calcula SHAP values para uma transação individual.
+
+        Usa TreeExplainer (otimizado para LightGBM, ~2-5ms por row).
+        Só é calculado para decisões CONFIRMAR e BLOQUEAR.
+
+        Args:
+            X_row: DataFrame de 1 linha com as features LGBM.
+            decisao: Decisão final ("APROVAR", "CONFIRMAR", "BLOQUEAR").
+            top_n: Quantidade de top features a retornar.
+
+        Returns:
+            Dict com explicabilidade ou None se não aplicável.
+        """
+        # Só calcular SHAP para CONFIRMAR e BLOQUEAR (economia de CPU)
+        if decisao == "APROVAR":
+            return None
+
+        if self._shap_explainer is None:
+            return None
+
+        if top_n is None:
+            top_n = self.shap_top_n
+
+        try:
+            shap_values = self._shap_explainer.shap_values(X_row)
+
+            # Para classificação binária, shap_values pode ser lista [class_0, class_1]
+            if isinstance(shap_values, list):
+                sv = shap_values[1][0]  # classe fraude (1), primeira linha
+            else:
+                sv = shap_values[0]
+
+            base_value = self._shap_explainer.expected_value
+            if isinstance(base_value, (list, np.ndarray)):
+                base_value = float(base_value[1])
+
+            feature_names = X_row.columns.tolist()
+
+            # Ordenar por valor absoluto (maior impacto primeiro)
+            indices = np.argsort(np.abs(sv))[::-1][:top_n]
+
+            top_features = []
+            total_abs_shap = float(np.abs(sv).sum())
+
+            for i in indices:
+                feat_name = feature_names[i]
+                shap_val = float(sv[i])
+                feat_value = X_row.iloc[0, i]
+
+                # Converter para tipo Python nativo
+                if isinstance(feat_value, (np.integer,)):
+                    feat_value = int(feat_value)
+                elif isinstance(feat_value, (np.floating,)):
+                    feat_value = round(float(feat_value), 4) if not np.isnan(feat_value) else None
+                elif pd.isna(feat_value):
+                    feat_value = None
+
+                # Direção e label humano
+                direction = "aumenta_risco" if shap_val > 0 else "diminui_risco"
+                human_label = SHAP_FEATURE_LABELS.get(feat_name, feat_name)
+                impact_pct = round(
+                    abs(shap_val) / max(total_abs_shap, 1e-9) * 100, 1
+                )
+
+                top_features.append({
+                    "feature": feat_name,
+                    "label": human_label,
+                    "shap_value": round(shap_val, 6),
+                    "feature_value": feat_value,
+                    "direction": direction,
+                    "impact_pct": impact_pct,
+                })
+
+            return {
+                "method": "TreeSHAP",
+                "base_value": round(float(base_value), 6),
+                "top_features": top_features,
+                "sum_shap": round(float(sv.sum()), 6),
+                "prediction_logodds": round(float(base_value + sv.sum()), 6),
+                "note": (
+                    "SHAP values indicam a contribuição de cada feature "
+                    "para a probabilidade de fraude (log-odds). "
+                    "Valores positivos aumentam o risco, negativos diminuem."
+                ),
+            }
+
+        except Exception as e:
+            logger.warning(f"Erro ao calcular SHAP: {e}")
+            return {"error": str(e), "top_features": []}
 
     # ==========================================================
     # FEATURE ENGINEERING (fonte única — sem duplicação)
@@ -275,6 +508,9 @@ class PipelineOrquestrador:
         df = df.copy()
 
         # ─── Limpeza ────────────────────────────────────────
+        for col in TEXT_COLUMNS:
+            if col in df.columns and df[col].dtype != object:
+                df[col] = df[col].apply(lambda v: str(v) if pd.notna(v) else None)
         df = clean_text_columns(df, TEXT_COLUMNS)
         df = safe_to_numeric(df, NUMERIC_COLUMNS)
         df = safe_to_datetime(df, ["dt_pix"])
@@ -366,24 +602,23 @@ class PipelineOrquestrador:
 
         # ─── Autenticação ───────────────────────────────────
         auth_map = {"biometria": 1, "senha": 2, "pin": 3}
-        df["metodo_auth_encoded"] = (
-            df["metodo_autenticacao"]
-            .str.strip().str.lower()
-            .map(auth_map)
-            .fillna(0)
-            .astype(int)
+        _auth = pd.Series(
+            [str(v).strip().lower() if pd.notna(v) else "" for v in df["metodo_autenticacao"]],
+            index=df.index,
         )
-        df["is_login_biometria_flag"] = (df["metodo_auth_encoded"] == 1).astype(int)
-        df["is_login_senha_flag"] = (df["metodo_auth_encoded"] == 2).astype(int)
+        df["metodo_auth_encoded"] = _auth.map(auth_map).fillna(0).astype(int)
+
+        # ─── Login Flags (features LGBM) ───────────────────  ← ADICIONAR ESTE BLOCO
+        df["is_login_biometria_flag"] = (_auth == "biometria").astype(int)
+        df["is_login_senha_flag"] = (_auth.isin(["senha", "pin"])).astype(int)
+
 
         # ─── Agendamento ────────────────────────────────────
-        df["is_agendamento_recorrente_flag"] = (
-            df["is_agendamento_recorrente"]
-            .fillna("false")
-            .astype(str).str.strip().str.lower()
-            .isin(["true", "1", "sim", "yes"])
-            .astype(int)
-        )
+        _agend = df["is_agendamento_recorrente"].fillna("false")
+        _agend = pd.Series([str(v).strip().lower() for v in _agend], index=df.index)
+        df["is_agendamento_recorrente_flag"] = _agend.isin(
+            ["true", "1", "1.0", "sim", "yes"]
+        ).astype(int)
 
         # ─── Flags v3 ──────────────────────────────────────
         df["vl_pix_over_1000_flag"] = (df["vl_pix"] >= 1000).astype(int)
@@ -485,7 +720,9 @@ class PipelineOrquestrador:
                 receiver_counts = hist.get("receiver_counts", {})
                 df.loc[idx, "receiver_tx_count_prev"] = receiver_counts.get(receiver, 0)
                 df.loc[idx, "qt_envio_recebedor_trimestre"] = receiver_counts.get(receiver, 0)
-                df.loc[idx, "first_receiver_flag"] = 1 if receiver_counts.get(receiver, 0) == 0 else 0
+                df.loc[idx, "first_receiver_flag"] = (
+                    1 if receiver_counts.get(receiver, 0) == 0 else 0
+                )
 
                 # Contagem de tx com esta chave
                 key_counts = hist.get("key_counts", {})
@@ -500,7 +737,7 @@ class PipelineOrquestrador:
                     1 if pix_key not in key_counts else 0
                 )
 
-                # Primeiro envio para recebedor neste trimestre (flag tp_primeiro_envio)
+                # Primeiro envio para recebedor neste trimestre
                 df.loc[idx, "tp_primeiro_envio_recebedor_trimestre"] = (
                     1 if receiver_counts.get(receiver, 0) == 0 else 0
                 )
@@ -694,7 +931,8 @@ class PipelineOrquestrador:
             data: Dados brutos da transação (dict, Series ou DataFrame de 1 linha).
 
         Returns:
-            Dict padronizado com decisão, scores, agravantes e metadata.
+            Dict padronizado com decisão, scores, explicabilidade SHAP,
+            agravantes e metadata.
         """
         t0 = time.perf_counter()
         timings: Dict[str, float] = {}
@@ -741,10 +979,34 @@ class PipelineOrquestrador:
         )
         timings["engine_ms"] = (time.perf_counter() - t1) * 1000
 
-        # ─── 8. Atualizar histórico ─────────────────────────
+        # ─── 8. SHAP Explicabilidade (v1.2) ─────────────────
+        t1 = time.perf_counter()
+        shap_explanation = None
+        if self.shap_enabled and decision.decisao in ("CONFIRMAR", "BLOQUEAR"):
+            try:
+                lgbm_features = self.engine.lgbm_features
+                # Garantir que as features existem no df
+                available_feats = [f for f in lgbm_features if f in df_features.columns]
+                if len(available_feats) == len(lgbm_features):
+                    X_for_shap = df_features[lgbm_features].copy()
+                    # Preencher NaN com 0 (mesmo que o LGBM faz internamente)
+                    X_for_shap = X_for_shap.fillna(0)
+                    shap_explanation = self._compute_shap_explanation(
+                        X_for_shap, decision.decisao
+                    )
+                else:
+                    missing = set(lgbm_features) - set(available_feats)
+                    logger.warning(
+                        f"SHAP: {len(missing)} features faltando: {list(missing)[:5]}"
+                    )
+            except Exception as e:
+                logger.warning(f"SHAP falhou: {e}")
+        timings["shap_ms"] = (time.perf_counter() - t1) * 1000
+
+        # ─── 9. Atualizar histórico ─────────────────────────
         self._update_customer_history(df_features)
 
-        # ─── 9. Montar resposta final ───────────────────────
+        # ─── 10. Montar resposta final ──────────────────────
         total_ms = (time.perf_counter() - t0) * 1000
         timings["total_ms"] = total_ms
 
@@ -754,11 +1016,19 @@ class PipelineOrquestrador:
             behavioral_result=behavioral_result,
             features_dict=features_dict,
             timings=timings,
+            shap_explanation=shap_explanation,
         )
 
         # Log resumido
-        cascade_info = f" CASCADE={','.join(decision.cascade_rules)}" if decision.cascade_triggered else ""
-        if_info = f" IF_boost={decision.if_boost_applied:.2f}" if decision.if_active else ""
+        cascade_info = (
+            f" CASCADE={','.join(decision.cascade_rules)}"
+            if decision.cascade_triggered
+            else ""
+        )
+        if_info = (
+            f" IF_boost={decision.if_boost_applied:.2f}" if decision.if_active else ""
+        )
+        shap_info = " SHAP=OK" if shap_explanation and "error" not in shap_explanation else ""
         logger.info(
             f"TX {decision.transaction_id} | "
             f"{decision.decisao} | "
@@ -767,7 +1037,7 @@ class PipelineOrquestrador:
             f"SE={se_result.se_score:.0f} | "
             f"BEH={behavioral_result.behavioral_score:.0f} | "
             f"Agr={decision.peso_total}/{decision.peso_maximo}"
-            f"{cascade_info}{if_info} | "
+            f"{cascade_info}{if_info}{shap_info} | "
             f"{total_ms:.0f}ms"
         )
 
@@ -824,7 +1094,7 @@ class PipelineOrquestrador:
         return results
 
     # ==========================================================
-    # BUILD RESPONSE
+    # BUILD RESPONSE (v1.2 — otimizado, com SHAP)
     # ==========================================================
     def _build_response(
         self,
@@ -833,52 +1103,71 @@ class PipelineOrquestrador:
         behavioral_result: BehavioralAnalysisResult,
         features_dict: Dict[str, Any],
         timings: Dict[str, float],
+        shap_explanation: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
-        """Monta resposta padronizada para API/consumidor."""
-        return {
-            # ─── Decisão ────────────────────────────────────
-            "decisao": decision.decisao,
-            "score_final": round(decision.score_final, 2),
-            "score_raw": round(decision.score_raw, 8),
+        """
+        Monta resposta padronizada para API/consumidor.
 
-            # ─── Identificação ──────────────────────────────
-            "transaction_id": decision.transaction_id,
-            "customer_id": decision.customer_id,
-            "timestamp": str(features_dict.get("event_datetime", "")),
-            "vl_pix": features_dict.get("vl_pix"),
+        v1.2 — Mudanças:
+          - score_raw removido (era duplicata de componentes.lgbm_raw)
+          - faixas e peso_maximo movidos para metadata (constantes)
+          - cascade e atenuantes omitidos quando vazios
+          - IF fields omitidos quando if_active=false
+          - Bloco explicabilidade SHAP adicionado (CONFIRMAR/BLOQUEAR)
+        """
+        response: Dict[str, Any] = {}
 
-            # ─── Componentes de Score ───────────────────────
-            "componentes": {
-                "lgbm_raw": round(decision.score_lgbm_raw, 8),
-                "lgbm_mapped": round(decision.score_lgbm_mapped, 2),
-                "if_score": round(decision.score_if, 6),
-                "if_raw": round(decision.score_if_raw, 6),
-                "if_active": decision.if_active,
-                "if_boost_applied": round(decision.if_boost_applied, 4),
-                "rule_score_raw": round(decision.rule_score_raw, 2),
-                "rule_score_normalized": round(decision.rule_score_normalized, 4),
-            },
+        # ─── Decisão ────────────────────────────────────────
+        response["decisao"] = decision.decisao
+        response["score_final"] = round(decision.score_final, 2)
 
-            # ─── Cascade ────────────────────────────────────
-            "cascade": {
-                "triggered": decision.cascade_triggered,
+        # ─── Identificação ──────────────────────────────────
+        response["transaction_id"] = decision.transaction_id
+        response["customer_id"] = decision.customer_id
+        response["timestamp"] = str(features_dict.get("event_datetime", ""))
+        response["vl_pix"] = features_dict.get("vl_pix")
+
+        # ─── Componentes de Score ───────────────────────────
+        componentes = {
+            "lgbm_raw": round(decision.score_lgbm_raw, 8),
+            "lgbm_mapped": round(decision.score_lgbm_mapped, 2),
+            "rule_score_raw": round(decision.rule_score_raw, 2),
+            "rule_score_normalized": round(decision.rule_score_normalized, 4),
+        }
+        # IF — só incluir quando ativo (evita 4 campos zerados)
+        if decision.if_active:
+            componentes["if_score"] = round(decision.score_if, 6)
+            componentes["if_raw"] = round(decision.score_if_raw, 6)
+            componentes["if_boost_applied"] = round(decision.if_boost_applied, 4)
+        response["componentes"] = componentes
+
+        # ─── Cascade — só incluir quando triggered ──────────
+        if decision.cascade_triggered:
+            response["cascade"] = {
+                "triggered": True,
                 "rules": decision.cascade_rules,
-            },
+            }
 
-            # ─── Agravantes ─────────────────────────────────
-            "agravantes": [
+        # ─── Agravantes ─────────────────────────────────────
+        agravantes_ativos = [a for a in decision.agravantes if a.peso > 0]
+        if agravantes_ativos:
+            response["agravantes"] = [
                 {
                     "codigo": a.codigo,
                     "descricao": a.descricao,
                     "peso": a.peso,
                 }
-                for a in decision.agravantes
-            ],
-            "peso_total": decision.peso_total,
-            "peso_maximo": decision.peso_maximo,
+                for a in agravantes_ativos
+            ]
+            response["peso_total"] = decision.peso_total
 
-            # ─── Social Engineering ─────────────────────────
-            "social_engineering": {
+        # ─── SHAP Explicabilidade (v1.2) ────────────────────
+        if shap_explanation is not None:
+            response["explicabilidade"] = shap_explanation
+
+        # ─── Social Engineering ─────────────────────────────
+        if se_result.se_score > 0 or se_result.patterns:
+            response["social_engineering"] = {
                 "se_score": round(se_result.se_score, 2),
                 "risk_level": se_result.risk_level,
                 "patterns": [
@@ -893,12 +1182,14 @@ class PipelineOrquestrador:
                 ],
                 "worst_pattern": (
                     se_result.worst_pattern.pattern_name
-                    if se_result.worst_pattern else None
+                    if se_result.worst_pattern
+                    else None
                 ),
-            },
+            }
 
-            # ─── Behavioral ─────────────────────────────────
-            "behavioral": {
+        # ─── Behavioral ────────────────────────────────────
+        if behavioral_result.behavioral_score > 0 or behavioral_result.risk_factors:
+            beh_block: Dict[str, Any] = {
                 "behavioral_score": round(behavioral_result.behavioral_score, 2),
                 "risk_level": behavioral_result.risk_level,
                 "risk_factors": [
@@ -910,35 +1201,44 @@ class PipelineOrquestrador:
                     }
                     for rf in behavioral_result.risk_factors
                 ],
-                "device_info": {
+            }
+            if behavioral_result.device_info:
+                beh_block["device_info"] = {
                     "device_model": behavioral_result.device_info.device_model,
                     "device_type": behavioral_result.device_info.device_type,
                     "is_known": behavioral_result.device_info.is_known,
-                } if behavioral_result.device_info else None,
-            },
+                }
+            response["behavioral"] = beh_block
 
-            # ─── Veto / Atenuantes ──────────────────────────
-            "veto_aplicado": decision.veto_aplicado,
-            "atenuantes": decision.atenuantes,
+        # ─── Veto ──────────────────────────────────────────
+        if decision.veto_aplicado:
+            response["veto_aplicado"] = decision.veto_aplicado
 
-            # ─── Faixas de decisão ──────────────────────────
+        # ─── Atenuantes — só incluir quando presentes ───────
+        if decision.atenuantes:
+            response["atenuantes"] = decision.atenuantes
+
+        # ─── Metadata ──────────────────────────────────────
+        response["metadata"] = {
+            "pipeline_version": "1.2",
+            "engine_version": "2.1",
+            "scoring_version": self.engine.scoring_config.get("versao", "N/A"),
+            "cascade_enabled": self.engine.config.cascade_enabled,
+            "shap_enabled": self.shap_enabled,
+            "lgbm_threshold": self.engine.config.lgbm_threshold,
             "faixas": {
                 "aprovar": f"[0, {self.engine.config.threshold_confirmar:.0f})",
-                "confirmar": f"[{self.engine.config.threshold_confirmar:.0f}, {self.engine.config.threshold_bloquear:.0f})",
+                "confirmar": (
+                    f"[{self.engine.config.threshold_confirmar:.0f}, "
+                    f"{self.engine.config.threshold_bloquear:.0f})"
+                ),
                 "bloquear": f"[{self.engine.config.threshold_bloquear:.0f}, 100]",
             },
-
-            # ─── Metadata ──────────────────────────────────
-            "metadata": {
-                "pipeline_version": "1.1",
-                "engine_version": "2.1",
-                "scoring_version": self.engine.scoring_config.get("versao", "N/A"),
-                "cascade_enabled": self.engine.config.cascade_enabled,
-                "lgbm_threshold": self.engine.config.lgbm_threshold,
-                "timings": {k: round(v, 1) for k, v in timings.items()},
-                "timestamp_inferencia": datetime.utcnow().isoformat() + "Z",
-            },
+            "timings": {k: round(v, 1) for k, v in timings.items()},
+            "timestamp_inferencia": datetime.utcnow().isoformat() + "Z",
         }
+
+        return response
 
     # ==========================================================
     # HEALTH CHECK / STATUS
@@ -948,13 +1248,14 @@ class PipelineOrquestrador:
         engine_status = self.engine.get_status()
         return {
             "status": "healthy" if self.available else "degraded",
-            "pipeline_version": "1.1",
+            "pipeline_version": "1.2",
             "load_time_ms": round(self._load_time_ms, 1),
             "components": {
                 "preprocessor": self.preprocessor is not None,
                 "decision_engine": engine_status,
                 "social_engineering": True,
                 "behavioral_analytics": True,
+                "shap_explainer": self._shap_explainer is not None,
             },
             "cache": {
                 "customers_tracked": len(self._customer_history),
@@ -977,11 +1278,11 @@ class PipelineOrquestrador:
 # TESTE STANDALONE
 # =========================================================
 def main():
-    """Teste completo do pipeline orquestrador."""
+    """Teste completo do pipeline orquestrador v1.2."""
     print("\n")
     print("█" * 70)
-    print("  TESTE DO PIPELINE ORQUESTRADOR v1.1")
-    print("  FE → SE + Behavioral + Engine v2.1 (LGBM+Cascade+IF) → Decisão")
+    print("  TESTE DO PIPELINE ORQUESTRADOR v1.2")
+    print("  FE → SE + Behavioral + Engine v2.1 + SHAP → Decisão")
     print("█" * 70)
 
     pipeline = PipelineOrquestrador()
@@ -989,11 +1290,15 @@ def main():
     print(f"\n  📊 Status: {status['status']}")
     print(f"     Load time: {status['load_time_ms']:.0f}ms")
     print(f"     Preprocessor: {'✅' if status['components']['preprocessor'] else '⚠️'}")
-    engine = status['components']['decision_engine']
+    engine = status["components"]["decision_engine"]
     print(f"     LGBM: {'✅' if engine['lgbm'] else '❌'} ({engine['lgbm_features']} features)")
     print(f"     LGBM threshold: {engine.get('lgbm_threshold', 'N/A')}")
     print(f"     IF: {'✅' if engine['if_enabled'] else '—'} ({engine['if_features']} features)")
-    print(f"     Cascade: {'✅' if engine.get('cascade_enabled', False) else '—'} ({engine.get('cascade_rules', 0)} rules)")
+    print(
+        f"     Cascade: {'✅' if engine.get('cascade_enabled', False) else '—'} "
+        f"({engine.get('cascade_rules', 0)} rules)"
+    )
+    print(f"     SHAP: {'✅' if status['components']['shap_explainer'] else '⚠️'}")
 
     # ─── Teste 1: Transação Normal ───
     tx_normal = {
@@ -1141,46 +1446,49 @@ def main():
     print(f"  📋 RESUMO DOS TESTES")
     print(f"{'═' * 60}")
     icons = {"APROVAR": "🟢", "CONFIRMAR": "🟡", "BLOQUEAR": "🔴", "ERRO": "❌"}
-    for i, (label, r) in enumerate([
-        ("Normal", r1), ("Suspeita", r2), ("Intermediária", r3)
-    ], 1):
+    for i, (label, r) in enumerate(
+        [("Normal", r1), ("Suspeita", r2), ("Intermediária", r3)], 1
+    ):
         icon = icons.get(r["decisao"], "❓")
-        se = r["social_engineering"]["se_score"]
-        beh = r["behavioral"]["behavioral_score"]
-        agr = r["peso_total"]
+        se = r.get("social_engineering", {}).get("se_score", 0)
+        beh = r.get("behavioral", {}).get("behavioral_score", 0)
+        agr = r.get("peso_total", 0)
         ms = r["metadata"]["timings"]["total_ms"]
-        cascade = " 🔗CASCADE" if r["cascade"]["triggered"] else ""
+        cascade = " 🔗CASCADE" if r.get("cascade", {}).get("triggered") else ""
+        shap_ok = " 🔍SHAP" if r.get("explicabilidade") else ""
         print(
             f"  {i}. {label:15} → {icon} {r['decisao']:10} | "
             f"Score={r['score_final']:5.1f} | "
             f"SE={se:4.0f} | BEH={beh:4.0f} | "
-            f"Agr={agr:2d}/{r['peso_maximo']}{cascade} | "
+            f"Agr={agr:2d}"
+            f"{cascade}{shap_ok} | "
             f"{ms:.0f}ms"
         )
 
-    print(f"\n  ✅ Pipeline Orquestrador v1.1 funcionando!")
-    print(f"  💡 Engine v2.1: LGBM + Cascade + IF Boost")
+    print(f"\n  ✅ Pipeline Orquestrador v1.2 funcionando!")
+    print(f"  💡 Engine v2.1: LGBM + Cascade + IF Boost + SHAP")
 
 
 def _print_result(r: Dict):
-    """Imprime resultado formatado."""
+    """Imprime resultado formatado (v1.2 — com SHAP)."""
     icons = {"APROVAR": "🟢", "CONFIRMAR": "🟡", "BLOQUEAR": "🔴", "ERRO": "❌"}
     icon = icons.get(r["decisao"], "❓")
 
     print(f"\n  {icon} DECISÃO: {r['decisao']}")
     print(f"  ┌─────────────────────────────────────────────────┐")
     print(f"  │ Score Final:     {r['score_final']:6.2f} / 100                  │")
-    print(f"  │ Score Raw:       {r['score_raw']:.8f}                   │")
     print(f"  ├─────────────────────────────────────────────────┤")
 
     comp = r["componentes"]
     print(f"  │ LGBM Raw:        {comp['lgbm_raw']:.8f} → {comp['lgbm_mapped']:5.1f}   │")
-    print(f"  │ IF Score:        {comp['if_score']:.6f}  "
-          f"({'✅' if comp['if_active'] else '—':2})              │")
-    if comp.get("if_boost_applied", 0) > 0:
-        print(f"  │ IF Boost:        +{comp['if_boost_applied']:.4f}                       │")
-    print(f"  │ Rules:           {comp['rule_score_raw']:.0f}/21 "
-          f"({comp['rule_score_normalized']:.1%})                  │")
+    if comp.get("if_score") is not None:
+        print(f"  │ IF Score:        {comp['if_score']:.6f}  (✅)              │")
+        if comp.get("if_boost_applied", 0) > 0:
+            print(f"  │ IF Boost:        +{comp['if_boost_applied']:.4f}                       │")
+    print(
+        f"  │ Rules:           {comp['rule_score_raw']:.0f}/21 "
+        f"({comp['rule_score_normalized']:.1%})                  │"
+    )
 
     # Cascade
     cascade = r.get("cascade", {})
@@ -1190,27 +1498,56 @@ def _print_result(r: Dict):
         print(f"  │ 🔗 CASCADE: {rules_str:36} │")
 
     # Agravantes
-    agr_ativos = [a for a in r["agravantes"] if a["peso"] > 0]
-    if agr_ativos:
+    agravantes = r.get("agravantes", [])
+    if agravantes:
         print(f"  ├─────────────────────────────────────────────────┤")
-        print(f"  │ AGRAVANTES ({r['peso_total']}/{r['peso_maximo']}):                            │")
-        for a in agr_ativos[:5]:
+        peso_total = r.get("peso_total", 0)
+        print(f"  │ AGRAVANTES ({peso_total}):                                │")
+        for a in agravantes[:5]:
             codigo = a["codigo"][:30]
             print(f"  │   [{a['peso']}] {codigo:30}            │")
-        if len(agr_ativos) > 5:
-            print(f"  │   ... +{len(agr_ativos)-5} agravantes                         │")
+        if len(agravantes) > 5:
+            print(f"  │   ... +{len(agravantes)-5} agravantes                         │")
+
+    # SHAP Explicabilidade (v1.2)
+    explicabilidade = r.get("explicabilidade")
+    if explicabilidade and "top_features" in explicabilidade:
+        print(f"  ├─────────────────────────────────────────────────┤")
+        print(f"  │ 🔍 SHAP EXPLICABILIDADE (TreeSHAP)              │")
+        print(f"  │    Base value: {explicabilidade['base_value']:.4f}                      │")
+        for feat in explicabilidade["top_features"][:7]:
+            direction = "▲" if feat["direction"] == "aumenta_risco" else "▼"
+            sign = "+" if feat["shap_value"] > 0 else ""
+            label = feat["label"][:28]
+            val = feat["feature_value"]
+            if val is None:
+                val_str = "null"
+            elif isinstance(val, float):
+                val_str = f"{val:,.2f}"
+            else:
+                val_str = str(val)
+            val_str = val_str[:8]
+            pct = feat["impact_pct"]
+            print(
+                f"  │  {direction} {label:28} "
+                f"= {val_str:>8} "
+                f"({sign}{feat['shap_value']:.3f} | {pct:4.1f}%) │"
+            )
+    elif r["decisao"] in ("CONFIRMAR", "BLOQUEAR"):
+        print(f"  ├─────────────────────────────────────────────────┤")
+        print(f"  │ ⚠️  SHAP indisponível                           │")
 
     # SE
-    se = r["social_engineering"]
-    if se["se_score"] > 0:
+    se = r.get("social_engineering")
+    if se:
         print(f"  ├─────────────────────────────────────────────────┤")
         print(f"  │ ENG. SOCIAL: {se['risk_level']:8} (score={se['se_score']:.0f})           │")
         for p in se["patterns"][:2]:
             print(f"  │   ⚠️  {p['pattern_name'][:35]:35}        │")
 
     # Behavioral
-    beh = r["behavioral"]
-    if beh["behavioral_score"] > 0:
+    beh = r.get("behavioral")
+    if beh:
         print(f"  ├─────────────────────────────────────────────────┤")
         print(f"  │ BEHAVIORAL: {beh['risk_level']:8} (score={beh['behavioral_score']:.0f})          │")
         for rf in beh["risk_factors"][:2]:
@@ -1223,10 +1560,14 @@ def _print_result(r: Dict):
 
     # Timing
     t = r["metadata"]["timings"]
+    shap_ms = t.get("shap_ms", 0)
     print(f"  ├─────────────────────────────────────────────────┤")
-    print(f"  │ Latência: {t['total_ms']:.0f}ms total "
-          f"(FE={t['features_ms']:.0f} SE={t['se_ms']:.0f} "
-          f"BEH={t['behavioral_ms']:.0f} ENG={t['engine_ms']:.0f}) │")
+    print(
+        f"  │ Latência: {t['total_ms']:.0f}ms total "
+        f"(FE={t['features_ms']:.0f} SE={t['se_ms']:.0f} "
+        f"BEH={t['behavioral_ms']:.0f} ENG={t['engine_ms']:.0f}"
+        f"{f' SHAP={shap_ms:.0f}' if shap_ms > 0 else ''}) │"
+    )
     print(f"  └─────────────────────────────────────────────────┘")
 
 

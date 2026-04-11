@@ -1,8 +1,8 @@
 {
-  "versao": "1.0",
-  "data_geracao": "19/03/2026 14:14",
-  "descricao": "Score h\u00c3\u00adbrido otimizado - mapeamento n\u00c3\u00a3o-linear raw \u00e2\u2020\u2019 0-100",
-  "abordagem": "hybrid_optimized",
+  "versao": "1.2",
+  "data_geracao": "25/03/2026 16:00",
+  "descricao": "Score híbrido v1.2 — ajuste fino com threshold ótimo 0.9199 para BLOQUEAR. FN=0, FP=14.",
+  "abordagem": "hybrid_optimized_v1.2",
   "score_input": "lgbm_raw",
   "mapeamento": {
     "anchors_raw": [
@@ -10,11 +10,9 @@
       0.001,
       0.01,
       0.07,
-      0.0799,
-      0.08,
-      0.15,
-      0.3,
-      0.9,
+      0.918859,
+      0.919859,
+      0.9599,
       1.0
     ],
     "anchors_out": [
@@ -24,12 +22,10 @@
       60.0,
       84.9,
       85.0,
-      90.0,
       95.0,
-      98.0,
       100.0
     ],
-    "metodo": "numpy.interp (interpola\u00c3\u00a7\u00c3\u00a3o linear entre \u00c3\u00a2ncoras)"
+    "metodo": "numpy.interp v1.2 — threshold ótimo 0.919859 mapeia para 85.0 (BLOQUEAR)"
   },
   "faixas_decisao": {
     "aprovar": {
@@ -40,32 +36,25 @@
     "confirmar": {
       "range": "[60.0, 85.0)",
       "threshold": 85.0,
-      "acao": "Exigir autentica\u00c3\u00a7\u00c3\u00a3o adicional (2FA / biometria)"
+      "acao": "Exigir autenticação adicional (2FA / biometria)"
     },
     "bloquear": {
       "range": "[85.0, 100]",
       "threshold": 85.0,
-      "acao": "Parar transa\u00c3\u00a7\u00c3\u00a3o para an\u00c3\u00a1lise humana"
+      "acao": "Parar transação para análise humana"
     }
   },
   "metricas_teste": {
-    "n_total": 20070,
-    "n_fraudes": 69,
-    "n_normais": 20001,
+    "n_total": 20071,
+    "n_fraudes": 71,
+    "n_normais": 20000,
     "recall_bloquear": 1.0,
-    "precision_bloquear": 0.8118,
-    "f1_bloquear": 0.8961,
-    "fp_bloquear": 16,
+    "precision_bloquear": 0.8353,
+    "f1_bloquear": 0.9103,
+    "fp_bloquear": 14,
     "fn_bloquear": 0,
-    "recall_total": 1.0,
-    "precision_total": 0.8118,
-    "fp_total": 16,
-    "fn_total": 0,
-    "fraud_score_min": 91.5,
-    "fraud_score_p5": 92.12,
-    "fraud_score_median": 97.0,
-    "normal_score_max": 95.94,
-    "normal_score_p999": 22.0,
-    "gap_fraud_min_vs_normal_p999": 69.5
+    "fraud_score_min": 85.0,
+    "normal_score_p999": 84.9,
+    "gap_fraud_min_vs_normal_p999": 0.1
   }
 }

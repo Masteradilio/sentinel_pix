@@ -45,7 +45,7 @@ PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..
 DADOS_DIR = os.path.join(PROJECT_ROOT, "dados")
 ARTEFACT_DIR = os.path.join(PROJECT_ROOT, "backend", "artefatos")
 
-INPUT_DATA = os.path.join(DADOS_DIR, "base_mvp_model_ready.csv")
+INPUT_DATA = os.path.join(DADOS_DIR, "base_mvp_model_ready_optimized.csv")
 LGBM_PREDICTIONS_PATH = os.path.join(ARTEFACT_DIR, "predicoes_teste_lightgbm.csv")
 
 MODEL_PATH = os.path.join(ARTEFACT_DIR, "model_isolation_forest.joblib")
@@ -76,9 +76,9 @@ FEATURES_PROFILE = [
 # Grupo 2: Valor (absoluto + relativo)
 FEATURES_VALUE = [
     "vl_pix",
-    "log_vl_pix",
-    "ratio_valor_mediana",       # LGBM usa mas IF pode ponderar diferente
-    "zscore_valor_aprox",        # Desvio estatístico
+    "ratio_valor_mediana",
+    "ratio_valor_desvio_padrao",  # substituto — score=0.212
+    "zscore_valor_aprox",
 ]
 
 # Grupo 3: Velocity/Burst (FRAQUEZA DO LGBM — importance quase zero)
@@ -93,11 +93,11 @@ FEATURES_VELOCITY = [
 
 # Grupo 4: Contexto da transação
 FEATURES_CONTEXT = [
-    "first_receiver_flag",       # Primeiro envio para este recebedor
-    "is_first_tx_trimestre",     # Primeira tx do trimestre
-    "hour",                      # Horário
-    "topaz_score_filled",        # Score externo
-    "rule_score_raw",            # Score de regras
+    "first_receiver_flag",
+    "is_first_tx_trimestre",
+    "hour",
+    "topaz_risk_score",         # ← Substituída pela original
+    "rule_score_raw",
 ]
 
 # Grupo 5: Features de interação (combinações que capturam padrões)
@@ -809,11 +809,11 @@ if_config = {
     "ensemble_strategy": "complementary_boost",
     "ensemble_params": {
         "lgbm_threshold": 0.08,
-        "description": "IF ativa quando LGBM < 0.08. Boost de 0.08-0.15 ao score.",
-        "if_high_threshold": 0.70,
-        "if_very_high_threshold": 0.85,
-        "boost_high": 0.08,
-        "boost_very_high": 0.15,
+        "description": "IF ativa quando LGBM < 0.08. Boost restrito a anomalias extremas.",
+        "if_high_threshold": 0.99,        # ✅ Corrigido (era 0.70)
+        "if_very_high_threshold": 0.9994,  # ✅ Corrigido (era 0.85)
+        "boost_high": 0.05,               # ✅ Corrigido (era 0.08)
+        "boost_very_high": 0.08,           # ✅ Corrigido (era 0.15)
     },
 }
 

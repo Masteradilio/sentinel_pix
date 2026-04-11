@@ -1,0 +1,98 @@
+{
+  "data_execucao": "2026-03-27T14:00:24.690545",
+  "features_removidas_modelo": [
+    "log_vl_pix",
+    "topaz_score_filled",
+    "rule_score_normalized",
+    "latencia_missing_flag",
+    "rule_velocity_score",
+    "rule_mule_account_score",
+    "qt_dependentes",
+    "is_login_biometria_flag",
+    "topaz_rejeitada_flag",
+    "is_login_senha_flag",
+    "is_agendamento_recorrente_flag",
+    "pix_key_missing_flag_derived",
+    "metodo_auth_encoded",
+    "tempo_interacao_missing_flag",
+    "app_version_missing_flag",
+    "app_version_minor",
+    "auth_method_missing_flag",
+    "pix_key_email_flag",
+    "pix_key_document_flag",
+    "pix_key_other_flag",
+    "day_of_week",
+    "is_business_hours",
+    "pix_over_100pct_renda_flag",
+    "latencia_rede_ms_final",
+    "tempo_processamento_host_ms",
+    "latencia_host_ratio",
+    "receiver_document_same_as_customer_flag",
+    "is_sexo_feminino_flag"
+  ],
+  "campos_brutos_removidos": [
+    "qt_dependentes",
+    "is_agendamento_recorrente"
+  ],
+  "features_antes": 80,
+  "features_depois": 52,
+  "resultados": {
+    "base_model_ready": {
+      "arquivo": "base_mvp_model_ready.csv",
+      "linhas": 100355,
+      "colunas_antes": 85,
+      "colunas_depois": 57,
+      "features_removidas": [
+        "log_vl_pix",
+        "topaz_score_filled",
+        "rule_score_normalized",
+        "latencia_missing_flag",
+        "rule_velocity_score",
+        "rule_mule_account_score",
+        "qt_dependentes",
+        "is_login_biometria_flag",
+        "topaz_rejeitada_flag",
+        "is_login_senha_flag",
+        "is_agendamento_recorrente_flag",
+        "pix_key_missing_flag_derived",
+        "metodo_auth_encoded",
+        "tempo_interacao_missing_flag",
+        "app_version_missing_flag",
+        "app_version_minor",
+        "auth_method_missing_flag",
+        "pix_key_email_flag",
+        "pix_key_document_flag",
+        "pix_key_other_flag",
+        "day_of_week",
+        "is_business_hours",
+        "pix_over_100pct_renda_flag",
+        "latencia_rede_ms_final",
+        "tempo_processamento_host_ms",
+        "latencia_host_ratio",
+        "receiver_document_same_as_customer_flag",
+        "is_sexo_feminino_flag"
+      ],
+      "features_nao_encontradas": []
+    },
+    "dados_pix_normais": {
+      "arquivo": "dados_pix_normais.csv",
+      "linhas": 100000,
+      "colunas_antes": 39,
+      "colunas_depois": 37,
+      "campos_removidos": [
+        "tb_pix_anomalia_normais_trim_poc_v2.qt_dependentes",
+        "tb_pix_anomalia_normais_trim_poc_v2.is_agendamento_recorrente"
+      ]
+    },
+    "dados_pix_fraudes": {
+      "arquivo": "dados_pix_fraudes.csv",
+      "linhas": 355,
+      "colunas_antes": 40,
+      "colunas_depois": 38,
+      "campos_removidos": [
+        "tb_pix_anomalia_fraudes_trim_poc_v2.qt_dependentes",
+        "tb_pix_anomalia_fraudes_trim_poc_v2.is_agendamento_recorrente"
+      ]
+    }
+  }
+}

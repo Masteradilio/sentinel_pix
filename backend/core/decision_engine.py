@@ -676,18 +676,20 @@ class PixDecisionEngine:
         intervalo = _safe_float(f.get("qt_intervalo_transacao_minuto"))
         qt_total = _safe_int(f.get("qt_total_pix_trimestre"), 0)
         if intervalo is not None and 0 <= intervalo <= 30:
+            _min_label = "minuto" if int(intervalo) == 1 else "minutos"
             if qt_total >= 3:
                 agravantes.append(AgravanteFator(
                     "INTERVALO_30MIN",
-                    f"Múltiplas transações em {intervalo:.0f} minutos",
+                    f"Múltiplas transações em {intervalo:.0f} {_min_label}",
                     self.config.peso_intervalo_30min_2tx, intervalo,
                 ))
             else:
                 agravantes.append(AgravanteFator(
                     "INTERVALO_30MIN",
-                    f"Segunda transação em {intervalo:.0f} minutos",
+                    f"Segunda transação em {intervalo:.0f} {_min_label}",
                     self.config.peso_intervalo_30min_1tx, intervalo,
                 ))
+
 
         idade = _safe_int(f.get("nr_idade"), 0)
         if idade >= 76:
@@ -960,19 +962,21 @@ class PixDecisionEngine:
     # VETO
     # ==========================================================
     def _aplicar_veto(
-        self,
-        score_mapped: float,
-        lgbm_raw: float,
-        if_score: float,
-        if_active: bool,
-        cascade_triggered: bool,
-    ) -> Tuple[float, Optional[str]]:
+    self,
+    score_mapped: float,
+    lgbm_raw: float,
+    if_score: float,
+    if_active: bool,
+    cascade_triggered: bool,
+    peso_agravantes: int = 0,
+) -> Tuple[float, Optional[str]]:
         """
         Aplica regras de veto.
 
-        - Cascade triggered: mínimo CONFIRMAR
-        - 1 modelo ≥ veto_threshold: mínimo CONFIRMAR
         - 2 modelos ≥ veto_threshold: mínimo BLOQUEAR
+        - 1 modelo ≥ veto_threshold: mínimo CONFIRMAR
+        - IF extremo (≥ 99.5%) + agravantes pesados (≥ 8): mínimo BLOQUEAR
+        - Cascade triggered: mínimo CONFIRMAR
         """
         threshold = self.config.veto_threshold
         vetos = []
@@ -982,19 +986,41 @@ class PixDecisionEngine:
         if if_active and if_score >= threshold:
             vetos.append(f"IF={if_score*100:.1f}%")
 
+        # --- Regra existente: 2 modelos → BLOQUEAR ---
         if len(vetos) >= 2:
             score_ajustado = max(score_mapped, self.config.threshold_bloquear)
             desc = f"VETO BLOQUEAR: {' + '.join(vetos)} ≥ {threshold*100:.0f}%"
             logger.info(f"{desc} | Score: {score_mapped:.1f} → {score_ajustado:.1f}")
             return score_ajustado, desc
 
+        # --- NOVA REGRA: IF extremo + agravantes pesados → BLOQUEAR ---
+        # Quando IF ≥ 99.5% E os agravantes somam ≥ 8 pontos,
+        # há evidência suficiente para bloquear mesmo sem LGBM concordar.
+        # Racional: IF detectou anomalia extrema + múltiplos sinais de risco.
+        IF_EXTREME_THRESHOLD = 0.995
+        AGRAVANTES_MIN_BLOQUEAR = 8
+
+        if (
+            if_active
+            and if_score >= IF_EXTREME_THRESHOLD
+            and peso_agravantes >= AGRAVANTES_MIN_BLOQUEAR
+        ):
+            score_ajustado = max(score_mapped, self.config.threshold_bloquear)
+            desc = (
+                f"VETO BLOQUEAR: IF extremo={if_score*100:.1f}% "
+                f"+ {peso_agravantes} pts agravantes ≥ {AGRAVANTES_MIN_BLOQUEAR}"
+            )
+            logger.info(f"{desc} | Score: {score_mapped:.1f} → {score_ajustado:.1f}")
+            return score_ajustado, desc
+
+        # --- Regra existente: 1 modelo → CONFIRMAR ---
         if len(vetos) == 1:
             score_ajustado = max(score_mapped, self.config.threshold_confirmar)
             desc = f"VETO CONFIRMAR: {vetos[0]} ≥ {threshold*100:.0f}%"
             logger.info(f"{desc} | Score: {score_mapped:.1f} → {score_ajustado:.1f}")
             return score_ajustado, desc
 
-        # Cascade veto: garante ao menos CONFIRMAR
+        # --- Regra existente: Cascade → CONFIRMAR ---
         if cascade_triggered:
             score_ajustado = max(score_mapped, self.config.threshold_confirmar)
             desc = "VETO CONFIRMAR: Cascade rule triggered"
@@ -1002,6 +1028,7 @@ class PixDecisionEngine:
             return score_ajustado, desc
 
         return score_mapped, None
+
 
     # ==========================================================
     # DECISÃO
@@ -1093,9 +1120,12 @@ class PixDecisionEngine:
 
         peso_total = sum(a.peso for a in agravantes_positivos)
 
-        # Agravantes adicionam até +15 pontos ao score
+        # Agravantes adicionam pontos proporcionais ao score (sem teto artificial)
+        # peso_normalizado varia de 0.0 a ~1.0+ (pode exceder 1.0 se peso_total > peso_maximo)
+        # Multiplicador calibrável — ajustar conforme testes
+        AGRAVANTE_MULTIPLIER = 50.0
         peso_normalizado = peso_total / max(self.config.peso_maximo, 1)
-        bonus_agravantes = peso_normalizado * 15.0
+        bonus_agravantes = peso_normalizado * AGRAVANTE_MULTIPLIER
         score_com_agravantes = min(100.0, score_mapped + bonus_agravantes)
 
         if atenuantes:
@@ -1103,8 +1133,10 @@ class PixDecisionEngine:
 
         # --- 7. Veto ---
         score_final, veto_desc = self._aplicar_veto(
-            score_com_agravantes, lgbm_raw, if_score, if_active, cascade_triggered
+            score_com_agravantes, lgbm_raw, if_score, if_active, cascade_triggered,
+            peso_agravantes=peso_total,  # ← NOVO PARÂMETRO
         )
+
 
         # --- 8. Decisão ---
         decisao = self._classificar(score_final)

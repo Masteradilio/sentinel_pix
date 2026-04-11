@@ -1,0 +1,160 @@
+{
+  "data_geracao": "2026-03-26T17:45:14.623619",
+  "total_features": 80,
+  "recomendacoes": {
+    "REMOVER": 36,
+    "AVALIAR": 21,
+    "MANTER_BAIXA": 12,
+    "MANTER": 11
+  },
+  "features_remover": [
+    "tx_count_prev_30m",
+    "rule_velocity_score",
+    "rule_mule_account_score",
+    "first_key_flag",
+    "first_receiver_flag",
+    "is_first_tx_trimestre",
+    "key_tx_count_prev",
+    "is_business_hours",
+    "receiver_document_same_as_customer_flag",
+    "latencia_host_ratio",
+    "is_sexo_feminino_flag",
+    "tp_primeiro_envio_recebedor_trimestre",
+    "latencia_missing_flag",
+    "topaz_missing_flag",
+    "latencia_rede_ms_final",
+    "tempo_processamento_host_ms",
+    "pix_over_100pct_renda_flag",
+    "tempo_interacao_missing_flag",
+    "pix_key_document_flag",
+    "app_version_missing_flag",
+    "metodo_auth_encoded",
+    "app_version_minor",
+    "auth_method_missing_flag",
+    "rule_random_key_score",
+    "pix_key_other_flag",
+    "day_of_week",
+    "pix_key_random_flag",
+    "pix_key_email_flag",
+    "pix_key_missing_flag_derived",
+    "perfil_vulneravel_se_flag",
+    "is_viuvo_flag",
+    "is_login_senha_flag",
+    "is_agendamento_recorrente_flag",
+    "qt_dependentes",
+    "is_login_biometria_flag",
+    "topaz_rejeitada_flag"
+  ],
+  "features_avaliar": [
+    "qt_aparelhos_distintos_trimestre",
+    "rule_age_score",
+    "zscore_intervalo_aprox",
+    "rule_score_normalized",
+    "ratio_valor_mediana",
+    "is_segmento_premium_flag",
+    "rule_relationship_score",
+    "renda_missing_flag",
+    "vl_renda_cliente",
+    "topaz_risk_score",
+    "zscore_valor_aprox",
+    "rule_topaz_score",
+    "topaz_score_filled",
+    "diff_valor_mediana",
+    "pix_over_50pct_renda_flag",
+    "distinct_receivers_so_far",
+    "device_missing_flag",
+    "distinct_keys_so_far",
+    "host_time_missing_flag",
+    "hour",
+    "qt_envio_recebedor_trimestre"
+  ],
+  "pca": {
+    "n_90pct": 36,
+    "n_95pct": 42,
+    "total": 80
+  },
+  "top10_features": [
+    {
+      "feature": "vl_mediana_pix_trimestre",
+      "composite_score": 0.9951
+    },
+    {
+      "feature": "qt_intervalo_desvio_padrao_trimestre",
+      "composite_score": 0.6711
+    },
+    {
+      "feature": "qt_total_pix_trimestre",
+      "composite_score": 0.5673
+    },
+    {
+      "feature": "vl_pix",
+      "composite_score": 0.5531
+    },
+    {
+      "feature": "qt_intervalo_mediana_trimestre",
+      "composite_score": 0.4801
+    },
+    {
+      "feature": "log_vl_pix",
+      "composite_score": 0.3465
+    },
+    {
+      "feature": "nr_idade",
+      "composite_score": 0.2594
+    },
+    {
+      "feature": "qt_intervalo_transacao_minuto",
+      "composite_score": 0.2233
+    },
+    {
+      "feature": "qt_pix_dia_maximo_trimestre",
+      "composite_score": 0.2169
+    },
+    {
+      "feature": "ratio_valor_desvio_padrao",
+      "composite_score": 0.212
+    }
+  ],
+  "bottom10_features": [
+    {
+      "feature": "pix_key_random_flag",
+      "composite_score": 0.02
+    },
+    {
+      "feature": "pix_key_email_flag",
+      "composite_score": 0.014
+    },
+    {
+      "feature": "pix_key_missing_flag_derived",
+      "composite_score": 0.0085
+    },
+    {
+      "feature": "perfil_vulneravel_se_flag",
+      "composite_score": 0.0065
+    },
+    {
+      "feature": "is_viuvo_flag",
+      "composite_score": 0.0058
+    },
+    {
+      "feature": "is_login_senha_flag",
+      "composite_score": 0.0043
+    },
+    {
+      "feature": "is_agendamento_recorrente_flag",
+      "composite_score": 0.0028
+    },
+    {
+      "feature": "qt_dependentes",
+      "composite_score": 0.0
+    },
+    {
+      "feature": "is_login_biometria_flag",
+      "composite_score": 0.0
+    },
+    {
+      "feature": "topaz_rejeitada_flag",
+      "composite_score": 0.0
+    }
+  ]
+}

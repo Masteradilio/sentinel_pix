@@ -40,7 +40,7 @@ PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..
 DADOS_DIR = os.path.join(PROJECT_ROOT, "dados")
 ARTEFACT_DIR = os.path.join(PROJECT_ROOT, "backend", "artefatos")
 
-INPUT_DATA = os.path.join(DADOS_DIR, "base_mvp_model_ready.csv")
+INPUT_DATA = os.path.join(DADOS_DIR, "base_mvp_model_ready_optimized.csv")
 
 MODEL_PATH = os.path.join(ARTEFACT_DIR, "model_lightgbm.joblib")
 MODEL_CALIBRATED_PATH = os.path.join(ARTEFACT_DIR, "model_lightgbm_calibrated.joblib")
@@ -62,52 +62,96 @@ os.makedirs(ARTEFACT_DIR, exist_ok=True)
 # FEATURES
 # =========================================================
 CORE_FEATURES = [
-    "receiver_document_same_as_customer_flag",
-    "pix_key_random_flag", "pix_key_email_flag",
-    "pix_key_document_flag", "pix_key_other_flag",
-    "pix_key_missing_flag_derived",
-    "vl_pix", "log_vl_pix", "vl_pix_over_1000_flag",
-    "qt_total_pix_trimestre", "is_first_tx_trimestre",
-    "vl_mediana_pix_trimestre", "vl_desvio_padrao_pix_trimestre",
-    "qt_intervalo_transacao_minuto", "qt_intervalo_mediana_trimestre",
-    "qt_intervalo_desvio_padrao_trimestre", "qt_pix_dia_maximo_trimestre",
-    "qt_aparelhos_distintos_trimestre",
-    "nr_idade", "qt_tempo_relacionamento_mes",
-    "latencia_rede_ms_final", "vl_latencia_rede_media_trimestre",
-    "tempo_processamento_host_ms",
-    "ratio_valor_mediana", "diff_valor_mediana",
-    "ratio_valor_desvio_padrao", "zscore_valor_aprox",
-    "ratio_intervalo_vs_mediana", "diff_intervalo_vs_mediana",
-    "zscore_intervalo_aprox",
-    "ratio_latencia_cliente", "diff_latencia_cliente", "latencia_host_ratio",
-    "minutes_since_prev_tx",
-    "tx_count_prev_30m", "burst_30m_flag",
-    "receiver_tx_count_prev", "first_receiver_flag",
-    "key_tx_count_prev", "first_key_flag",
-    "distinct_receivers_so_far", "distinct_keys_so_far",
-    "hour", "day_of_week", "is_business_hours",
-    "app_version_minor",
-    "topaz_risk_score", "topaz_score_filled",
-    "device_missing_flag", "app_version_missing_flag",
-    "auth_method_missing_flag", "topaz_missing_flag",
-    "host_time_missing_flag", "latencia_missing_flag",
-    "rule_age_score", "rule_relationship_score",
-    "rule_mule_account_score", "rule_random_key_score",
-    "rule_velocity_score", "rule_topaz_score",
-    "rule_score_raw", "rule_score_normalized",
+    # --- Valor e Desvio ---
+    "vl_pix",                              # score=0.553 ⭐
+    "vl_pix_over_1000_flag",               # score=0.188
+    "vl_mediana_pix_trimestre",            # score=0.995 ⭐⭐⭐
+    "vl_desvio_padrao_pix_trimestre",      # score=0.154
+    "ratio_valor_mediana",                 # score=0.089
+    "diff_valor_mediana",                  # score=0.061
+    "ratio_valor_desvio_padrao",           # score=0.212
+    "zscore_valor_aprox",                  # score=0.079
+
+    # --- Frequência e Velocity ---
+    "qt_total_pix_trimestre",              # score=0.567 ⭐
+    "is_first_tx_trimestre",               # score=0.116 (mantido: usado pelo IF)
+    "qt_intervalo_transacao_minuto",       # score=0.223
+    "qt_intervalo_mediana_trimestre",      # score=0.480 ⭐
+    "qt_intervalo_desvio_padrao_trimestre",# score=0.671 ⭐⭐
+    "qt_pix_dia_maximo_trimestre",         # score=0.217
+    "ratio_intervalo_vs_mediana",          # score=0.109
+    "diff_intervalo_vs_mediana",           # score=0.157
+    "zscore_intervalo_aprox",              # score=0.093
+    "minutes_since_prev_tx",              # score=0.207
+
+    # --- Burst e Velocity (alimentam Cascade Rules) ---
+    "tx_count_prev_30m",                   # score=0.155 (mantido: Cascade C1/C2)
+    "burst_30m_flag",                      # score=0.145 (mantido: Cascade C5)
+
+    # --- Recebedor ---
+    "receiver_tx_count_prev",              # score=0.124
+    "first_receiver_flag",                 # score=0.128 (mantido: Cascade C1)
+    "distinct_receivers_so_far",           # score=0.048
+    "tp_primeiro_envio_recebedor_trimestre",# score=0.043
+    "qt_envio_recebedor_trimestre",        # score=0.028
+
+    # --- Chave PIX ---
+    "pix_key_random_flag",                 # score=0.020 (mantido: SE/agravantes)
+    "key_tx_count_prev",                   # score=0.107
+    "first_key_flag",                      # score=0.128
+    "distinct_keys_so_far",                # score=0.041
+
+    # --- Temporal ---
+    "hour",                                # score=0.034
+
+    # --- Perfil do Cliente ---
+    "nr_idade",                            # score=0.259 ⭐
+    "qt_tempo_relacionamento_mes",         # score=0.175
+
+    # --- Dispositivo e Sessão ---
+    "qt_aparelhos_distintos_trimestre",    # score=0.100
+    "vl_latencia_rede_media_trimestre",    # score=0.116
+    "ratio_latencia_cliente",              # score=0.118
+    "diff_latencia_cliente",               # score=0.112
+
+    # --- Missing Flags (mantidas: indicam dados ausentes do MBK) ---
+    "device_missing_flag",                 # score=0.046
+    "host_time_missing_flag",              # score=0.041
+    "topaz_missing_flag",                  # score=0.041
+
+    # --- Topaz ---
+    "topaz_risk_score",                    # score=0.080
+
+    # --- Regras de Negócio ---
+    "rule_age_score",                      # score=0.100
+    "rule_relationship_score",             # score=0.083
+    "rule_random_key_score",               # score=0.027
+    "rule_topaz_score",                    # score=0.078
+    "rule_score_raw",                      # score=0.106
 ]
 
 EXTRA_FEATURES = [
-    "ratio_pix_renda", "vl_renda_cliente",
-    "pix_over_50pct_renda_flag", "pix_over_100pct_renda_flag",
-    "renda_missing_flag", "perfil_vulneravel_se_flag",
-    "is_sexo_feminino_flag", "is_viuvo_flag",
-    "is_segmento_premium_flag", "qt_dependentes",
-    "tp_primeiro_envio_recebedor_trimestre", "qt_envio_recebedor_trimestre",
-    "is_agendamento_recorrente_flag", "metodo_auth_encoded",
-    "is_login_senha_flag", "is_login_biometria_flag",
-    "topaz_rejeitada_flag", "tempo_interacao_missing_flag",
+    # --- Renda (mantidas: contribuição moderada) ---
+    "ratio_pix_renda",                     # score=0.144
+    "vl_renda_cliente",                    # score=0.080
+    "pix_over_50pct_renda_flag",           # score=0.050
+    "renda_missing_flag",                  # score=0.082
+
+    # --- Perfil para SE/Agravantes (mantidas por necessidade do sistema) ---
+    "perfil_vulneravel_se_flag",           # score=0.007 (mantido: módulo SE)
+    "is_viuvo_flag",                       # score=0.006 (mantido: módulo SE)
+    "is_segmento_premium_flag",            # score=0.083
+
+    # --- Autenticação (mantida: metodo simplificado) ---
+    "is_login_senha_flag",                 # score=0.004 (mantido: SE usa)
+
+    # --- Sessão ---
+    "is_business_hours",                   # score=0.049 (mantido: SE usa)
 ]
+
+# NOTA: EXTRA_FEATURES acima inclui features que o LGBM não usa bem
+# mas que alimentam SE/Cascade/Agravantes no pipeline de decisão.
+# Se quiser um modelo LGBM puro com 52 features, use APENAS CORE_FEATURES.
 
 
 # =========================================================
@@ -242,8 +286,8 @@ def apply_cascade_rules(df, y_prob, lgbm_threshold):
         tempo_rel = row.get("qt_tempo_relacionamento_mes", 999) or 999
         ratio_med = row.get("ratio_valor_mediana", 0) or 0
         vl_pix = row.get("vl_pix", 0) or 0
-        if tempo_rel <= 6 and first_recv == 1 and ratio_med >= 3.0:
-            reasons.append(f"CONTA_NOVA_ATIPICO(meses={tempo_rel},ratio={ratio_med:.1f})")
+        #if tempo_rel <= 6 and first_recv == 1 and ratio_med >= 3.0:
+        #    reasons.append(f"CONTA_NOVA_ATIPICO(meses={tempo_rel},ratio={ratio_med:.1f})")
 
         # Regra C4: Conta muito nova (< 3 meses) + valor alto (> R$5000)
         if tempo_rel <= 3 and vl_pix >= 5000:
@@ -255,14 +299,14 @@ def apply_cascade_rules(df, y_prob, lgbm_threshold):
             reasons.append(f"ESVAZIAMENTO(ratio={ratio_med:.1f},vl={vl_pix:.0f})")
 
         # Regra C6: LGBM deu score > 0.01 (não totalmente zerado) + sinais combinados
-        if y_prob[i] >= 0.01:
+        if y_prob[i] >= 0.05:
             # Combinação: primeiro recebedor + valor acima mediana + qualquer sinal extra
             sinais = 0
             if first_recv == 1:
                 sinais += 1
-            if ratio_med >= 2.0:
+            if ratio_med >= 3.0:
                 sinais += 1
-            if vl_pix >= 1000:
+            if vl_pix >= 2000:
                 sinais += 1
             idade = row.get("nr_idade", 0) or 0
             if idade >= 60:
@@ -271,7 +315,7 @@ def apply_cascade_rules(df, y_prob, lgbm_threshold):
             if chave_random == 1:
                 sinais += 1
 
-            if sinais >= 3:
+            if sinais >= 4:
                 reasons.append(f"LGBM_BORDERLINE_COMBINADO(score={y_prob[i]:.4f},sinais={sinais})")
 
         if reasons:

@@ -1312,3 +1312,4 @@ Para dúvidas sobre este módulo:
 **Última atualização**: 2024-01-15  
 **Versão do módulo**: 3.0.0  
 **Autor**: Equipe Anomalia PIX
+
