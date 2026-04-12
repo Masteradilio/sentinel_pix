@@ -1,5 +1,5 @@
 """
-api.py v1.1 — API REST para Detecção de Fraude PIX
+api.py v1.2 — API REST para Detecção de Fraude PIX
 
 Mudanças v1.0 → v1.1:
   1. AnalyzeResponse atualizado para pipeline v1.2 (sem score_raw, com SHAP)
@@ -494,7 +494,7 @@ async def lifespan(app: FastAPI):
     """Gerencia ciclo de vida da aplicação."""
     # --- Startup ---
     logger.info("=" * 60)
-    logger.info("  API Antifraude PIX v1.1 — Iniciando...")
+    logger.info("  API Antifraude PIX v1.2 — Iniciando...")
     logger.info("=" * 60)
 
     t0 = time.perf_counter()
@@ -526,16 +526,16 @@ app = FastAPI(
     title="API Antifraude PIX",
     description=(
         "API REST para detecção de fraude em transações PIX em tempo real.\n\n"
-        "**Pipeline v2.1 + Orquestrador v1.2:**\n"
-        "LightGBM + Cascade Rules + Isolation Forest + 24 Agravantes + "
-        "Social Engineering (11 padrões) + Behavioral Analytics (12 fatores) + "
+        "**Pipeline v1.4 + Engine v3.0.5:**\n"
+        "LightGBM v5.1 + Cascade v3 + Isolation Forest v3 + "
+        "Fast-Approve + Agravantes (7 fases) + Social Engineering v3.4 (8 padrões) + Behavioral Analytics v3.1 (6 fatores) + "
         "SHAP Explicabilidade\n\n"
         "**Faixas de decisão:**\n"
-        "- 🟢 **APROVAR** `[0, 60)` — Liberar automaticamente\n"
-        "- 🟡 **CONFIRMAR** `[60, 85)` — Autenticação adicional\n"
-        "- 🔴 **BLOQUEAR** `[85, 100]` — Análise humana\n"
+        "- 🟢 **APROVAR** `[0, 77)` — Liberar automaticamente\n"
+        "- 🟡 **CONFIRMAR** `[77, 95)` — Autenticação adicional\n"
+        "- 🔴 **BLOQUEAR** `[95, 100]` — Bloqueio automático\n"
     ),
-    version="1.1.0",
+    version="1.2.0",
     lifespan=lifespan,
     docs_url="/docs",
     redoc_url="/redoc",
@@ -616,8 +616,8 @@ async def root():
     """Informações básicas da API."""
     return {
         "name": "API Antifraude PIX",
-        "version": "1.1.0",
-        "pipeline": "v2.1 + Orquestrador v1.2",
+        "version": "1.2.0",
+        "pipeline": "v1.4 + Engine v3.0.5",
         "docs": "/docs",
         "health": "/api/v1/health",
         "endpoints": {
@@ -885,7 +885,7 @@ if __name__ == "__main__":
     reload = os.getenv("API_RELOAD", "false").lower() in ("1", "true")
     workers = int(os.getenv("API_WORKERS", "1"))
 
-    print(f"\n🚀 Iniciando API Antifraude PIX v1.1")
+    print(f"\n🚀 Iniciando API Antifraude PIX v1.2")
     print(f"   Host: {host}:{port}")
     print(f"   Workers: {workers}")
     print(f"   Reload: {reload}")

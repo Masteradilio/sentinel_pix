@@ -1,51 +1,33 @@
 {
   "features": [
-    "nr_idade",
-    "qt_tempo_relacionamento_mes",
-    "vl_pix",
-    "ratio_valor_mediana",
-    "ratio_valor_desvio_padrao",
-    "zscore_valor_aprox",
-    "tx_count_prev_30m",
     "burst_30m_flag",
-    "minutes_since_prev_tx",
-    "qt_total_pix_trimestre",
-    "qt_pix_dia_maximo_trimestre",
-    "distinct_receivers_so_far",
+    "tx_count_prev_30m",
     "first_receiver_flag",
-    "is_first_tx_trimestre",
-    "hour",
     "topaz_risk_score",
     "rule_score_raw",
+    "qt_tempo_relacionamento_mes",
+    "nr_idade",
+    "vl_pix",
+    "minutes_since_prev_tx",
+    "burst_x_distinct_recv",
     "valor_x_burst",
     "idade_x_first_recv",
-    "valor_x_first_recv",
-    "burst_x_distinct_recv",
-    "valor_over_trimestre_avg"
+    "log_vl_pix"
   ],
   "medians": {
-    "nr_idade": 43.0,
-    "qt_tempo_relacionamento_mes": 58.0,
-    "vl_pix": 45.45,
-    "ratio_valor_mediana": 1.0,
-    "ratio_valor_desvio_padrao": 0.2313326089013193,
-    "zscore_valor_aprox": 0.0,
-    "tx_count_prev_30m": 0.0,
     "burst_30m_flag": 0.0,
-    "minutes_since_prev_tx": 20325.366666666665,
-    "qt_total_pix_trimestre": 98.0,
-    "qt_pix_dia_maximo_trimestre": 7.0,
-    "distinct_receivers_so_far": 1.0,
+    "tx_count_prev_30m": 0.0,
     "first_receiver_flag": 1.0,
-    "is_first_tx_trimestre": 0.0,
-    "hour": 14.0,
     "topaz_risk_score": 0.0,
     "rule_score_raw": 5.0,
+    "qt_tempo_relacionamento_mes": 58.0,
+    "nr_idade": 43.0,
+    "vl_pix": 45.45,
+    "minutes_since_prev_tx": 20325.366666666665,
+    "burst_x_distinct_recv": 0.0,
     "valor_x_burst": 45.5,
     "idade_x_first_recv": 42.0,
-    "valor_x_first_recv": 44.95,
-    "burst_x_distinct_recv": 0.0,
-    "valor_over_trimestre_avg": 0.010606060606060607
+    "log_vl_pix": 3.838
   },
   "best_threshold": 0.9500000000000002,
   "best_params": {
@@ -62,5 +44,8 @@
     "if_very_high_threshold": 0.9994,
     "boost_high": 0.05,
     "boost_very_high": 0.08
+  },
+  "_changelog": {
+    "v3.0.5": "Alinhado features com scaler real (22 → 13). Removidas 9 features ausentes no scaler. Adicionada log_vl_pix (presente no scaler, ausente no config anterior). Ordem das features agora espelha scaler.feature_names_in_."
   }
 }

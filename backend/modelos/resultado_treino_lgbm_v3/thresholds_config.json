@@ -1,0 +1,15 @@
+{
+  "version": "v6.1",
+  "threshold_f1_best": 0.355,
+  "threshold_f1_calibrated": 0.4,
+  "threshold_recall_100": 0.001,
+  "threshold_recall_99": 0.001,
+  "threshold_recall_98": 0.004,
+  "threshold_recall_95": 0.389,
+  "oof_threshold_f1": 0.545,
+  "oof_threshold_recall_99": 0.001,
+  "recommended_production": {
+    "lgbm_threshold": 0.355,
+    "note": "Threshold de melhor F1 no holdout. Engine aplica cascade e vetos em cima."
+  }
+}

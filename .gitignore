@@ -12,3 +12,4 @@ env/
 .DS_Store
 .venv/
 .venv/
+_archive

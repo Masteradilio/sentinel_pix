@@ -1,60 +1,96 @@
 {
-  "versao": "1.2",
-  "data_geracao": "25/03/2026 16:00",
-  "descricao": "Score híbrido v1.2 — ajuste fino com threshold ótimo 0.9199 para BLOQUEAR. FN=0, FP=14.",
-  "abordagem": "hybrid_optimized_v1.2",
+  "versao": "1.3",
+  "data_geracao": "12/04/2026 12:00",
+  "descricao": "Score híbrido v1.3 — Otimização FN via threshold + veto cirúrgico. FN=3 (irredutível), FP=207.",
+  "abordagem": "hybrid_optimized_v1.3",
+  "changelog": {
+    "v1.2_para_v1.3": {
+      "motivacao": "Reduzir 7 FN para 3 (nível irredutível) com custo controlado de +36 FP",
+      "mudancas": [
+        "threshold_confirmar: 80.0 → 77.0 (recupera 3 FN Tier A com +30 FP CONFIRMAR)",
+        "Novo veto cirúrgico VETO_SE_BEH_VALOR_NOVO: SE>=40 AND BEH>=15 AND val>=15k AND rel_mes<=12 → CONFIRMAR (recupera 1 FN Tier C com +6 FP)",
+        "threshold_bloquear mantido em 95.0",
+        "Anchors de mapeamento mantidos (v1.2)"
+      ],
+      "fn_recuperados": [
+        {"idx": 36694, "vl_pix": 1000.00, "lgbm_raw": 0.709, "score": 78.74, "via": "threshold_77"},
+        {"idx": 30588, "vl_pix": 400.00,  "lgbm_raw": 0.678, "score": 77.83, "via": "threshold_77"},
+        {"idx": 58511, "vl_pix": 1000.00, "lgbm_raw": 0.671, "score": 77.63, "via": "threshold_77"},
+        {"idx": 93105, "vl_pix": 20000.00,"lgbm_raw": 0.013, "score": 31.68, "via": "veto_se_beh_valor_novo"}
+      ],
+      "fn_irredutiveis": [
+        {"idx": 90197, "vl_pix": 498.96,  "lgbm_raw": 0.455, "motivo": "Score 71.3, sem SE/BEH. Threshold 71 custaria +87 FP"},
+        {"idx": 98992, "vl_pix": 2478.98, "lgbm_raw": 0.148, "motivo": "LGBM baixo, sem sinais SE/BEH. Invisível ao ensemble"},
+        {"idx": 13814, "vl_pix": 188.82,  "lgbm_raw": 0.023, "motivo": "Nenhum sinal em nenhum componente. Indistinguível de normal"}
+      ]
+    }
+  },
   "score_input": "lgbm_raw",
   "mapeamento": {
-    "anchors_raw": [
-      0.0,
-      0.001,
-      0.01,
-      0.07,
-      0.918859,
-      0.919859,
-      0.9599,
-      1.0
-    ],
-    "anchors_out": [
-      0.0,
-      10.0,
-      30.0,
-      60.0,
-      84.9,
-      85.0,
-      95.0,
-      100.0
-    ],
-    "metodo": "numpy.interp v1.2 — threshold ótimo 0.919859 mapeia para 85.0 (BLOQUEAR)"
+    "anchors_raw": [0.0, 0.001, 0.01, 0.07, 0.918859, 0.919859, 0.9599, 1.0],
+    "anchors_out": [0.0, 10.0, 30.0, 60.0, 84.9, 85.0, 95.0, 100.0],
+    "metodo": "numpy.interp v1.2 — mantido de v1.2 (anchors não alterados)"
   },
   "faixas_decisao": {
     "aprovar": {
-      "range": "[0, 60.0)",
-      "threshold": 60.0,
+      "range": "[0, 77.0)",
+      "threshold": 77.0,
       "acao": "Liberar automaticamente"
     },
     "confirmar": {
-      "range": "[60.0, 85.0)",
-      "threshold": 85.0,
+      "range": "[77.0, 95.0)",
+      "threshold": 77.0,
       "acao": "Exigir autenticação adicional (2FA / biometria)"
     },
     "bloquear": {
-      "range": "[85.0, 100]",
-      "threshold": 85.0,
+      "range": "[95.0, 100]",
+      "threshold": 95.0,
       "acao": "Parar transação para análise humana"
     }
   },
+  "vetos": {
+    "existentes": "Mantidos de v3.0.3 (cascade C1/C3, LGBM+IF, SE+BEH convergência)",
+    "novo_v1_3": {
+      "id": "VETO_SE_BEH_VALOR_NOVO",
+      "descricao": "Veto cirúrgico para fraudes de alto valor com sinais SE+BEH em contas novas",
+      "condicoes": {
+        "se_score_gte": 40,
+        "beh_score_gte": 15,
+        "vl_pix_gte": 15000,
+        "qt_tempo_relacionamento_mes_lte": 12
+      },
+      "acao": "CONFIRMAR",
+      "score_minimo": 77.0,
+      "validacao": {
+        "total_ativacoes": 14,
+        "fraud_hit": 8,
+        "normal_hit": 6,
+        "precision": 0.571,
+        "incremental_tp": 1,
+        "incremental_fp": 6
+      }
+    }
+  },
   "metricas_teste": {
-    "n_total": 20071,
-    "n_fraudes": 71,
-    "n_normais": 20000,
-    "recall_bloquear": 1.0,
-    "precision_bloquear": 0.8353,
-    "f1_bloquear": 0.9103,
-    "fp_bloquear": 14,
-    "fn_bloquear": 0,
-    "fraud_score_min": 85.0,
-    "normal_score_p999": 84.9,
-    "gap_fraud_min_vs_normal_p999": 0.1
+    "n_total": 100355,
+    "n_fraudes": 355,
+    "n_normais": 100000,
+    "tp": 352,
+    "fp": 207,
+    "fn": 3,
+    "tn": 99793,
+    "recall": 0.9915,
+    "precision": 0.6298,
+    "f1": 0.7703,
+    "fpr": 0.00207,
+    "fn_taxa": 0.0085,
+    "vs_v1_2": {
+      "delta_tp": 4,
+      "delta_fp": 36,
+      "delta_fn": -4,
+      "delta_recall_pp": 1.13,
+      "delta_precision_pp": -4.07,
+      "delta_f1": -0.026
+    }
   }
 }

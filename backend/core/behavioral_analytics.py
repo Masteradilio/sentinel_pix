@@ -1,40 +1,68 @@
 """
-core/behavioral_analytics.py v2.1 — Análise Comportamental Real para MVP Fraude PIX
+core/behavioral_analytics.py v3.1 — Recalibrado para Leakage-Free
 
-Mudanças v2.0 → v2.1:
-  1. NOVO fator: BURST_CONTA_COMPROMETIDA — 3+ tx em 30min para recebedores novos
-     (cenário exato dos 18 FN residuais do LGBM: contas antigas com burst súbito)
-  2. NOVO fator: MULTIPLOS_RECEBEDORES_BURST — burst + 3+ recebedores distintos
-     (usa distinct_receivers_so_far do pipeline)
-  3. FIX: is_agendamento_recorrente agora usa flag int do orquestrador
-     (antes comparava string "true", atenuante nunca ativava)
-  4. NOVO fator: VALOR_CONCENTRADO_TRIMESTRE — valor_over_trimestre_avg alto
-     (feature do IF v4, indica concentração anormal de valor)
-  5. AJUSTE: RENDA_INCOMPATIVEL combinado com ratio_valor_mediana
-     (contexto mais rico para o fator)
-  6. Total de fatores: 12 → 15
+Evolução v3.0 → v3.1 baseada na validação com dataset leakage-free
+(base_mvp_model_ready_leakage_free.csv, 100.355 tx, rolling window causal).
 
-Fatores v2.1:
-─────────────────────────────────────────────────────────
-#   Código                          Source       Score
-1   DEVICE_NOVO                     device       +25
-2   DEVICE_NOVO_IDOSO               device       +20
-3   DEVICE_NOVO_PREMIUM             device       +15
-4   LOGIN_SENHA_ALTO_VALOR          session      +10
-5   LOGIN_SENHA_IDOSO               session      +15
-6   LOGIN_METODO_DIFERENTE          session      +15
-7   SESSAO_RAPIDA_ALTO_VALOR        session      +15
-8   TEMPO_INTERACAO_ANORMAL         behavioral   +15
-9   FREQUENCIA_BURST                behavioral   +20
-10  PERFIL_VULNERAVEL_SE            profile      +20
-11  RENDA_INCOMPATIVEL              value        +25
-12  PRIMEIRO_PIX_CLIENTE_NOVO       profile      +30
-13  BURST_CONTA_COMPROMETIDA        behavioral   +25  ← NOVO
-14  MULTIPLOS_RECEBEDORES_BURST     behavioral   +20  ← NOVO
-15  VALOR_CONCENTRADO_TRIMESTRE     value        +15  ← NOVO
-─────────────────────────────────────────────────────────
-Atenuante: AGENDAMENTO_RECORRENTE   session      -10
-Máximo teórico: ~285 (capped em 100)
+Problema identificado:
+  No v3.0, os fatores dormancy usavam gates calibrados no dataset "optimized"
+  que tinha data leakage temporal (qt_total_pix_trimestre calculado com visão
+  completa do trimestre). No dataset leakage-free (rolling window causal):
+  - 97.7% dos normais têm qt_total_pix_trimestre ≤ 2 → gate inútil
+  - is_first_tx_trimestre Lift 0.568x → ANTI-INDICADOR
+  - FP explodiu: 1.797 → 7.544 (+5.747)
+  - PERFIL_VULNERAVEL_SE: TP=5, FP=11.787, Prec=0.04%
+
+Mudanças v3.0 → v3.1:
+  ─────────────────────────────────────────────────────────────────────────
+  REMOVIDOS (2 fatores — mortos no leakage-free):
+    ✗ PRIMEIRA_TX_VALOR_ALTO    is_first_tx_trimestre Lift 0.568x (anti-indicador)
+    ✗ PERFIL_VULNERAVEL_SE      TP=5, FP=11.787, Prec=0.04% (lixo puro)
+
+  RECALIBRADOS (2 fatores — gates ajustados para leakage-free):
+    ⟳ CONTA_DORMANTE_VALOR_ALTO  Gate: qt_pix ≤ 2 & vl ≥ 1000
+                                   → qt_pix == 0 & vl ≥ 5000
+                                 LF: TP=58, FP=738, Prec=7.3%, Lift=22.1x
+                                 Score: 20 → 15 (precision caiu)
+
+    ⟳ CONTA_DORMANTE_IDOSO       Gate: qt_pix ≤ 2 & idade ≥ 60 & vl ≥ 500
+                                   → idade ≥ 65 & vl ≥ 2000 (SEM gate dormancy)
+                                 Renomeado: IDOSO_VALOR_ALTO
+                                 LF: TP=101, FP=304, Prec=24.9%, Lift=93.6x
+                                 Score: 25 → 20
+
+  NOVOS (1 fator — descoberto na exploração B2-LF):
+    ★ IDOSO_VALOR_CRITICO        idade ≥ 70 & vl ≥ 5000
+                                 LF: TP=45, FP=65, Prec=40.9%, Lift=195.0x
+                                 Score: +10 (boost sobre IDOSO_VALOR_ALTO)
+
+  MANTIDOS (3 fatores — velocity intactos, Lift > 100x):
+    ✓ FREQUENCIA_BURST           Prec 97.4%, TP=75,  FP=2   (idêntico)
+    ✓ BURST_CONTA_COMPROMETIDA   Prec 80.0%, TP=8,   FP=2   (idêntico)
+    ✓ MULTIPLOS_RECEBEDORES_BURST Prec 35.9%, TP=28, FP=50  (idêntico)
+
+  ─────────────────────────────────────────────────────────────────────────
+  Fatores v3.1 (6 total):
+  #   Código                          Source       Score  Prec(LF)   Origem
+  1   FREQUENCIA_BURST                velocity     +25    97.4%      B1
+  2   BURST_CONTA_COMPROMETIDA        velocity     +20    80.0%      B1
+  3   MULTIPLOS_RECEBEDORES_BURST     velocity     +20    35.9%      B1
+  4   CONTA_DORMANTE_VALOR_EXTREMO    dormancy     +15     7.3%      B2-LF ⟳
+  5   IDOSO_VALOR_ALTO                age+value    +20    24.9%      B2-LF ⟳
+  6   IDOSO_VALOR_CRITICO             age+value    +10    40.9%      B2-LF ★
+  ─────────────────────────────────────────────────────────────────────────
+  Nota: Fator 6 é boost condicional sobre fator 5 (co-ativam).
+  Um idoso de 72 anos com PIX de R$8.000 recebe:
+    IDOSO_VALOR_ALTO (+20) + IDOSO_VALOR_CRITICO (+10) = 30 pontos
+
+  Atenuante: AGENDAMENTO_RECORRENTE   session      -10
+  Máximo teórico: 25+20+20+15+20+10 = 110 (capped em 100)
+
+  Impacto estimado v3.0(LF) → v3.1(LF):
+    FP (score > 0):     7.544  →  ~1.100  (redução ~85%)
+    Precision (score>0): 3.76% →  ~15%    (melhoria ~4x)
+    Recall (score>0):   83.1%  →  ~50%    (tradeoff aceitável)
+    FPR:                7.54%  →  ~1.1%   (redução ~85%)
 """
 
 from __future__ import annotations
@@ -44,7 +72,8 @@ import logging
 from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any
+
 
 logger = logging.getLogger(__name__)
 
@@ -55,43 +84,49 @@ logger = logging.getLogger(__name__)
 @dataclass
 class BehavioralRiskFactor:
     """Um fator de risco comportamental detectado em tempo real."""
+
     codigo: str
     descricao: str
     peso: int          # 1-5 (severidade)
     score_add: float   # pontos adicionados ao behavioral_score
-    source: str        # "device", "session", "profile", "behavioral", "value"
+    source: str        # "velocity", "dormancy", "age_value"
+    precision: float   # precision empírica validada (leakage-free)
+    origin: str        # "B1", "B2", "B2-LF"
 
 
 @dataclass
 class DeviceInfo:
-    """Informações do dispositivo inferidas dos dados da transação."""
+    """Informações do dispositivo (mantido para compatibilidade da API)."""
+
     device_id: str
     device_model: str
-    device_type: str            # "Android", "iOS", "Desconhecido"
-    app_version: Optional[str]
-    is_known: bool              # Se já foi visto para este CPF
-    first_seen: Optional[datetime] = None
-    last_seen: Optional[datetime] = None
+    device_type: str
+    app_version: str | None
+    is_known: bool
+    first_seen: datetime | None = None
+    last_seen: datetime | None = None
 
 
 @dataclass
 class SessionMetrics:
     """Métricas da sessão extraídas das features do pipeline."""
-    tempo_interacao_ms: Optional[float]
-    latencia_rede_ms: Optional[float]
-    metodo_login: str                       # "biometria", "senha", "pin", "desconhecido"
+
+    tempo_interacao_ms: float | None
+    latencia_rede_ms: float | None
+    metodo_login: str
     is_agendamento_recorrente: bool
-    duration_estimate_seconds: Optional[int]
+    duration_estimate_seconds: int | None
 
 
 @dataclass
 class BehavioralAnalysisResult:
     """Resultado completo da análise comportamental."""
-    behavioral_score: float                                 # 0-100
-    risk_factors: List[BehavioralRiskFactor] = field(default_factory=list)
-    device_info: Optional[DeviceInfo] = None
-    session_metrics: Optional[SessionMetrics] = None
-    fatores_atenuantes: List[str] = field(default_factory=list)
+
+    behavioral_score: float = 0.0
+    risk_factors: list[BehavioralRiskFactor] = field(default_factory=list)
+    device_info: DeviceInfo | None = None
+    session_metrics: SessionMetrics | None = None
+    fatores_atenuantes: list[str] = field(default_factory=list)
 
     @property
     def risk_level(self) -> str:
@@ -107,7 +142,7 @@ class BehavioralAnalysisResult:
     def total_fatores(self) -> int:
         return len(self.risk_factors)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Serializa para dict (usado pelo orquestrador/API)."""
         return {
             "behavioral_score": round(self.behavioral_score, 2),
@@ -120,6 +155,8 @@ class BehavioralAnalysisResult:
                     "peso": rf.peso,
                     "score_add": rf.score_add,
                     "source": rf.source,
+                    "precision": rf.precision,
+                    "origin": rf.origin,
                 }
                 for rf in self.risk_factors
             ],
@@ -135,23 +172,32 @@ class BehavioralAnalysisResult:
                 "tempo_interacao_ms": self.session_metrics.tempo_interacao_ms,
                 "latencia_rede_ms": self.session_metrics.latencia_rede_ms,
                 "metodo_login": self.session_metrics.metodo_login,
-                "is_agendamento_recorrente": self.session_metrics.is_agendamento_recorrente,
-                "duration_estimate_seconds": self.session_metrics.duration_estimate_seconds,
+                "is_agendamento_recorrente": (
+                    self.session_metrics.is_agendamento_recorrente
+                ),
+                "duration_estimate_seconds": (
+                    self.session_metrics.duration_estimate_seconds
+                ),
             } if self.session_metrics else None,
         }
 
-    def to_features(self) -> Dict[str, float]:
-        """Exporta features numéricas para alimentar o score final do orquestrador."""
+    def to_features(self) -> dict[str, float]:
+        """Exporta features numéricas para alimentar o score final."""
         return {
             "behavioral_score": round(self.behavioral_score, 2),
             "behavioral_risk_factor_count": float(self.total_fatores),
-            "behavioral_device_is_known": float(self.device_info.is_known) if self.device_info else 0.0,
-            "behavioral_login_senha_flag": float(
-                self.session_metrics.metodo_login == "senha"
-            ) if self.session_metrics else 0.0,
-            "behavioral_agendamento_recorrente_flag": float(
-                self.session_metrics.is_agendamento_recorrente
-            ) if self.session_metrics else 0.0,
+            "behavioral_has_velocity_factor": float(
+                any(rf.source == "velocity" for rf in self.risk_factors)
+            ),
+            "behavioral_has_dormancy_factor": float(
+                any(rf.source == "dormancy" for rf in self.risk_factors)
+            ),
+            "behavioral_has_age_value_factor": float(
+                any(rf.source == "age_value" for rf in self.risk_factors)
+            ),
+            "behavioral_max_precision": float(
+                max((rf.precision for rf in self.risk_factors), default=0.0)
+            ),
         }
 
 
@@ -166,13 +212,18 @@ class _InlineProfileManager:
     Em produção, substituir por Redis/DynamoDB.
     """
 
-    def __init__(self, max_tx_history: int = 50, max_profiles: int = 100_000):
-        self._profiles: Dict[str, Dict[str, Any]] = {}
-        self._tx_history: Dict[str, List[datetime]] = defaultdict(list)
+    def __init__(
+        self,
+        max_tx_history: int = 50,
+        max_profiles: int = 100_000,
+    ) -> None:
+        self._profiles: dict[str, dict[str, Any]] = {}
+        self._tx_history: dict[str, list[datetime]] = defaultdict(list)
         self._max_tx_history = max_tx_history
         self._max_profiles = max_profiles
 
-    def get_or_create(self, cpf: str) -> Dict[str, Any]:
+    def get_or_create(self, cpf: str) -> dict[str, Any]:
+        """Retorna ou cria profile para o CPF."""
         if cpf not in self._profiles:
             if len(self._profiles) >= self._max_profiles:
                 oldest_cpf = next(iter(self._profiles))
@@ -188,29 +239,27 @@ class _InlineProfileManager:
         return self._profiles[cpf]
 
     def is_device_known(self, cpf: str, device_id: str) -> bool:
+        """Verifica se device já foi visto para este CPF."""
         profile = self.get_or_create(cpf)
         return device_id in profile["devices_conhecidos"]
 
     def register_device(self, cpf: str, device_id: str) -> None:
+        """Registra device no histórico do CPF."""
         profile = self.get_or_create(cpf)
         profile["devices_conhecidos"].add(device_id)
 
-    def is_metodo_login_diferente(self, cpf: str, metodo_atual: str) -> bool:
-        profile = self.get_or_create(cpf)
-        principal = profile["metodo_login_principal"]
-        if principal == "desconhecido" or profile["total_tx"] < 3:
-            return False
-        return metodo_atual != principal
-
     def register_login(self, cpf: str, metodo: str) -> None:
+        """Registra método de login no profile."""
         profile = self.get_or_create(cpf)
         profile["login_counts"][metodo] += 1
         if profile["login_counts"]:
             profile["metodo_login_principal"] = max(
-                profile["login_counts"], key=profile["login_counts"].get
+                profile["login_counts"],
+                key=profile["login_counts"].get,  # type: ignore[arg-type]
             )
 
     def register_tx(self, cpf: str, dt: datetime) -> None:
+        """Registra transação no histórico temporal."""
         profile = self.get_or_create(cpf)
         profile["total_tx"] += 1
         history = self._tx_history[cpf]
@@ -218,30 +267,39 @@ class _InlineProfileManager:
         if len(history) > self._max_tx_history:
             self._tx_history[cpf] = history[-self._max_tx_history:]
 
-    def count_recent_tx(self, cpf: str, dt: datetime, window_minutes: int = 5) -> int:
-        cutoff = dt - timedelta(minutes=window_minutes)
-        return sum(1 for t in self._tx_history.get(cpf, []) if t >= cutoff)
-
 
 # =========================================================
-# BEHAVIORAL ANALYTICS ENGINE
+# BEHAVIORAL ANALYTICS ENGINE v3.1
 # =========================================================
 class BehavioralAnalytics:
     """
-    Motor de análise comportamental em tempo real v2.1.
+    Motor de análise comportamental v3.1 — Leakage-Free Validated.
 
-    15 fatores de risco viáveis com dados reais disponíveis.
+    6 fatores de risco, todos validados com dados causalmente corretos
+    (rolling window, sem data leakage temporal).
+
+    Categorias:
+      - velocity  (3): padrões de burst/frequência (Tier 1, B1)
+      - dormancy  (1): conta dormante + valor extremo (Tier 2, B2-LF recalibrado)
+      - age_value (2): idoso + valor alto (Tier 2, B2-LF novo)
     """
 
-    def __init__(self):
+    VERSION = "3.1"
+
+    def __init__(self) -> None:
         self._profile_mgr = _InlineProfileManager()
-        self._device_history: Dict[str, DeviceInfo] = {}
-        logger.info("BehavioralAnalytics v2.1 inicializado (15 fatores, sem mock)")
+        self._device_history: dict[str, DeviceInfo] = {}
+        logger.info(
+            "BehavioralAnalytics v%s inicializado "
+            "(6 fatores leakage-free validated: "
+            "3 velocity + 1 dormancy + 2 age_value)",
+            self.VERSION,
+        )
 
     # ---------------------------------------------------------
     # PUBLIC API
     # ---------------------------------------------------------
-    def analyze(self, features: Dict[str, Any]) -> BehavioralAnalysisResult:
+    def analyze(self, features: dict[str, Any]) -> BehavioralAnalysisResult:
         """
         Analisa comportamento da transação em tempo real.
 
@@ -251,234 +309,200 @@ class BehavioralAnalytics:
         Returns:
             BehavioralAnalysisResult com score 0-100 e fatores de risco.
         """
-        cpf = str(features.get("cd_cpf_pagador") or features.get("customer_id") or "")
+        cpf = str(
+            features.get("cd_cpf_pagador")
+            or features.get("customer_id")
+            or ""
+        )
         now = datetime.utcnow()
 
         # --- Extrair dados ---
         device_info = self._build_device_info(cpf, features, now)
         session_metrics = self._build_session_metrics(features)
-        extracted = self._extract_features(features)
+        ext = self._extract_features(features)
 
         # --- Avaliar fatores de risco ---
-        risk_factors: List[BehavioralRiskFactor] = []
-        atenuantes: List[str] = []
+        risk_factors: list[BehavioralRiskFactor] = []
+        atenuantes: list[str] = []
         score = 0.0
 
-        # 1. DEVICE_NOVO
-        if not device_info.is_known:
-            rf = BehavioralRiskFactor(
-                codigo="DEVICE_NOVO",
-                descricao=f"Primeiro acesso deste dispositivo ({device_info.device_model})",
-                peso=3, score_add=25, source="device",
-            )
-            risk_factors.append(rf)
-            score += rf.score_add
+        # ─────────────────────────────────────────────────────
+        # TIER 1 — VELOCITY (B1, intactos — à prova de leakage)
+        # ─────────────────────────────────────────────────────
 
-        # 2. DEVICE_NOVO_IDOSO (combinação)
-        if not device_info.is_known and extracted["nr_idade"] >= 65:
-            rf = BehavioralRiskFactor(
-                codigo="DEVICE_NOVO_IDOSO",
-                descricao=f"Cliente idoso ({extracted['nr_idade']} anos) em dispositivo novo — alto risco de engenharia social",
-                peso=4, score_add=20, source="device",
-            )
-            risk_factors.append(rf)
-            score += rf.score_add
-
-        # 3. DEVICE_NOVO_PREMIUM (combinação)
-        if not device_info.is_known and extracted["is_segmento_premium"]:
-            rf = BehavioralRiskFactor(
-                codigo="DEVICE_NOVO_PREMIUM",
-                descricao="Cliente de segmento premium acessando de dispositivo desconhecido",
-                peso=3, score_add=15, source="device",
-            )
-            risk_factors.append(rf)
-            score += rf.score_add
-
-        # 4. LOGIN_SENHA_ALTO_VALOR
-        if session_metrics.metodo_login == "senha" and extracted["vl_pix"] >= 1000:
-            rf = BehavioralRiskFactor(
-                codigo="LOGIN_SENHA_ALTO_VALOR",
-                descricao=f"Login por senha (não biometria) em PIX de R${extracted['vl_pix']:,.2f}",
-                peso=2, score_add=10, source="session",
-            )
-            risk_factors.append(rf)
-            score += rf.score_add
-
-        # 5. LOGIN_SENHA_IDOSO
-        if session_metrics.metodo_login == "senha" and extracted["nr_idade"] >= 60:
-            rf = BehavioralRiskFactor(
-                codigo="LOGIN_SENHA_IDOSO",
-                descricao=f"Idoso ({extracted['nr_idade']} anos) autenticando por senha — possível coação",
-                peso=3, score_add=15, source="session",
-            )
-            risk_factors.append(rf)
-            score += rf.score_add
-
-        # 6. LOGIN_METODO_DIFERENTE
-        if self._profile_mgr.is_metodo_login_diferente(cpf, session_metrics.metodo_login):
-            rf = BehavioralRiskFactor(
-                codigo="LOGIN_METODO_DIFERENTE",
-                descricao=f"Método de login mudou para '{session_metrics.metodo_login}' (diferente do habitual)",
-                peso=2, score_add=15, source="session",
-            )
-            risk_factors.append(rf)
-            score += rf.score_add
-
-        # 7. SESSAO_RAPIDA_ALTO_VALOR
-        if (
-            session_metrics.tempo_interacao_ms is not None
-            and session_metrics.tempo_interacao_ms < 30_000
-            and extracted["vl_pix"] >= 1000
-        ):
-            tempo_s = session_metrics.tempo_interacao_ms / 1000
-            rf = BehavioralRiskFactor(
-                codigo="SESSAO_RAPIDA_ALTO_VALOR",
-                descricao=f"Interação muito rápida ({tempo_s:.1f}s) para PIX de R${extracted['vl_pix']:,.2f}",
-                peso=3, score_add=15, source="session",
-            )
-            risk_factors.append(rf)
-            score += rf.score_add
-
-        # 8. TEMPO_INTERACAO_ANORMAL
-        ratio_tempo = extracted["ratio_tempo_interacao"]
-        if ratio_tempo is not None:
-            if ratio_tempo < 0.3:
-                rf = BehavioralRiskFactor(
-                    codigo="TEMPO_INTERACAO_ANORMAL",
-                    descricao=f"Interação {ratio_tempo:.1%} do tempo médio — possível automação",
-                    peso=3, score_add=15, source="behavioral",
-                )
-                risk_factors.append(rf)
-                score += rf.score_add
-            elif ratio_tempo > 3.0:
-                rf = BehavioralRiskFactor(
-                    codigo="TEMPO_INTERACAO_ANORMAL",
-                    descricao=f"Interação {ratio_tempo:.1f}x o tempo médio — possível hesitação/coação",
-                    peso=2, score_add=15, source="behavioral",
-                )
-                risk_factors.append(rf)
-                score += rf.score_add
-
-        # 9. FREQUENCIA_BURST
-        burst_flag = extracted["burst_30m_flag"]
-        tx_count_30m = extracted["tx_count_prev_30m"]
-        if burst_flag and tx_count_30m >= 2:
+        # 1. FREQUENCIA_BURST
+        #    Condição: burst_30m_flag=1 AND tx_count_prev_30m >= 2
+        #    LF: Prec 97.4%, TP=75, FP=2, Lift 10.563x
+        if ext["burst_30m_flag"] and ext["tx_count_prev_30m"] >= 2:
             rf = BehavioralRiskFactor(
                 codigo="FREQUENCIA_BURST",
-                descricao=f"{tx_count_30m + 1} transações em 30 minutos — padrão de burst",
-                peso=3, score_add=20, source="behavioral",
-            )
-            risk_factors.append(rf)
-            score += rf.score_add
-
-        # 10. PERFIL_VULNERAVEL_SE
-        if extracted["perfil_vulneravel_se"]:
-            rf = BehavioralRiskFactor(
-                codigo="PERFIL_VULNERAVEL_SE",
-                descricao=f"Perfil de alta vulnerabilidade: viúvo(a), {extracted['nr_idade']} anos, sem dependentes",
-                peso=4, score_add=20, source="profile",
-            )
-            risk_factors.append(rf)
-            score += rf.score_add
-
-        # 11. RENDA_INCOMPATIVEL
-        if extracted["pix_over_100pct_renda"]:
-            ratio_renda = extracted["ratio_pix_renda"]
-            ratio_mediana = extracted["ratio_valor_mediana"]
-            desc_extra = ""
-            if ratio_mediana is not None and ratio_mediana >= 3.0:
-                desc_extra = f" + {ratio_mediana:.1f}x acima da mediana pessoal"
-            rf = BehavioralRiskFactor(
-                codigo="RENDA_INCOMPATIVEL",
                 descricao=(
-                    f"PIX de R${extracted['vl_pix']:,.2f} = "
-                    f"{ratio_renda:.0%} da renda mensal (R${extracted['vl_renda']:,.2f})"
-                    f"{desc_extra}"
+                    f"{ext['tx_count_prev_30m'] + 1} transações em 30 minutos "
+                    f"(PIX de R${ext['vl_pix']:,.2f}) — padrão de burst confirmado"
                 ),
-                peso=4, score_add=25, source="value",
+                peso=5,
+                score_add=25,
+                source="velocity",
+                precision=0.974,
+                origin="B1",
             )
             risk_factors.append(rf)
             score += rf.score_add
 
-        # 12. PRIMEIRO_PIX_CLIENTE_NOVO
+        # 2. BURST_CONTA_COMPROMETIDA
+        #    Condição: conta >= 12m + tx_count >= 2 + first_receiver + valor >= 500
+        #    LF: Prec 80.0%, TP=8, FP=2, Lift 1.127x
         if (
-            extracted["qt_tempo_relacionamento_mes"] < 3
-            and extracted["first_receiver_flag"]
-            and extracted["vl_pix"] >= 1000
-        ):
-            rf = BehavioralRiskFactor(
-                codigo="PRIMEIRO_PIX_CLIENTE_NOVO",
-                descricao=(
-                    f"Cliente novo ({extracted['qt_tempo_relacionamento_mes']} meses), "
-                    f"primeiro envio ao destinatário, PIX de R${extracted['vl_pix']:,.2f}"
-                ),
-                peso=5, score_add=30, source="profile",
-            )
-            risk_factors.append(rf)
-            score += rf.score_add
-
-        # ─── NOVOS FATORES v2.1 ─────────────────────────────
-
-        # 13. BURST_CONTA_COMPROMETIDA
-        # Cenário exato dos 18 FN: conta antiga (> 12 meses) com burst súbito
-        # para recebedor novo — padrão de conta comprometida por engenharia social
-        if (
-            extracted["qt_tempo_relacionamento_mes"] >= 12
-            and tx_count_30m >= 2
-            and extracted["first_receiver_flag"]
-            and extracted["vl_pix"] >= 500
+            ext["qt_tempo_relacionamento_mes"] >= 12
+            and ext["tx_count_prev_30m"] >= 2
+            and ext["first_receiver_flag"]
+            and ext["vl_pix"] >= 500
         ):
             rf = BehavioralRiskFactor(
                 codigo="BURST_CONTA_COMPROMETIDA",
                 descricao=(
-                    f"Conta antiga ({extracted['qt_tempo_relacionamento_mes']} meses) "
-                    f"com burst súbito ({tx_count_30m + 1} tx em 30min) "
-                    f"para recebedor novo — possível conta comprometida"
+                    f"Conta antiga ({ext['qt_tempo_relacionamento_mes']} meses) "
+                    f"com burst ({ext['tx_count_prev_30m'] + 1} tx em 30min) "
+                    f"para recebedor novo — R${ext['vl_pix']:,.2f}"
                 ),
-                peso=4, score_add=25, source="behavioral",
+                peso=4,
+                score_add=20,
+                source="velocity",
+                precision=0.80,
+                origin="B1",
             )
             risk_factors.append(rf)
             score += rf.score_add
 
-        # 14. MULTIPLOS_RECEBEDORES_BURST
-        # Burst + múltiplos recebedores distintos = esvaziamento com pulverização
-        distinct_receivers = extracted["distinct_receivers_so_far"]
-        if burst_flag and distinct_receivers >= 3:
+        # 3. MULTIPLOS_RECEBEDORES_BURST
+        #    Condição: burst_30m_flag + distinct_receivers >= 3
+        #    LF: Prec 35.9%, TP=28, FP=50, Lift 158x
+        if ext["burst_30m_flag"] and ext["distinct_receivers_so_far"] >= 3:
             rf = BehavioralRiskFactor(
                 codigo="MULTIPLOS_RECEBEDORES_BURST",
                 descricao=(
-                    f"Burst com {distinct_receivers} recebedores distintos — "
-                    f"padrão de esvaziamento pulverizado"
+                    f"Burst com {ext['distinct_receivers_so_far']} recebedores "
+                    f"distintos — esvaziamento pulverizado"
                 ),
-                peso=4, score_add=20, source="behavioral",
+                peso=4,
+                score_add=20,
+                source="velocity",
+                precision=0.359,
+                origin="B1",
             )
             risk_factors.append(rf)
             score += rf.score_add
 
-        # 15. VALOR_CONCENTRADO_TRIMESTRE
-        # valor_over_trimestre_avg alto indica que esta tx concentra
-        # uma fração desproporcional do volume do trimestre
-        valor_over_avg = extracted["valor_over_trimestre_avg"]
-        if valor_over_avg is not None and valor_over_avg >= 0.10:
-            # Esta tx sozinha representa >= 10% do volume total do trimestre
+        # ─────────────────────────────────────────────────────
+        # TIER 2 — DORMANCY (recalibrado para leakage-free)
+        # ─────────────────────────────────────────────────────
+
+        # 4. CONTA_DORMANTE_VALOR_EXTREMO
+        #    Condição: qt_total_pix_trimestre == 0 AND vl_pix >= 5000
+        #    LF: TP=58, FP=738, Prec=7.3%, Lift=22.1x
+        #    Mudança v3.0→v3.1: gate restrito (qt_pix==0, vl>=5000)
+        #    Semântica: conta sem NENHUMA tx no trimestre que faz PIX >= R$5k
+        #    Score reduzido para 15 (precision caiu vs v3.0)
+        if ext["qt_total_pix_trimestre"] == 0 and ext["vl_pix"] >= 5000:
             rf = BehavioralRiskFactor(
-                codigo="VALOR_CONCENTRADO_TRIMESTRE",
+                codigo="CONTA_DORMANTE_VALOR_EXTREMO",
                 descricao=(
-                    f"Transação concentra {valor_over_avg:.1%} do volume total do trimestre "
-                    f"— concentração anormal de valor"
+                    f"Conta sem transações no trimestre fazendo PIX de "
+                    f"R${ext['vl_pix']:,.2f} — padrão de conta dormante comprometida"
                 ),
-                peso=3, score_add=15, source="value",
+                peso=3,
+                score_add=15,
+                source="dormancy",
+                precision=0.073,
+                origin="B2-LF",
             )
             risk_factors.append(rf)
             score += rf.score_add
 
-        # --- Atenuante: AGENDAMENTO_RECORRENTE ---
-        # FIX v2.1: usa flag int do orquestrador (não string)
+        # ─────────────────────────────────────────────────────
+        # TIER 2 — AGE + VALUE (novo no B2-LF)
+        # ─────────────────────────────────────────────────────
+
+        # 5. IDOSO_VALOR_ALTO
+        #    Condição: nr_idade >= 65 AND vl_pix >= 2000
+        #    LF: TP=101, FP=304, Prec=24.9%, Lift=93.6x, F1=0.266
+        #    Insight: funciona MELHOR sem gate de dormancy — idosos fraudados
+        #    são alvo independente de atividade da conta
+        #    Substitui CONTA_DORMANTE_IDOSO do v3.0
+        if ext["nr_idade"] >= 65 and ext["vl_pix"] >= 2000:
+            rf = BehavioralRiskFactor(
+                codigo="IDOSO_VALOR_ALTO",
+                descricao=(
+                    f"Idoso ({ext['nr_idade']} anos) com PIX de "
+                    f"R${ext['vl_pix']:,.2f} — alto risco de engenharia social"
+                ),
+                peso=4,
+                score_add=20,
+                source="age_value",
+                precision=0.249,
+                origin="B2-LF",
+            )
+            risk_factors.append(rf)
+            score += rf.score_add
+
+        # 6. IDOSO_VALOR_CRITICO (boost condicional)
+        #    Condição: nr_idade >= 70 AND vl_pix >= 5000
+        #    LF: TP=45, FP=65, Prec=40.9%, Lift=195.0x
+        #    Semântica: boost adicional — idoso 70+ com valor muito alto
+        #    Co-ativa com IDOSO_VALOR_ALTO (score aditivo)
+        #    Idoso de 72 com R$8k recebe: 20 (fator 5) + 10 (fator 6) = 30
+        if ext["nr_idade"] >= 70 and ext["vl_pix"] >= 5000:
+            rf = BehavioralRiskFactor(
+                codigo="IDOSO_VALOR_CRITICO",
+                descricao=(
+                    f"Idoso 70+ ({ext['nr_idade']} anos) com PIX crítico "
+                    f"R${ext['vl_pix']:,.2f} — risco máximo de engenharia social"
+                ),
+                peso=5,
+                score_add=10,
+                source="age_value",
+                precision=0.409,
+                origin="B2-LF",
+            )
+            risk_factors.append(rf)
+            score += rf.score_add
+
+        # ─────────────────────────────────────────────────────
+        # ATENUANTE
+        # ─────────────────────────────────────────────────────
+
         if session_metrics.is_agendamento_recorrente:
-            atenuantes.append("AGENDAMENTO_RECORRENTE: PIX recorrente agendado — risco atenuado")
+            atenuantes.append(
+                "AGENDAMENTO_RECORRENTE: PIX recorrente agendado — risco atenuado"
+            )
             score = max(0.0, score - 10)
 
         # --- Registrar no profile manager ---
+        self._register_transaction(cpf, features, device_info, session_metrics, now)
+
+        # --- Normalizar score ---
+        score = min(100.0, max(0.0, score))
+
+        return BehavioralAnalysisResult(
+            behavioral_score=score,
+            risk_factors=risk_factors,
+            device_info=device_info,
+            session_metrics=session_metrics,
+            fatores_atenuantes=atenuantes,
+        )
+
+    # ---------------------------------------------------------
+    # PRIVATE: Registrar transação no profile manager
+    # ---------------------------------------------------------
+    def _register_transaction(
+        self,
+        cpf: str,
+        features: dict[str, Any],
+        device_info: DeviceInfo,
+        session_metrics: SessionMetrics,
+        now: datetime,
+    ) -> None:
+        """Registra device, login e timestamp no profile manager."""
         self._profile_mgr.register_device(cpf, device_info.device_id)
         self._profile_mgr.register_login(cpf, session_metrics.metodo_login)
         try:
@@ -493,24 +517,21 @@ class BehavioralAnalytics:
         except Exception:
             self._profile_mgr.register_tx(cpf, now)
 
-        # --- Normalizar score ---
-        score = min(100.0, max(0.0, score))
-
-        return BehavioralAnalysisResult(
-            behavioral_score=score,
-            risk_factors=risk_factors,
-            device_info=device_info,
-            session_metrics=session_metrics,
-            fatores_atenuantes=atenuantes,
-        )
-
     # ---------------------------------------------------------
     # PRIVATE: Build device info
     # ---------------------------------------------------------
     def _build_device_info(
-        self, cpf: str, features: Dict[str, Any], now: datetime
+        self,
+        cpf: str,
+        features: dict[str, Any],
+        now: datetime,
     ) -> DeviceInfo:
-        device_name = features.get("device_name") or features.get("device_name_normalized") or ""
+        """Constrói DeviceInfo a partir das features (mantido para API)."""
+        device_name = (
+            features.get("device_name")
+            or features.get("device_name_normalized")
+            or ""
+        )
         app_version = features.get("app_version")
         device_model = str(device_name).strip() if device_name else "Desconhecido"
         device_type = self._infer_device_type(device_model)
@@ -549,27 +570,39 @@ class BehavioralAnalytics:
     # ---------------------------------------------------------
     # PRIVATE: Build session metrics
     # ---------------------------------------------------------
-    def _build_session_metrics(self, features: Dict[str, Any]) -> SessionMetrics:
-        tempo_raw = features.get("tempo_interacao_ms") or features.get("tempo_interacao_ms_final")
+    def _build_session_metrics(
+        self,
+        features: dict[str, Any],
+    ) -> SessionMetrics:
+        """Constrói SessionMetrics a partir das features."""
+        tempo_raw = (
+            features.get("tempo_interacao_ms")
+            or features.get("tempo_interacao_ms_final")
+        )
         tempo_ms = self._safe_float(tempo_raw)
 
-        latencia_raw = features.get("latencia_rede_ms") or features.get("latencia_rede_ms_final")
+        latencia_raw = (
+            features.get("latencia_rede_ms")
+            or features.get("latencia_rede_ms_final")
+        )
         latencia_ms = self._safe_float(latencia_raw)
 
         metodo_raw = features.get("metodo_autenticacao")
         metodo = self._normalize_login_method(metodo_raw)
 
-        # FIX v2.1: verifica TANTO a flag int quanto a string
+        # Agendamento recorrente: verifica flag int e fallback string
         is_recorrente_raw = features.get("is_agendamento_recorrente_flag")
         if is_recorrente_raw is not None:
-            # Flag int do orquestrador v1.1
             is_recorrente = bool(self._safe_int(is_recorrente_raw, 0))
         else:
-            # Fallback: string legada
             is_recorrente_str = features.get("is_agendamento_recorrente", "")
-            is_recorrente = str(is_recorrente_str).strip().lower() in ("true", "1", "sim")
+            is_recorrente = str(is_recorrente_str).strip().lower() in (
+                "true", "1", "sim",
+            )
 
-        duration_s = int(tempo_ms / 1000) if tempo_ms and tempo_ms > 0 else None
+        duration_s = (
+            int(tempo_ms / 1000) if tempo_ms and tempo_ms > 0 else None
+        )
 
         return SessionMetrics(
             tempo_interacao_ms=tempo_ms,
@@ -580,46 +613,40 @@ class BehavioralAnalytics:
         )
 
     # ---------------------------------------------------------
-    # PRIVATE: Extract features from pipeline dict
+    # PRIVATE: Extract features
     # ---------------------------------------------------------
-    def _extract_features(self, features: Dict[str, Any]) -> Dict[str, Any]:
+    def _extract_features(self, features: dict[str, Any]) -> dict[str, Any]:
         """Extrai e normaliza features relevantes do dict do pipeline."""
         return {
+            # Valor da transação
             "vl_pix": self._safe_float(features.get("vl_pix"), 0.0),
+
+            # Dados do cliente
             "nr_idade": self._safe_int(features.get("nr_idade"), 0),
             "qt_tempo_relacionamento_mes": self._safe_int(
-                features.get("qt_tempo_relacionamento_mes"), 999
+                features.get("qt_tempo_relacionamento_mes"), 999,
             ),
-            "is_segmento_premium": bool(
-                self._safe_int(features.get("is_segmento_premium_flag"), 0)
+
+            # Velocity / Burst
+            "burst_30m_flag": bool(
+                self._safe_int(features.get("burst_30m_flag"), 0),
             ),
-            "is_viuvo": bool(self._safe_int(features.get("is_viuvo_flag"), 0)),
-            "perfil_vulneravel_se": bool(
-                self._safe_int(features.get("perfil_vulneravel_se_flag"), 0)
+            "tx_count_prev_30m": self._safe_int(
+                features.get("tx_count_prev_30m"), 0,
             ),
-            "vl_renda": self._safe_float(features.get("vl_renda_cliente"), 0.0),
-            "ratio_pix_renda": self._safe_float(features.get("ratio_pix_renda")),
-            "pix_over_100pct_renda": bool(
-                self._safe_int(features.get("pix_over_100pct_renda_flag"), 0)
+            "distinct_receivers_so_far": self._safe_int(
+                features.get("distinct_receivers_so_far"), 1,
             ),
             "first_receiver_flag": bool(
-                self._safe_int(features.get("first_receiver_flag"), 0)
+                self._safe_int(features.get("first_receiver_flag"), 0),
             ),
-            "burst_30m_flag": bool(
-                self._safe_int(features.get("burst_30m_flag"), 0)
+
+            # Dormancy (recalibrado v3.1 — só qt_total_pix_trimestre)
+            "qt_total_pix_trimestre": self._safe_int(
+                features.get("qt_total_pix_trimestre"), 999,
             ),
-            "tx_count_prev_30m": self._safe_int(features.get("tx_count_prev_30m"), 0),
-            "ratio_tempo_interacao": self._safe_float(
-                features.get("ratio_tempo_interacao_cliente")
-            ),
-            # Novas features v2.1
-            "ratio_valor_mediana": self._safe_float(features.get("ratio_valor_mediana")),
-            "distinct_receivers_so_far": self._safe_int(
-                features.get("distinct_receivers_so_far"), 1
-            ),
-            "valor_over_trimestre_avg": self._safe_float(
-                features.get("valor_over_trimestre_avg")
-            ),
+            # NOTA: is_first_tx_trimestre REMOVIDO (anti-indicador, Lift 0.568x)
+            # NOTA: perfil_vulneravel_se_flag REMOVIDO (Prec 0.04%, TP=5, FP=11787)
         }
 
     # ---------------------------------------------------------
@@ -627,15 +654,23 @@ class BehavioralAnalytics:
     # ---------------------------------------------------------
     @staticmethod
     def _infer_device_type(device_model: str) -> str:
+        """Infere tipo de device a partir do model name."""
         model = device_model.lower()
         if any(kw in model for kw in ("iphone", "ipad", "ios", "apple")):
             return "iOS"
-        if any(kw in model for kw in ("samsung", "xiaomi", "motorola", "pixel", "oneplus", "huawei", "lg", "galaxy", "redmi")):
+        if any(
+            kw in model
+            for kw in (
+                "samsung", "xiaomi", "motorola", "pixel",
+                "oneplus", "huawei", "lg", "galaxy", "redmi",
+            )
+        ):
             return "Android"
         return "Desconhecido"
 
     @staticmethod
     def _normalize_login_method(raw: Any) -> str:
+        """Normaliza string de método de autenticação."""
         if raw is None:
             return "desconhecido"
         val = str(raw).strip().lower()
@@ -654,12 +689,16 @@ class BehavioralAnalytics:
         return "desconhecido"
 
     @staticmethod
-    def _safe_float(val: Any, default: Optional[float] = None) -> Optional[float]:
+    def _safe_float(
+        val: Any,
+        default: float | None = None,
+    ) -> float | None:
+        """Converte para float de forma segura."""
         if val is None:
             return default
         try:
             v = float(val)
-            if v != v:
+            if v != v:  # NaN check
                 return default
             return v
         except (ValueError, TypeError):
@@ -667,11 +706,12 @@ class BehavioralAnalytics:
 
     @staticmethod
     def _safe_int(val: Any, default: int = 0) -> int:
+        """Converte para int de forma segura."""
         if val is None:
             return default
         try:
             v = float(val)
-            if v != v:
+            if v != v:  # NaN check
                 return default
             return int(v)
         except (ValueError, TypeError):
@@ -689,10 +729,100 @@ class BehavioralAnalytics:
         count = result.total_fatores
         top_factors = ", ".join(rf.codigo for rf in result.risk_factors[:3])
 
-        summary = f"Risco comportamental {level} ({result.behavioral_score:.0f}/100): "
-        summary += f"{count} fator(es) — {top_factors}"
+        sources = {rf.source for rf in result.risk_factors}
+        source_str = "+".join(sorted(sources))
+
+        summary = (
+            f"Risco comportamental {level} "
+            f"({result.behavioral_score:.0f}/100): "
+            f"{count} fator(es) [{source_str}] — {top_factors}"
+        )
 
         if result.fatores_atenuantes:
             summary += f" | Atenuantes: {len(result.fatores_atenuantes)}"
 
         return summary
+
+    # ---------------------------------------------------------
+    # PUBLIC: Factor catalog (para documentação/testes)
+    # ---------------------------------------------------------
+    @staticmethod
+    def get_factor_catalog() -> list[dict[str, Any]]:
+        """Retorna catálogo dos 6 fatores com métricas de validação LF."""
+        return [
+            {
+                "codigo": "FREQUENCIA_BURST",
+                "tier": 1, "source": "velocity", "origin": "B1",
+                "score_add": 25, "precision_lf": 0.974,
+                "tp_lf": 75, "fp_lf": 2,
+                "condition": "burst_30m_flag=1 AND tx_count_prev_30m >= 2",
+                "status": "intacto",
+            },
+            {
+                "codigo": "BURST_CONTA_COMPROMETIDA",
+                "tier": 1, "source": "velocity", "origin": "B1",
+                "score_add": 20, "precision_lf": 0.80,
+                "tp_lf": 8, "fp_lf": 2,
+                "condition": (
+                    "qt_tempo_relacionamento_mes >= 12 AND "
+                    "tx_count_prev_30m >= 2 AND "
+                    "first_receiver_flag=1 AND vl_pix >= 500"
+                ),
+                "status": "intacto",
+            },
+            {
+                "codigo": "MULTIPLOS_RECEBEDORES_BURST",
+                "tier": 1, "source": "velocity", "origin": "B1",
+                "score_add": 20, "precision_lf": 0.359,
+                "tp_lf": 28, "fp_lf": 50,
+                "condition": (
+                    "burst_30m_flag=1 AND distinct_receivers_so_far >= 3"
+                ),
+                "status": "intacto",
+            },
+            {
+                "codigo": "CONTA_DORMANTE_VALOR_EXTREMO",
+                "tier": 2, "source": "dormancy", "origin": "B2-LF",
+                "score_add": 15, "precision_lf": 0.073,
+                "tp_lf": 58, "fp_lf": 738,
+                "condition": (
+                    "qt_total_pix_trimestre == 0 AND vl_pix >= 5000"
+                ),
+                "v30_gate": "qt_total_pix_trimestre <= 2 AND vl_pix >= 1000",
+                "status": "recalibrado",
+                "rationale": (
+                    "97.7% dos normais têm qt_pix <= 2 no LF. "
+                    "Restringir para ==0 e vl>=5000 reduz FP de 5215 para 738."
+                ),
+            },
+            {
+                "codigo": "IDOSO_VALOR_ALTO",
+                "tier": 2, "source": "age_value", "origin": "B2-LF",
+                "score_add": 20, "precision_lf": 0.249,
+                "tp_lf": 101, "fp_lf": 304,
+                "condition": "nr_idade >= 65 AND vl_pix >= 2000",
+                "v30_gate": (
+                    "qt_total_pix_trimestre <= 2 AND "
+                    "nr_idade >= 60 AND vl_pix >= 500"
+                ),
+                "status": "recalibrado",
+                "rationale": (
+                    "Remover gate dormancy MELHORA performance. "
+                    "Idosos são alvo independente de atividade da conta. "
+                    "Prec: 6.9% → 24.9%, com mais TP (137 → 101 é por "
+                    "faixa etária mais restrita, mas FP: 1850 → 304)."
+                ),
+            },
+            {
+                "codigo": "IDOSO_VALOR_CRITICO",
+                "tier": 2, "source": "age_value", "origin": "B2-LF",
+                "score_add": 10, "precision_lf": 0.409,
+                "tp_lf": 45, "fp_lf": 65,
+                "condition": "nr_idade >= 70 AND vl_pix >= 5000",
+                "status": "novo",
+                "rationale": (
+                    "Boost condicional sobre IDOSO_VALOR_ALTO. "
+                    "Prec 40.9%, Lift 195x. Co-ativa com fator 5."
+                ),
+            },
+        ]

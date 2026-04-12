@@ -1,10 +1,23 @@
-joblib
-numpy
-pandas
-lightgbm
-scikit-learn
-matplotlib
-uvicorn
-fastapi
-pydantic
-requests
+# ==============================================================
+# rebuild_pix — Requirements (pinned from venv, 2026-04-12)
+# ==============================================================
+
+# --- Core ML ---
+lightgbm==4.6.0
+scikit-learn==1.8.0
+numpy==2.4.3
+scipy==1.17.1
+pandas==3.0.1
+joblib==1.5.3
+
+# --- Visualização ---
+matplotlib==3.10.8
+
+# --- API (instalar antes de rodar uvicorn) ---
+fastapi>=0.115,<1.0
+uvicorn>=0.34,<1.0
+pydantic>=2.0,<3.0
+
+# --- Utilitários ---
+tabulate==0.10.0
+networkx==3.6.1

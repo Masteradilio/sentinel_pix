@@ -1,0 +1,120 @@
+[    0.0s] Input: E:\Projetos\rebuild_pix\dados\base_treino_final.csv
+[    0.1s] MD5: 55795aaefb33302701e27efce3c0b3b3
+[    0.5s] Shape: (100355, 70)
+[    0.5s] Fraudes: 355 | Normais: 100000 | Ratio: 0.354%
+[    0.5s] Features: 65 total (45 core + 7 extra + 13 graph)
+[    0.5s] Features corrigidas (leakage-free): 14
+[    0.5s] Graph features temporais: 13 (prefixo graph_)
+[    0.6s] --- Split Dev / Holdout ---
+  Dev (CV):  90,319 rows |  275 fraudes (0.30%) | 2025-12-20 00:03:06 → 2026-02-21 16:30:54
+  Holdout :  10,036 rows |   80 fraudes (0.80%) | 2026-02-21 16:30:59 → 2026-03-19 09:22:08
+[    0.6s] Fraudes — Dev: 275 (77.5%) | Holdout: 80 (22.5%)
+[    0.6s] --- Fold 1/5 ---
+[    0.6s]   Treino: 15,054 rows, 20 fraudes (2025-12-20 00:03:06 → 2025-12-29 21:54:23)
+[    0.6s]   Val:    15,053 rows, 28 fraudes (2025-12-29 21:54:33 → 2026-01-09 09:31:42)
+[    9.5s]   Best iteration: 1059
+[    9.8s]   AUC: 0.9887 | AP: 0.4861 | F1: 0.5714 @ th=0.1750 | Rec: 0.5714 Prec: 0.5714 | TP=16 FP=12 FN=12
+[    9.8s] --- Fold 2/5 ---
+[    9.8s]   Treino: 30,107 rows, 48 fraudes (2025-12-20 00:03:06 → 2026-01-09 09:31:42)
+[    9.8s]   Val:    15,053 rows, 43 fraudes (2026-01-09 09:32:32 → 2026-01-19 22:02:03)
+[   19.5s]   Best iteration: 865
+[   19.8s]   AUC: 0.9948 | AP: 0.7973 | F1: 0.7609 @ th=0.1200 | Rec: 0.8140 Prec: 0.7143 | TP=35 FP=14 FN=8
+[   19.8s] --- Fold 3/5 ---
+[   19.8s]   Treino: 45,160 rows, 91 fraudes (2025-12-20 00:03:06 → 2026-01-19 22:02:03)
+[   19.8s]   Val:    15,053 rows, 100 fraudes (2026-01-19 22:02:09 → 2026-01-31 14:24:01)
+[   30.9s]   Best iteration: 912
+[   31.2s]   AUC: 0.9996 | AP: 0.9599 | F1: 0.9091 @ th=0.2400 | Rec: 0.9500 Prec: 0.8716 | TP=95 FP=14 FN=5
+[   31.2s] --- Fold 4/5 ---
+[   31.2s]   Treino: 60,213 rows, 191 fraudes (2025-12-20 00:03:06 → 2026-01-31 14:24:01)
+[   31.2s]   Val:    15,053 rows, 51 fraudes (2026-01-31 14:25:39 → 2026-02-10 06:49:25)
+[   40.3s]   Best iteration: 816
+[   40.7s]   AUC: 0.9993 | AP: 0.9055 | F1: 0.8387 @ th=0.9500 | Rec: 0.7647 Prec: 0.9286 | TP=39 FP=3 FN=12
+[   40.7s] --- Fold 5/5 ---
+[   40.7s]   Treino: 75,266 rows, 242 fraudes (2025-12-20 00:03:06 → 2026-02-10 06:49:25)
+[   40.7s]   Val:    15,053 rows, 33 fraudes (2026-02-10 06:50:05 → 2026-02-21 16:30:54)
+[   47.4s]   Best iteration: 552
+[   47.8s]   AUC: 0.9993 | AP: 0.8464 | F1: 0.8000 @ th=0.7350 | Rec: 0.8485 Prec: 0.7568 | TP=28 FP=9 FN=5
+[   47.8s] OOF: 75,265 predições (83.3% do dev)
+[   47.8s] OOF fraudes: 255
+[   54.5s] OOF ROC-AUC:  0.994769
+[   54.5s] OOF AP:       0.849997
+[   54.5s] OOF F1 best:  0.7819 @ th=0.5450
+[   54.5s] OOF th R≥99%: 0.0010
+[   54.5s] OOF th R≥95%: 0.0030
+[   54.5s] OOF salvo: E:\Projetos\rebuild_pix\backend\modelos\resultado_treino_lgbm_v3\oof_predictions.csv
+[   54.5s] Treino final: 90,319 rows, 275 fraudes
+[   54.5s] scale_pos_weight: 327.43
+[   54.5s] n_estimators: 1038
+[   56.9s] ✅ Modelo treinado — 64/65 features com gain > 0
+[   56.9s] Graph features com gain > 0: 13/13
+[   56.9s]   📊 graph_sender_avg_value: gain=645514.0
+[   56.9s]   📊 graph_receiver_in_degree: gain=17674.9
+[   56.9s]   📊 graph_receiver_avg_value: gain=13801.9
+[   56.9s]   📊 graph_receiver_value_ratio: gain=8394.4
+[   56.9s]   📊 graph_sender_value_ratio: gain=5911.2
+[   56.9s]   📊 graph_degree_ratio: gain=3929.9
+[   56.9s]   📊 graph_receiver_tx_count: gain=1592.9
+[   56.9s]   📊 graph_pair_tx_count: gain=1490.6
+[   56.9s]   📊 graph_sender_tx_count: gain=980.8
+[   56.9s]   📊 graph_sender_out_degree: gain=258.5
+[   56.9s]   📊 graph_is_new_edge: gain=130.7
+[   56.9s]   📊 graph_receiver_concentration_hhi: gain=124.8
+[   56.9s]   📊 graph_sender_value_zscore: gain=48.9
+[   56.9s] Calibrando probabilidades...
+[   56.9s]   Set calibração: 27,096 rows, 79 fraudes
+[   59.9s] ✅ Calibração isotonic (cv=3) OK
+[   64.1s] --- Thresholds (modelo raw) ---
+[   64.1s]   F1-best : th=0.355000 | TP= 77 FP=  10 FN=  3 | Rec=0.9625 Prec=0.8851 F1=0.9222
+[   64.2s]   R=100%  : th=0.001000 | TP= 80 FP=  94 FN=  0 | Rec=1.0000 Prec=0.4598 F1=0.6299
+[   64.2s]   R=99%   : th=0.001000 | TP= 80 FP=  94 FN=  0 | Rec=1.0000 Prec=0.4598 F1=0.6299
+[   64.2s]   R=98%   : th=0.004000 | TP= 79 FP=  43 FN=  1 | Rec=0.9875 Prec=0.6475 F1=0.7822
+[   64.2s]   R=95%   : th=0.389000 | TP= 76 FP=  10 FN=  4 | Rec=0.9500 Prec=0.8837 F1=0.9157
+[   64.2s] --- Threshold calibrado: F1-best = 0.4000 ---
+[   64.2s] Calculando feature importance...
+[   64.2s] Top 20 features (gain):
+[   64.2s]   # 1 vl_pix                                        gain=  11346457.8 (76.99%)
+[   64.2s]   # 2 qt_intervalo_transacao_minuto                 gain=   1416859.5 ( 9.61%)
+[   64.2s]   # 3 graph_sender_avg_value                        gain=    645514.0 ( 4.38%) 📊GRAPH
+[   64.2s]   # 4 minutes_since_prev_tx                         gain=    164747.0 ( 1.12%)
+[   64.2s]   # 5 vl_latencia_rede_media_trimestre              gain=    143043.4 ( 0.97%)
+[   64.2s]   # 6 diff_intervalo_vs_mediana                     gain=    110358.7 ( 0.75%) ⚠️FIX
+[   64.2s]   # 7 qt_aparelhos_distintos_trimestre              gain=    107723.0 ( 0.73%)
+[   64.2s]   # 8 rule_score_raw                                gain=    103415.8 ( 0.70%)
+[   64.2s]   # 9 ratio_latencia_cliente                        gain=     91049.1 ( 0.62%)
+[   64.2s]   #10 nr_idade                                      gain=     82868.6 ( 0.56%)
+[   64.2s]   #11 hour                                          gain=     62686.0 ( 0.43%)
+[   64.2s]   #12 topaz_risk_score                              gain=     51407.6 ( 0.35%)
+[   64.2s]   #13 rule_topaz_score                              gain=     45876.7 ( 0.31%)
+[   64.2s]   #14 diff_latencia_cliente                         gain=     42370.8 ( 0.29%)
+[   64.2s]   #15 qt_tempo_relacionamento_mes                   gain=     41619.6 ( 0.28%)
+[   64.3s]   #16 vl_mediana_pix_trimestre                      gain=     33881.6 ( 0.23%) ⚠️FIX
+[   64.3s]   #17 qt_envio_recebedor_trimestre                  gain=     32240.3 ( 0.22%)
+[   64.3s]   #18 ratio_pix_renda                               gain=     25562.3 ( 0.17%)
+[   64.3s]   #19 vl_desvio_padrao_pix_trimestre                gain=     24187.6 ( 0.16%) ⚠️FIX
+[   64.3s]   #20 qt_total_pix_trimestre                        gain=     18472.1 ( 0.13%) ⚠️FIX
+[   64.3s]   Grupo 'core': 31/31 ativas, 93.6% do gain total
+[   64.3s]   Grupo 'leakage_fixed': 14/14 ativas, 1.4% do gain total
+[   64.3s]   Grupo 'extra': 6/7 ativas, 0.2% do gain total
+[   64.3s]   Grupo 'graph': 13/13 ativas, 4.7% do gain total
+[   64.3s] Gerando curvas PR/ROC e threshold sweep...
+[   64.9s] Gerando distribuição de scores...
+[   64.9s] Score dist (holdout):
+[   64.9s]   Fraudes: mean=0.9097 med=0.9983 min=0.001019 max=0.999939
+[   64.9s]   Normais: mean=0.001110 med=0.000003 max=0.996176 p99=0.000860
+[   64.9s] Score dist (train):
+[   64.9s]   Fraudes: mean=0.9988 med=0.9996 min=0.990401 max=0.999938
+[   64.9s]   Normais: mean=0.001200 med=0.000003 max=0.978176 p99=0.004560
+[   64.9s] Análise de erros...
+[   65.0s] Erros: 3 FN + 10 FP
+[   65.0s] FN residuais:
+[   65.0s]   score=0.004801 vl_pix=    188.82 burst=0 tx30m=0 1st_recv=1 idade=27 1st_tx=1 pair_tx=0 new_edge=1
+[   65.0s]   score=0.065511 vl_pix=   2478.98 burst=0 tx30m=0 1st_recv=1 idade=4 1st_tx=1 pair_tx=0 new_edge=1
+[   65.0s]   score=0.001019 vl_pix=   20000.0 burst=0 tx30m=0 1st_recv=1 idade=51 1st_tx=1 pair_tx=0 new_edge=1
+[   65.0s] FP (top 5 por score):
+[   65.0s]   score=0.996176 vl_pix=     997.0 burst=0 tx30m=0 1st_recv=1 idade=53 pair_tx=0 deg_ratio=0.0
+[   65.0s]   score=0.995234 vl_pix=    4000.0 burst=1 tx30m=1 1st_recv=1 idade=86 pair_tx=0 deg_ratio=0.0
+[   65.0s]   score=0.993275 vl_pix=    1000.0 burst=0 tx30m=0 1st_recv=1 idade=42 pair_tx=0 deg_ratio=0.0
+[   65.0s]   score=0.992335 vl_pix=    2650.0 burst=0 tx30m=0 1st_recv=1 idade=34 pair_tx=0 deg_ratio=0.0
+[   65.0s]   score=0.989300 vl_pix=    4800.0 burst=0 tx30m=0 1st_recv=0 idade=25 pair_tx=1 deg_ratio=1.0
+[   65.0s] Salvando artefatos...
+[   65.1s] ✅ PRODUÇÃO: E:\Projetos\rebuild_pix\backend\artefatos\model_lightgbm.joblib

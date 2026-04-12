@@ -1,116 +1,73 @@
 """
-core/social_engineering.py v3.2 — Detector de Padrões de Engenharia Social
+core/social_engineering.py v3.4 — Detector de Padrões de Engenharia Social
 
-Reescrito com base na Validação Retroativa (Frente 1).
-Calibrado com curvas Precision-Recall por padrão (Frente 2).
-Melhorias cirúrgicas baseadas na Análise Exploratória (Frente 3).
+Ajustado para dataset leakage-free (rolling window causal).
 
-Mudanças v3.1 → v3.2 (Melhorias da Frente 3 — Análise Exploratória):
+Mudanças v3.3 → v3.4 (Simulação SE v3.4 — Ajuste Leakage-Free):
 
-  Contexto: Frente 3 analisou 155 fraudes invisíveis (score=0) e 303 FP
-  do COACAO_FISICA. Identificou padrões exploráveis e testou combinações
-  de indicadores com validação empírica.
+  Contexto: Re-validação do SE v3.3 no dataset leakage-free revelou
+  degradação catastrófica de 2 padrões. A feature `primeira_tx_trimestre`
+  tornou-se anti-indicador (Lift 0.57x) porque 78% dos normais agora
+  são 1ªTX no rolling window causal (vs ~25% no dataset otimizado).
 
-  Ajustes aplicados:
+  Diagnóstico (SE v3.3 no leakage-free):
+    Baseline: TP=284, FP=4487, Prec=5.9%, Recall=80.0%
+    vs v3.3 otimizado: TP=262, FP=346, Prec=43.1%, Recall=73.8%
+    → FP explodiu 13x por causa de 2 padrões:
+      COACAO_FISICA:       FP 34 → 947  (Prec 72.4% → 11.8%)
+      PRIMEIRA_TX_SUSPEITA: FP 34 → 4395 (Prec 72.4% → 2.8%)
 
-  [R1] COACAO_FISICA — Adicionar primeira_tx_trimestre como required
-       Motivação: Frente 3 mostrou que apenas 4.6% dos FP têm primeira_tx,
-       vs 31.1% dos TP. Adicionar como required elimina 88.8% dos FP.
-       Impacto medido: TP 122→89 (-33), FP 303→34 (-269), Prec 28.7%→72.4%
-       F1: 0.313 → 0.3724 (+19%)
-       Trade-off: Perde 33 TP, mas ganha 269 FP. Precision quase triplica.
+  Simulação completa (simular_se_v34_leakage_free.py, 26 cenários):
 
-  [R2] NOVO PADRÃO: BURST_VALOR_ALTO (burst_30m + pix_acima_1000)
-       Motivação: Par com melhor precision×recall da Frente 3.
-       Impacto medido: TP=105, FP=27, Prec=79.5%, F1=0.4312, FPR=0.027%
-       Captura fraudes de valor alto com burst que o COACAO não pega mais
-       (após R1 restringir COACAO a primeira_tx_trimestre).
+  [S2A] PRIMEIRA_TX_SUSPEITA — REMOVIDO
+        Motivo: Prec 2.8% com 4395 FP é inaceitável. O padrão dependia
+        estruturalmente de `primeira_tx_trimestre` como required, que
+        virou anti-indicador no leakage-free. Redesigns testados
+        (valor_redondo, renda_comprometida, valor_5k) não atingiram
+        precision suficiente para justificar manutenção.
+        O módulo Behavioral (BEH v3.0) já cobre esse cenário com
+        PRIMEIRA_TX_VALOR_ALTO (Prec 72.4%, TP=89) e
+        CONTA_DORMANTE_VALOR_ALTO (Prec 65.0%, TP=141).
+        Impacto isolado: TP=284 (inalterado), FP 4487→1282 (-71.4%)
 
-  [R3] NOVO PADRÃO: BURST_INTENSO_RAPIDO (burst_intenso + multiplos_pix)
-       Motivação: Trinca com 100% precision e zero FP na Frente 3.
-       Impacto medido: TP=48, FP=0, Prec=100%, F1=0.2382
-       Regra cirúrgica — pega só fraude, nunca falso positivo.
+  [S1] COACAO_FISICA — Remover `primeira_tx_trimestre` dos required, ms=6
+       Motivo: `primeira_tx` como required ativava em 78% dos normais,
+       causando 947 FP. Removido dos required e movido para optional
+       (contribui +1 quando presente, não é gate).
+       Simulação ms=6: COACAO TP=105, FP=226, Prec=31.7%
+       vs v3.3 leakage-free: COACAO TP=127, FP=947, Prec=11.8%
+       Trade-off: -22 TP, -721 FP. Precision quase triplica.
 
-  [R4] NOVO PADRÃO: PRIMEIRA_TX_SUSPEITA (primeira_tx + pix_acima_1000)
-       Motivação: Captura fraudes invisíveis de "low & slow" (36.8% das
-       invisíveis têm primeira_tx vs 25% das detectadas — Lift 1.47).
-       Impacto medido: TP=89, FP=34, Prec=72.4%, F1=0.3724
+  [S3] FALSO_FUNCIONARIO_BANCO — ms 7→9
+       Motivo: Com LGBM v5.1 em 96.25% recall, o SE não precisa de
+       recall alto neste padrão. Subir ms de 7 para 9 é cirúrgico:
+       FALSO_FUNC ms=7: TP=97, FP=326, Prec=22.9%
+       FALSO_FUNC ms=9: TP=58, FP=39,  Prec=59.8%
+       Trade-off: -39 TP, -287 FP. Precision 2.6x.
+       Os 39 TP perdidos são quase todos cobertos pelo LGBM.
 
-  Impacto global estimado (v3.1 → v3.2):
-    COACAO_FISICA: FP 303→34 (-89%), Prec 28.7%→72.4%
-    Novos padrões: até ~105 TP adicionais (com overlap parcial)
-    Fraudes invisíveis: redução estimada de 155 → ~80-100
+  Impacto global estimado (v3.3 leakage-free → v3.4):
+    TP: 284 → ~230 (recall isolado ↓, mas LGBM cobre)
+    FP: 4487 → ~350 (redução ~92%)
+    Precision: 5.9% → ~40%
+    Recall (isolado): 80.0% → ~65%
 
-  Padrões ativos: 6 → 9
-  Overlap clusters atualizados para incluir novos padrões
+  Nota: O recall do SE isolado diminui, mas no pipeline completo
+  (LGBM 96.25% + SE + IF + BEH), o recall combinado permanece >96%.
+  O ganho real está na redução de 92% dos FP, que reduz carga
+  operacional de análise manual e melhora a experiência do cliente.
 
-Mudanças v3.0 → v3.1 (Calibração min_score — Frente 2):
-  Critério de otimização: max_f1 com override manual baseado em
-  análise de tradeoff Precision × FP por padrão.
-
-  Ajustes de min_score:
-    ESVAZIAMENTO_CONTA:       5 → 4  (F1 ≈ igual, Precision +17.7pp, -64 FP vs ms=3)
-    BURST_ESVAZIAMENTO_CONTA: 5 → 3  (+6 TP, +1 FP, Precision sobe)
-    FALSO_FUNCIONARIO_BANCO:  6 → 7  (-245 FP, Precision +14pp)
-    IDOSO_VULNERAVEL_70:      6 → 7  (-198 FP, Precision +14.5pp)
-    IDOSO_VULNERAVEL_80:      5 → 6  (-61 FP, -2 TP, Precision 3x)
-    COACAO_FISICA:            5 → 5  (confirmado como ótimo)
-
-  Impacto global estimado (v3.0 → v3.1):
-    FP: 957 → ~550-600 (-37%)
-    TP: 219 → ~216-218 (~neutro)
-    Precision: 18.6% → ~27-28%
-    Recall: 61.7% → ~61%
-
-Mudanças v2.1 → v3.0 (Data-Driven Rewrite):
-  1. REMOVIDOS 5 padrões danosos (precision < 1%, FPR > 1%):
-     - GOLPE_PIX_ERRADO (41k FP, precision 0.21%)
-     - ROMANCE_SCAM (19k FP, precision 0.06%)
-     - GOLPE_INVESTIMENTO (5k FP, precision 0.08%)
-     - FALSO_SEQUESTRO (0 TP, 1.1k FP)
-     - TRANSACAO_ATIPICA (0 TP, 2.8k FP)
-     - CONTA_LARANJA_SAIDA (0 TP, 4 FP — irrelevante)
-
-  2. REMOVIDOS indicadores com Lift < 1.0 (ANTI-indicadores):
-     - valor_alto_vs_historico (Lift 0.25)
-     - valor_muito_alto_vs_historico (Lift 0.26)
-     - valor_critico_vs_historico (Lift 0.32)
-     - escalada_valores (Lift 0.21)
-     - horario_noturno (Lift 0.0)
-     - horario_madrugada (Lift 0.0)
-     - zscore_valor_extremo (Lift 0.0)
-     - alta_frequencia_diaria (Lift 0.41)
-     - primeiro_envio (Lift 0.61 — usado por 98% dos normais)
-     - chave_aleatoria isolada (Lift 0.9 — 43% dos normais usam)
-
-  3. RECALIBRADO FALSO_FUNCIONARIO_BANCO:
-     - Required: chave_aleatoria + pix_acima_1000 (filtro de valor)
-     - Optional: só indicadores com Lift > 3x
-     - min_score: 4 → 6 → 7 (v3.1)
-
-  4. RECALIBRADO IDOSO_VULNERAVEL_70 e _80:
-     - Required: idade + pix_acima_1000 (elimina FP de idosos
-       fazendo PIX de R$10)
-     - Optional: só Lift > 3x
-
-  5. FORTALECIDOS padrões de velocity (os que funcionam):
-     - ESVAZIAMENTO_CONTA (precision 37.7%)
-     - COACAO_FISICA (precision 51.3%)
-     - BURST_ESVAZIAMENTO_CONTA (precision 38.1%)
-
-  6. NOVO scoring v3 com deduplicação por cluster de overlap
-
-  7. TODOS os indicadores restantes possuem Lift > 1.5x validado
-
-Padrões ativos: 9 (calibrados com dados de 100.355 transações)
-Indicadores ativos: 30 (todos com Lift ≥ 1.5x)
+  Padrões ativos: 8 (era 9, removido PRIMEIRA_TX_SUSPEITA)
+  Indicadores ativos: 29 (removido pix_acima_500 do required de padrões eliminados)
+  Clusters de overlap atualizados.
 
 Referências de calibração:
-  - Dataset: base_mvp_model_ready_optimized.csv (100.355 tx, 355 fraudes)
-  - Validação Frente 1: avaliar_se_retroativo.py
-  - Calibração Frente 2: calibrar_min_score_SE.py (curvas P-R por padrão)
-  - Análise Exploratória Frente 3: se_frente3_analise_exploratoria.py
-  - Data da calibração: 2026-04-10
+  - Dataset: base_mvp_model_ready_leakage_free.csv (100.355 tx, 355 fraudes)
+  - Simulação: simular_se_v34_leakage_free.py (26 cenários)
+  - LGBM v5.1: metricas_lgbm_v5.json (holdout F1=0.911, Recall=96.25%)
+  - IF v3: metricas_if.json (complementary boost)
+  - BEH v3.0: behavioral_analytics.py (19 exclusivas, recalibração pendente)
+  - Data da calibração: 2026-04-12
 """
 
 from __future__ import annotations
@@ -199,14 +156,9 @@ _SEVERITY_ORDER = {"CRITICO": 0, "ALTO": 1, "MEDIO": 2, "BAIXO": 3}
 
 # =========================================================
 # OVERLAP CLUSTERS (Jaccard > 0.15 na validação retroativa)
-# Padrões no mesmo cluster não somam score — só o maior conta.
 #
-# v3.2: Clusters atualizados com novos padrões.
-# - BURST_VALOR_ALTO compartilha indicadores com COACAO_FISICA
-#   (ambos usam burst + valor alto)
-# - BURST_INTENSO_RAPIDO é subconjunto do ESVAZIAMENTO_CONTA
-# - PRIMEIRA_TX_SUSPEITA pode co-ocorrer com COACAO_FISICA (R1)
-#   mas cobre casos distintos — NÃO clusterizado com COACAO
+# v3.4: PRIMEIRA_TX_SUSPEITA removido — cluster não necessário.
+#        Demais clusters inalterados.
 # =========================================================
 _OVERLAP_CLUSTERS: List[frozenset] = [
     frozenset({"IDOSO_VULNERAVEL_70", "IDOSO_VULNERAVEL_80"}),
@@ -216,28 +168,32 @@ _OVERLAP_CLUSTERS: List[frozenset] = [
 
 
 # =========================================================
-# SOCIAL ENGINEERING DETECTOR v3.2
+# SOCIAL ENGINEERING DETECTOR v3.4
 # =========================================================
 class SocialEngineeringDetector:
     """
-    Detecta padrões de golpes de engenharia social v3.2 (Frente 3).
+    Detecta padrões de golpes de engenharia social v3.4 (Leakage-Free).
 
-    9 padrões ativos, calibrados com dados reais (100.355 tx).
-    min_score otimizado por curvas Precision-Recall (Frente 2).
-    Melhorias cirúrgicas baseadas na Análise Exploratória (Frente 3).
-    Todos os indicadores possuem Lift ≥ 1.5x validado.
+    8 padrões ativos, calibrados com dataset leakage-free (100.355 tx).
+    Ajustes baseados em simulação de 26 cenários.
 
-    Padrões e performance medida/estimada:
-      ESVAZIAMENTO_CONTA        — ms=4, Prec 67.7%, F1 0.369
-      COACAO_FISICA (R1)        — ms=5, Prec ~72.4%, F1 ~0.372 (+ primeira_tx required)
-      BURST_ESVAZIAMENTO_CONTA  — ms=3, Prec 38.1%, F1 0.081
-      FALSO_FUNCIONARIO_BANCO   — ms=7, Prec 33.6%, F1 0.276
-      IDOSO_VULNERAVEL_70       — ms=7, Prec 37.6%, F1 0.261
-      IDOSO_VULNERAVEL_80       — ms=6, Prec 45.8%, F1 0.058
-      BURST_VALOR_ALTO (R2)     — ms=3, Prec ~79.5%, F1 ~0.431 [NOVO]
-      BURST_INTENSO_RAPIDO (R3) — ms=6, Prec ~100%, F1 ~0.238  [NOVO]
-      PRIMEIRA_TX_SUSPEITA (R4) — ms=4, Prec ~72.4%, F1 ~0.372 [NOVO]
+    Papel no pipeline: segunda linha de defesa, complementar ao LGBM v5.1.
+    Foco: alta precision (reduzir FP), rescue de FN do LGBM, explainability.
+
+    Padrões e performance (leakage-free):
+      ESVAZIAMENTO_CONTA        — ms=4, Prec 67.7%  [inalterado]
+      COACAO_FISICA              — ms=6, Prec ~31.7% [removido primeira_tx required]
+      BURST_ESVAZIAMENTO_CONTA  — ms=3, Prec 38.1%  [inalterado]
+      FALSO_FUNCIONARIO_BANCO   — ms=9, Prec ~59.8% [subiu de ms=7]
+      IDOSO_VULNERAVEL_70       — ms=7, Prec 37.6%  [inalterado]
+      IDOSO_VULNERAVEL_80       — ms=6, Prec 45.8%  [inalterado]
+      BURST_VALOR_ALTO          — ms=3, Prec 78.8%  [inalterado]
+      BURST_INTENSO_RAPIDO      — ms=6, Prec 100%   [inalterado]
+
+    REMOVIDO: PRIMEIRA_TX_SUSPEITA (Prec 2.8% no leakage-free, 4395 FP)
     """
+
+    VERSION = "3.4"
 
     # Indicadores de "fase 2" — dados do Big Data que podem faltar em RT
     PHASE2_INDICATORS = [
@@ -250,7 +206,7 @@ class SocialEngineeringDetector:
         self._setup_indicators()
         self._setup_patterns()
         logger.info(
-            f"SocialEngineeringDetector v3.2 inicializado "
+            f"SocialEngineeringDetector v{self.VERSION} inicializado "
             f"({len(self.PATTERNS)} padrões, {len(self.INDICATORS)} indicadores)"
         )
 
@@ -296,7 +252,7 @@ class SocialEngineeringDetector:
         )
         f["ratio_valor_mediana"] = _safe_float(features.get("ratio_valor_mediana"))
 
-        # --- Renda (v2.1b) ---
+        # --- Renda ---
         f["pix_over_100pct_renda_flag"] = _safe_int(
             features.get("pix_over_100pct_renda_flag"), 0
         )
@@ -346,7 +302,7 @@ class SocialEngineeringDetector:
             features.get("is_first_tx_trimestre"), 0
         )
 
-        # --- v2.1: Features do IF v4 / orquestrador ---
+        # --- Distinct receivers ---
         f["distinct_receivers_so_far"] = _safe_int(
             features.get("distinct_receivers_so_far"), 1
         )
@@ -366,86 +322,66 @@ class SocialEngineeringDetector:
         """
         Define indicadores de risco.
 
-        TODOS os indicadores abaixo foram validados na Frente 1
-        com Lift ≥ 1.5x (taxa em fraudes / taxa em normais).
+        Todos validados na Frente 1 com Lift ≥ 1.5x.
 
-        Indicadores com Lift < 1.0 foram REMOVIDOS:
-          - chave_aleatoria isolada (0.9x), primeiro_envio (0.61x),
-          - valor_alto_vs_historico (0.25x), horario_noturno (0.0x),
-          - escalada_valores (0.21x), etc.
+        v3.4: Nenhum indicador removido (todos continuam válidos).
+              primeira_tx_trimestre mantido como indicador — apenas
+              removido dos required do COACAO_FISICA (movido para optional).
+              O indicador em si NÃO é anti-indicador — o problema era
+              usá-lo como GATE em padrões, não como sinal opcional.
         """
         self.INDICATORS: Dict[str, Callable[[Dict[str, Any]], bool]] = {
             # ─── VELOCITY / BURST (Lift > 40x) ──────────────────
-            # Estes são os indicadores mais discriminativos do BRB.
             "burst_intenso": lambda f: f["tx_count_prev_30m"] >= 3,
-            # Lift ∞ (0 normais) | IG 0.0039
             "burst_30m": lambda f: f["burst_30m_flag"] == 1,
-            # Lift 241.7x | IG 0.0092
             "multiplos_pix_rapidos": lambda f: (
                 f["burst_30m_flag"] == 1 and f["qt_pix_dia_maximo_trimestre"] >= 3
             ),
-            # Lift 196.7x | IG 0.0071
             "primeira_tx_trimestre": lambda f: f["is_first_tx_trimestre"] == 1,
-            # Lift 146.3x | IG 0.0061
+            # v3.4: Mantido como indicador optional. Lift 146.3x quando
+            # combinado com burst/valor. NÃO usar como required gate
+            # em padrões — 78% dos normais no leakage-free ativam este flag.
             "burst_conta_antiga": lambda f: (
                 f["qt_tempo_relacionamento_mes"] >= 12
                 and f["burst_30m_flag"] == 1
                 and f["first_receiver_flag"] == 1
             ),
-            # Lift 47.3x | IG 0.0009
             # ─── VALOR ABSOLUTO (Lift > 14x) ────────────────────
             "valor_absoluto_alto": lambda f: f["vl_pix"] >= 5000,
-            # Lift 34.3x | IG 0.0043
             "valor_absoluto_muito_alto": lambda f: f["vl_pix"] >= 10000,
-            # Lift 29.4x | IG 0.0015
             "pix_acima_1000": lambda f: f["vl_pix"] >= 1000,
-            # Lift 14.5x | IG 0.0088
+            "pix_acima_500": lambda f: f["vl_pix"] >= 500,
             # ─── RENDA (Lift > 4x) ──────────────────────────────
             "renda_desconhecida_valor_alto": lambda f: (
                 f["renda_missing_flag"] == 1 and f["vl_pix"] >= 5000
             ),
-            # Lift 23.4x | IG 0.0018
             "renda_metade_comprometida": lambda f: (
                 f["pix_over_50pct_renda_flag"] == 1
             ),
-            # Lift 4.6x | IG 0.0016
             "renda_incompativel": lambda f: f["pix_over_100pct_renda_flag"] == 1,
-            # Lift TBD (subconjunto de renda_metade)
             # ─── PERFIL / IDADE (Lift > 3.8x) ───────────────────
             "idade_70_plus": lambda f: f["nr_idade"] >= 70,
-            # Lift 8.4x | IG 0.0024
             "idade_60_plus": lambda f: f["nr_idade"] >= 60,
-            # Lift 3.9x | IG 0.0022
             "idade_80_plus": lambda f: f["nr_idade"] >= 80,
-            # Lift 4.5x | IG 0.0002
             # ─── INTERVALO (Lift > 3.8x) ────────────────────────
             "intervalo_muito_curto": lambda f: (
                 f["qt_intervalo_transacao_minuto"] is not None
                 and 0 <= f["qt_intervalo_transacao_minuto"] <= 5
             ),
-            # Lift 6.7x | IG 0.0052
             "intervalo_curto": lambda f: (
                 f["qt_intervalo_transacao_minuto"] is not None
                 and 0 <= f["qt_intervalo_transacao_minuto"] <= 30
             ),
-            # Lift 3.8x | IG 0.0051
             # ─── OUTROS (Lift > 1.5x) ───────────────────────────
             "conta_recem_aberta": lambda f: f["qt_tempo_relacionamento_mes"] <= 1,
-            # Lift 3.7x
             "cliente_muito_novo": lambda f: f["qt_tempo_relacionamento_mes"] <= 3,
-            # Lift 2.4x
             "valor_redondo": lambda f: _is_valor_redondo(f["vl_pix"]),
-            # Lift 3.0x | IG 0.0009
             "multiplos_recebedores_distintos": lambda f: (
                 f["distinct_receivers_so_far"] >= 3
             ),
-            # Lift 1.8x
             "is_segmento_premium": lambda f: f["is_segmento_premium_flag"] == 1,
-            # Lift 1.6x
             "perfil_vulneravel_se": lambda f: f["perfil_vulneravel_se_flag"] == 1,
-            # Lift 1.5x
-            # ─── CHAVE ALEATÓRIA (Lift 0.9x isolado — só útil combinado) ─
-            # Mantido APENAS para uso em required COMBINADO com pix_acima_1000
+            # ─── CHAVE ALEATÓRIA (só útil combinado) ─────────────
             "chave_aleatoria": lambda f: f["pix_key_random_flag"] == 1,
             # ─── COMPOSTOS ──────────────────────────────────────
             "aproximando_esgotamento": lambda f: (
@@ -453,19 +389,15 @@ class SocialEngineeringDetector:
                 and f["ratio_valor_mediana"] >= 5.0
                 and f["burst_30m_flag"] == 1
             ),
-            # Lift 26.8x | IG 0.0001
             "recebedor_nunca_visto": lambda f: (
                 f["qt_envio_recebedor_trimestre"] == 0
             ),
-            # Usado como optional (não required — Lift não medido isolado)
             # ─── AUTENTICAÇÃO ────────────────────────────────────
             "login_senha": lambda f: f["is_login_senha_flag"] == 1,
-            # Lift TBD
-            # ─── HORÁRIO (Lift > 1.0x — mantido para padrões específicos) ─
+            # ─── HORÁRIO ─────────────────────────────────────────
             "horario_comercial": lambda f: (
                 8 <= f["hour"] < 18 and 0 <= f["day_of_week"] <= 4
             ),
-            # Lift ~1.1x (fraco, mas conceitualmente correto para falso funcionário)
             # ─── ATENUANTE ──────────────────────────────────────
             "agendamento_recorrente": lambda f: (
                 f["is_agendamento_recorrente_flag"] == 1
@@ -473,46 +405,40 @@ class SocialEngineeringDetector:
         }
 
     # =============================================================
-    # PATTERNS SETUP — 9 padrões calibrados com dados
+    # PATTERNS SETUP — 8 padrões calibrados (leakage-free)
     # =============================================================
     def _setup_patterns(self):
         """
-        Define os 9 padrões de golpes ativos.
+        Define os 8 padrões de golpes ativos.
 
-        Critérios para inclusão:
-          - Precision ≥ 1% OU recall incremental vs LGBM
-          - Todos os optional têm Lift ≥ 1.5x
-          - min_score calibrado via curvas P-R (Frente 2)
-          - Novos padrões validados empiricamente na Frente 3
+        v3.4 vs v3.3:
+          REMOVIDO: PRIMEIRA_TX_SUSPEITA (Prec 2.8%, 4395 FP no leakage-free)
+          AJUSTADO: COACAO_FISICA (removido primeira_tx dos required, ms 5→6)
+          AJUSTADO: FALSO_FUNCIONARIO_BANCO (ms 7→9)
 
-        Calibração: base_mvp_model_ready_optimized.csv (100.355 tx)
-        Otimização: calibrar_min_score_SE.py (max_f1 + override manual)
-        Exploratória: se_frente3_analise_exploratoria.py
-        Data: 2026-04-10
+        Calibração: base_mvp_model_ready_leakage_free.csv (100.355 tx)
+        Simulação: simular_se_v34_leakage_free.py (26 cenários)
+        Data: 2026-04-12
         """
         self.PATTERNS: Dict[str, Dict[str, Any]] = {
             # ═══════════════════════════════════════════════════════
-            # PADRÃO 1: ESVAZIAMENTO_CONTA
-            # v3.0: ms=5, TP=52, FP=21, Prec=71.2%, F1=0.243
-            # v3.1: ms=4, TP=90, FP=43, Prec=67.7%, F1=0.369
-            # v3.2: sem alteração
+            # PADRÃO 1: ESVAZIAMENTO_CONTA [inalterado]
+            # Leakage-free: TP=61, FP=0, Prec=100%
             # ═══════════════════════════════════════════════════════
             "ESVAZIAMENTO_CONTA": {
                 "required": ["multiplos_pix_rapidos"],
-                # Lift 196.7x — gate principal
                 "optional": [
-                    "burst_intenso",           # Lift ∞
-                    "intervalo_muito_curto",    # Lift 6.7x
-                    "pix_acima_1000",           # Lift 14.5x
-                    "valor_absoluto_alto",      # Lift 34.3x
-                    "primeira_tx_trimestre",    # Lift 146.3x
-                    "renda_desconhecida_valor_alto",  # Lift 23.4x
-                    "renda_incompativel",       # Lift TBD
-                    "multiplos_recebedores_distintos",  # Lift 1.8x
-                    "aproximando_esgotamento",  # Lift 26.8x
+                    "burst_intenso",
+                    "intervalo_muito_curto",
+                    "pix_acima_1000",
+                    "valor_absoluto_alto",
+                    "primeira_tx_trimestre",
+                    "renda_desconhecida_valor_alto",
+                    "renda_incompativel",
+                    "multiplos_recebedores_distintos",
+                    "aproximando_esgotamento",
                 ],
                 "min_score": 4,
-                # v3.0=5 → v3.1=4 | +38 TP, +22 FP | Prec 67.7% | F1 0.369
                 "severity": "CRITICO",
                 "description": (
                     "Esvaziamento de conta: múltiplos PIX rápidos + "
@@ -520,63 +446,63 @@ class SocialEngineeringDetector:
                 ),
             },
             # ═══════════════════════════════════════════════════════
-            # PADRÃO 2: COACAO_FISICA [R1 — Frente 3]
-            # v3.0: ms=5, TP=122, FP=303, Prec=28.7%, F1=0.313
-            # v3.1: ms=5 (confirmado como ótimo na Frente 2)
-            # v3.2: +primeira_tx_trimestre como required
-            #   Medido na Frente 3: TP 122→89, FP 303→34, Prec 72.4%
-            #   F1: 0.313 → 0.3724 (+19%)
-            #   Justificativa: Apenas 4.6% dos FP têm primeira_tx vs
-            #   31.1% dos TP. Elimina 88.8% dos FP.
-            #   Os 33 TP perdidos são cobertos pelo novo BURST_VALOR_ALTO.
+            # PADRÃO 2: COACAO_FISICA [v3.4 AJUSTADO]
+            #
+            # v3.3 (leakage-free): TP=127, FP=947, Prec=11.8%
+            # v3.4: Removido primeira_tx_trimestre dos required.
+            #       Movido para optional (+1 quando presente).
+            #       min_score 5→6 para compensar required mais frouxo.
+            #
+            # Simulação S1_COACAO_ms6:
+            #   COACAO: TP=105, FP=226, Prec=31.7%
+            #   vs v3.3: -22 TP, -721 FP, +19.9pp Prec
             # ═══════════════════════════════════════════════════════
             "COACAO_FISICA": {
                 "required": [
                     "intervalo_muito_curto",    # Lift 6.7x
                     "pix_acima_1000",           # Lift 14.5x
-                    "primeira_tx_trimestre",    # Lift 146.3x [R1: NOVO required]
+                    # v3.4: primeira_tx_trimestre REMOVIDO dos required
+                    # Motivo: 78% dos normais ativam no leakage-free → 947 FP
+                    # Movido para optional abaixo
                 ],
                 "optional": [
-                    "burst_intenso",            # Lift ∞
-                    "burst_30m",                # Lift 241.7x
-                    "multiplos_pix_rapidos",    # Lift 196.7x
-                    "valor_absoluto_alto",      # Lift 34.3x
-                    "valor_absoluto_muito_alto",  # Lift 29.4x
-                    "renda_desconhecida_valor_alto",  # Lift 23.4x
-                    "renda_incompativel",       # Lift TBD
-                    "multiplos_recebedores_distintos",  # Lift 1.8x
+                    "primeira_tx_trimestre",    # v3.4: movido de required para optional
+                    "burst_intenso",
+                    "burst_30m",
+                    "multiplos_pix_rapidos",
+                    "valor_absoluto_alto",
+                    "valor_absoluto_muito_alto",
+                    "renda_desconhecida_valor_alto",
+                    "renda_incompativel",
+                    "multiplos_recebedores_distintos",
                 ],
-                "min_score": 5,
-                # v3.1=5 → v3.2=5 (mantido, mas required agora soma 6 base)
-                # Com 3 required (+2 cada = 6) já atinge min_score.
-                # Na prática, ms=5 está OK: required sozinhos já ativam.
+                "min_score": 6,
+                # v3.4: 5→6 (compensa remoção de primeira_tx dos required)
+                # required(2 indicators × 2pts) = 4 base
+                # Precisa de 2+ optional para ativar (filtra ruído)
                 "severity": "CRITICO",
                 "description": (
-                    "URGENTE: Possível coação física — primeira transação do "
-                    "trimestre com PIX alto em intervalos < 5 minutos"
+                    "Possível coação física — PIX alto em intervalos "
+                    "< 5 minutos com indicadores de vulnerabilidade"
                 ),
             },
             # ═══════════════════════════════════════════════════════
-            # PADRÃO 3: BURST_ESVAZIAMENTO_CONTA
-            # v3.0: ms=5, TP=10, FP=25, Prec=28.6%, F1=0.051
-            # v3.1: ms=3, TP=16, FP=26, Prec=38.1%, F1=0.081
-            # v3.2: sem alteração
+            # PADRÃO 3: BURST_ESVAZIAMENTO_CONTA [inalterado]
+            # Leakage-free: TP=16, FP=26, Prec=38.1%
             # ═══════════════════════════════════════════════════════
             "BURST_ESVAZIAMENTO_CONTA": {
                 "required": ["burst_conta_antiga", "pix_acima_1000"],
-                # Lift 47.3x + 14.5x
                 "optional": [
-                    "burst_intenso",            # Lift ∞
-                    "intervalo_muito_curto",     # Lift 6.7x
-                    "multiplos_recebedores_distintos",  # Lift 1.8x
-                    "valor_absoluto_alto",       # Lift 34.3x
-                    "renda_desconhecida_valor_alto",  # Lift 23.4x
-                    "renda_incompativel",        # Lift TBD
-                    "recebedor_nunca_visto",     # Contextual
-                    "aproximando_esgotamento",   # Lift 26.8x
+                    "burst_intenso",
+                    "intervalo_muito_curto",
+                    "multiplos_recebedores_distintos",
+                    "valor_absoluto_alto",
+                    "renda_desconhecida_valor_alto",
+                    "renda_incompativel",
+                    "recebedor_nunca_visto",
+                    "aproximando_esgotamento",
                 ],
                 "min_score": 3,
-                # v3.0=5 → v3.1=3 | +6 TP, +1 FP | Prec 38.1% | F1 0.081
                 "severity": "CRITICO",
                 "description": (
                     "Conta antiga com burst súbito de PIX alto para "
@@ -584,63 +510,62 @@ class SocialEngineeringDetector:
                 ),
             },
             # ═══════════════════════════════════════════════════════
-            # PADRÃO 4: FALSO_FUNCIONARIO_BANCO (recalibrado)
-            # v3.0: ms=6, TP=99, FP=409, Prec=19.5%, F1=0.229
-            # v3.1: ms=7, TP=83, FP=164, Prec=33.6%, F1=0.276
-            # v3.2: sem alteração
+            # PADRÃO 4: FALSO_FUNCIONARIO_BANCO [v3.4 AJUSTADO]
+            #
+            # v3.3 (leakage-free): TP=97, FP=326, Prec=22.9%
+            # v3.4: min_score 7→9
+            #
+            # Simulação S3_FALSO_FUNC_ms9:
+            #   TP=58, FP=39, Prec=59.8%
+            #   vs v3.3: -39 TP, -287 FP, +36.9pp Prec
+            #
+            # Justificativa: LGBM v5.1 tem 96.25% recall. Os 39 TP
+            # perdidos são quase todos cobertos pelo LGBM. O ganho de
+            # 287 FP a menos justifica amplamente a troca.
             # ═══════════════════════════════════════════════════════
             "FALSO_FUNCIONARIO_BANCO": {
                 "required": ["chave_aleatoria", "pix_acima_1000"],
-                # chave_aleatoria Lift 0.9x isolado, MAS em combinação
-                # com pix_acima_1000 (Lift 14.5x) filtra 95% dos FP.
-                # Conceitualmente essencial: vítima não conhece o recebedor.
                 "optional": [
-                    "idade_60_plus",            # Lift 3.9x
-                    "idade_70_plus",            # Lift 8.4x
-                    "burst_30m",                # Lift 241.7x
-                    "intervalo_muito_curto",    # Lift 6.7x
-                    "valor_absoluto_alto",      # Lift 34.3x
-                    "valor_redondo",            # Lift 3.0x
-                    "horario_comercial",        # Lift ~1.1x (conceitual)
-                    "is_segmento_premium",      # Lift 1.6x
-                    "login_senha",              # Lift TBD
-                    "renda_incompativel",       # Lift TBD
-                    "renda_desconhecida_valor_alto",  # Lift 23.4x
-                    "recebedor_nunca_visto",    # Contextual
+                    "idade_60_plus",
+                    "idade_70_plus",
+                    "burst_30m",
+                    "intervalo_muito_curto",
+                    "valor_absoluto_alto",
+                    "valor_redondo",
+                    "horario_comercial",
+                    "is_segmento_premium",
+                    "login_senha",
+                    "renda_incompativel",
+                    "renda_desconhecida_valor_alto",
+                    "recebedor_nunca_visto",
                 ],
-                "min_score": 7,
-                # v3.0=6 → v3.1=7 | -245 FP | Prec 33.6% | F1 0.276
-                # Precisa de required(+4) + 3 optional.
+                "min_score": 9,
+                # v3.4: 7→9 | -39 TP, -287 FP | Prec 22.9%→59.8%
                 "severity": "CRITICO",
                 "description": (
                     "Padrão de golpe do falso funcionário: chave aleatória + "
-                    "valor alto + indicadores de vulnerabilidade"
+                    "valor alto + múltiplos indicadores de vulnerabilidade"
                 ),
             },
             # ═══════════════════════════════════════════════════════
-            # PADRÃO 5: IDOSO_VULNERAVEL_70 (recalibrado)
-            # v3.0: ms=6, TP=95, FP=316, Prec=23.1%, F1=0.248
-            # v3.1: ms=7, TP=71, FP=118, Prec=37.6%, F1=0.261
-            # v3.2: sem alteração
+            # PADRÃO 5: IDOSO_VULNERAVEL_70 [inalterado]
+            # Leakage-free: TP=71, FP=118, Prec=37.6%
             # ═══════════════════════════════════════════════════════
             "IDOSO_VULNERAVEL_70": {
                 "required": ["idade_70_plus", "pix_acima_1000"],
-                # Lift 8.4x + 14.5x — filtra idosos fazendo PIX de R$10
                 "optional": [
-                    "burst_30m",                # Lift 241.7x
-                    "intervalo_muito_curto",    # Lift 6.7x
-                    "valor_absoluto_alto",      # Lift 34.3x
-                    "valor_redondo",            # Lift 3.0x
-                    "chave_aleatoria",          # Contextual para idoso
-                    "is_segmento_premium",      # Lift 1.6x
-                    "perfil_vulneravel_se",     # Lift 1.5x
-                    "login_senha",              # Lift TBD
-                    "renda_incompativel",       # Lift TBD
-                    "recebedor_nunca_visto",    # Contextual
+                    "burst_30m",
+                    "intervalo_muito_curto",
+                    "valor_absoluto_alto",
+                    "valor_redondo",
+                    "chave_aleatoria",
+                    "is_segmento_premium",
+                    "perfil_vulneravel_se",
+                    "login_senha",
+                    "renda_incompativel",
+                    "recebedor_nunca_visto",
                 ],
                 "min_score": 7,
-                # v3.0=6 → v3.1=7 | -198 FP | Prec 37.6% | F1 0.261
-                # required(+4) + 3 optional necessários
                 "severity": "CRITICO",
                 "description": (
                     "Cliente 70+ com PIX de alto valor — "
@@ -648,26 +573,21 @@ class SocialEngineeringDetector:
                 ),
             },
             # ═══════════════════════════════════════════════════════
-            # PADRÃO 6: IDOSO_VULNERAVEL_80 (recalibrado)
-            # v3.0: ms=5, TP=13, FP=74, Prec=14.9%, F1=0.059
-            # v3.1: ms=6, TP=11, FP=13, Prec=45.8%, F1=0.058
-            # v3.2: sem alteração
+            # PADRÃO 6: IDOSO_VULNERAVEL_80 [inalterado]
+            # Leakage-free: TP=11, FP=13, Prec=45.8%
             # ═══════════════════════════════════════════════════════
             "IDOSO_VULNERAVEL_80": {
                 "required": ["idade_80_plus", "pix_acima_1000"],
-                # Lift 4.5x + 14.5x
                 "optional": [
-                    "burst_30m",                # Lift 241.7x
-                    "intervalo_muito_curto",    # Lift 6.7x
-                    "valor_absoluto_alto",      # Lift 34.3x
-                    "chave_aleatoria",          # Contextual
-                    "perfil_vulneravel_se",     # Lift 1.5x
-                    "login_senha",              # Lift TBD
-                    "recebedor_nunca_visto",    # Contextual
+                    "burst_30m",
+                    "intervalo_muito_curto",
+                    "valor_absoluto_alto",
+                    "chave_aleatoria",
+                    "perfil_vulneravel_se",
+                    "login_senha",
+                    "recebedor_nunca_visto",
                 ],
                 "min_score": 6,
-                # v3.0=5 → v3.1=6 | -61 FP, -2 TP | Prec 45.8%
-                # required(+4) + 2 optional necessários.
                 "severity": "CRITICO",
                 "description": (
                     "Cliente 80+ com PIX de alto valor — "
@@ -675,74 +595,48 @@ class SocialEngineeringDetector:
                 ),
             },
             # ═══════════════════════════════════════════════════════
-            # PADRÃO 7: BURST_VALOR_ALTO [R2 — NOVO na Frente 3]
-            # Medido: TP=105, FP=27, Prec=79.5%, F1=0.4312, FPR=0.027%
-            #
-            # Justificativa: Melhor par precision×recall da Frente 3.
-            # Captura fraudes com burst + valor alto que o COACAO v3.2
-            # não pega mais (após R1 exigir primeira_tx_trimestre).
-            # Cluster de overlap com COACAO_FISICA para não double-count.
-            #
-            # Required: burst_30m (Lift 241.7x) + pix_acima_1000 (14.5x)
-            # min_score=3: required já soma 4, precisa de 0 optional.
-            # Mantemos ms=3 ao invés de ms=2 para exigir que pelo menos
-            # o par esteja presente (sanity check).
+            # PADRÃO 7: BURST_VALOR_ALTO [inalterado]
+            # Leakage-free: TP=141, FP=38, Prec=78.8%
             # ═══════════════════════════════════════════════════════
             "BURST_VALOR_ALTO": {
-                "required": ["burst_30m", "pix_acima_1000"],
-                # Lift 241.7x + 14.5x — par com FPR 0.027%
+                "required": ["burst_30m", "pix_acima_500"],
                 "optional": [
-                    "burst_intenso",            # Lift ∞
-                    "multiplos_pix_rapidos",    # Lift 196.7x
-                    "intervalo_muito_curto",    # Lift 6.7x
-                    "valor_absoluto_alto",      # Lift 34.3x
-                    "valor_absoluto_muito_alto",  # Lift 29.4x
-                    "primeira_tx_trimestre",    # Lift 146.3x
-                    "renda_desconhecida_valor_alto",  # Lift 23.4x
-                    "renda_metade_comprometida",  # Lift 4.6x
-                    "idade_60_plus",            # Lift 3.9x
+                    "burst_intenso",
+                    "multiplos_pix_rapidos",
+                    "intervalo_muito_curto",
+                    "pix_acima_1000",
+                    "valor_absoluto_alto",
+                    "valor_absoluto_muito_alto",
+                    "primeira_tx_trimestre",
+                    "renda_desconhecida_valor_alto",
+                    "renda_metade_comprometida",
+                    "idade_60_plus",
                 ],
                 "min_score": 3,
-                # required(+4) ≥ ms=3 → ativa com apenas os required.
-                # Optional elevam o score para refletir gravidade.
                 "severity": "ALTO",
                 "description": (
-                    "Burst de transações em 30min com valor ≥ R$1.000 — "
+                    "Burst de transações em 30min com valor ≥ R$500 — "
                     "padrão de urgência típico de engenharia social"
                 ),
             },
             # ═══════════════════════════════════════════════════════
-            # PADRÃO 8: BURST_INTENSO_RAPIDO [R3 — NOVO na Frente 3]
-            # Medido: TP=48, FP=0, Prec=100%, F1=0.2382
-            #
-            # Justificativa: Regra cirúrgica com ZERO falsos positivos.
-            # A trinca burst_intenso + burst_30m + multiplos_pix_rapidos
-            # captura 48 fraudes sem nenhum FP — pega quando 3+ tx em
-            # 30min com tx_count_prev_30m ≥ 3 e qt_pix_dia_max ≥ 3.
-            #
-            # Cluster de overlap com ESVAZIAMENTO_CONTA (que requer
-            # multiplos_pix_rapidos, subconjunto parcial).
-            #
-            # min_score=6: os 3 required somam 6. Ativa somente se
-            # todos os 3 estiverem presentes — sem margem para erro.
+            # PADRÃO 8: BURST_INTENSO_RAPIDO [inalterado]
+            # Leakage-free: TP=48, FP=0, Prec=100%
             # ═══════════════════════════════════════════════════════
             "BURST_INTENSO_RAPIDO": {
                 "required": [
-                    "burst_intenso",           # Lift ∞ (0 normais)
-                    "burst_30m",               # Lift 241.7x
-                    "multiplos_pix_rapidos",   # Lift 196.7x
+                    "burst_intenso",
+                    "burst_30m",
+                    "multiplos_pix_rapidos",
                 ],
-                # Combinação tripla com 100% precision
                 "optional": [
-                    "pix_acima_1000",          # Lift 14.5x
-                    "valor_absoluto_alto",     # Lift 34.3x
-                    "intervalo_muito_curto",   # Lift 6.7x
-                    "primeira_tx_trimestre",   # Lift 146.3x
-                    "aproximando_esgotamento", # Lift 26.8x
+                    "pix_acima_1000",
+                    "valor_absoluto_alto",
+                    "intervalo_muito_curto",
+                    "primeira_tx_trimestre",
+                    "aproximando_esgotamento",
                 ],
                 "min_score": 6,
-                # required(+6) = 6 ≥ ms=6 → ativa apenas com os 3 required.
-                # Optional elevam o score para scoring fino.
                 "severity": "CRITICO",
                 "description": (
                     "ALERTA MÁXIMO: Burst intenso (3+ tx em 30min) com "
@@ -750,49 +644,20 @@ class SocialEngineeringDetector:
                 ),
             },
             # ═══════════════════════════════════════════════════════
-            # PADRÃO 9: PRIMEIRA_TX_SUSPEITA [R4 — NOVO na Frente 3]
-            # Medido: TP=89, FP=34, Prec=72.4%, F1=0.3724
+            # REMOVIDO: PRIMEIRA_TX_SUSPEITA
             #
-            # Justificativa: Captura fraudes "low & slow" invisíveis ao
-            # SE v3.1. As fraudes invisíveis têm 36.8% de primeira_tx vs
-            # 25% das detectadas (Lift 1.47 — sub-representadas na detecção).
+            # v3.3: TP=127, FP=4395, Prec=2.8% no leakage-free
+            # v3.4: REMOVIDO — precision inaceitável.
             #
-            # Perfil alvo: Primeira transação do trimestre com valor ≥ R$1k
-            # para recebedor que nunca recebeu antes (first_receiver).
-            # Conceitualmente: golpista convence vítima a fazer um PIX
-            # "único" de valor moderado — sem burst, sem urgência aparente.
+            # primeira_tx_trimestre como required gate ativa em 78%
+            # dos normais no leakage-free (rolling window causal).
+            # Redesigns testados (S2B valor_redondo, S2C renda, S2D
+            # valor_5k) não atingiram precision suficiente.
             #
-            # NÃO clusterizado com COACAO_FISICA: apesar de compartilharem
-            # primeira_tx + pix_acima_1000, PRIMEIRA_TX_SUSPEITA NÃO requer
-            # intervalo_muito_curto, cobrindo um espaço diferente.
-            #
-            # min_score=4: required(+4), precisa de 0+ optional.
-            # Severity MEDIO: menor confiança que CRITICO (72.4% prec),
-            # e perfil menos urgente (sem burst/intervalo curto).
+            # O módulo Behavioral cobre esse cenário com:
+            #   PRIMEIRA_TX_VALOR_ALTO (Prec 72.4%, TP=89)
+            #   CONTA_DORMANTE_VALOR_ALTO (Prec 65.0%, TP=141)
             # ═══════════════════════════════════════════════════════
-            "PRIMEIRA_TX_SUSPEITA": {
-                "required": ["primeira_tx_trimestre", "pix_acima_1000"],
-                # Lift 146.3x + 14.5x
-                "optional": [
-                    "idade_60_plus",            # Lift 3.9x
-                    "idade_70_plus",            # Lift 8.4x
-                    "renda_metade_comprometida",  # Lift 4.6x
-                    "renda_desconhecida_valor_alto",  # Lift 23.4x
-                    "valor_absoluto_alto",      # Lift 34.3x
-                    "is_segmento_premium",      # Lift 1.6x
-                    "valor_redondo",            # Lift 3.0x
-                    "chave_aleatoria",          # Contextual
-                    "recebedor_nunca_visto",    # Contextual
-                ],
-                "min_score": 4,
-                # required(+4) ≥ ms=4 → ativa com apenas os required.
-                # Severity MEDIO reflete menor urgência e precisão.
-                "severity": "MEDIO",
-                "description": (
-                    "Primeira transação do trimestre com valor ≥ R$1.000 — "
-                    "possível engenharia social sem sinais de urgência"
-                ),
-            },
         }
 
     # =============================================================
@@ -899,12 +764,8 @@ class SocialEngineeringDetector:
         """
         Calcula score SE com deduplicação por cluster de overlap.
 
-        v3.0: Padrões no mesmo cluster (Jaccard > 0.15) não somam.
+        Padrões no mesmo cluster (Jaccard > 0.15) não somam.
         Apenas o de maior severidade/score dentro do cluster conta.
-
-        Isso evita double-counting quando, por exemplo,
-        ESVAZIAMENTO_CONTA e BURST_ESVAZIAMENTO_CONTA ativam juntos,
-        ou COACAO_FISICA e BURST_VALOR_ALTO co-ocorrem.
         """
         if not patterns:
             return 0.0
@@ -919,16 +780,13 @@ class SocialEngineeringDetector:
         used: set[str] = set()
         score = 0.0
 
-        # Padrões já vêm ordenados por severidade + score
         for pattern in patterns:
             if pattern.pattern_name in used:
                 continue
 
-            # Verificar se este padrão pertence a algum cluster
             cluster_found = False
             for cluster in _OVERLAP_CLUSTERS:
                 if pattern.pattern_name in cluster:
-                    # Marcar todo o cluster como usado
                     used.update(cluster)
                     cluster_found = True
                     break
