@@ -1,0 +1,15 @@
+{
+  "timestamp": "20260417_173806",
+  "mode": "sample",
+  "n_processed": 6000,
+  "n_fraud": 355,
+  "workers": 4,
+  "elapsed_seconds": 264.7,
+  "engine_version": "3.0.5",
+  "pipeline_version": "1.4",
+  "se_version": "3.4",
+  "beh_version": "3.1",
+  "alerts": [],
+  "dataset_path": "C:\\Users\\u857755\\OneDrive - BRB - Banco de Brasilia SA\\Documentos\\Projetos\\squad_IA\\PIX\\rebuild_pix\\dados\\base_treino_final.csv",
+  "output_dir": "C:\\Users\\u857755\\OneDrive - BRB - Banco de Brasilia SA\\Documentos\\Projetos\\squad_IA\\PIX\\rebuild_pix\\resultados\\simulacao_e2e_v2_sample_20260417_173806"
+}

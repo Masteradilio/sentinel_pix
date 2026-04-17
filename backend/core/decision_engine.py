@@ -415,13 +415,101 @@ class PixDecisionEngine:
             logger.warning(f"LGBM não encontrado em {lgbm_path}")
 
         # 2. LGBM Features
-        features_path = art / "lgbm_features.json"
-        if features_path.exists():
-            with open(features_path, "r") as f:
-                self.lgbm_features = json.load(f)
-            logger.info(f"LGBM features: {len(self.lgbm_features)}")
-        elif self.lgbm_model and hasattr(self.lgbm_model, "feature_name_"):
-            self.lgbm_features = list(self.lgbm_model.feature_name_)
+        # ============================================================
+        # ESTRATÉGIA: model.feature_name_ é source of truth (foi o que
+        # o LightGBM usou no treino). O JSON é metadata auxiliar que
+        # pode ter estrutura complexa (version, n_features, features,
+        # core_features, extra_features, etc.) e NÃO deve ser usado
+        # como fonte primária.
+        # ============================================================
+        self.lgbm_features = None
+
+        # Prioridade 1: feature_name_ do próprio modelo (sempre confiável)
+        if self.lgbm_model is not None and hasattr(self.lgbm_model, "feature_name_"):
+            model_features = self.lgbm_model.feature_name_
+            if model_features:  # não vazio
+                self.lgbm_features = list(model_features)
+                logger.info(
+                    f"LGBM features: {len(self.lgbm_features)} "
+                    f"(source=model.feature_name_) ✅"
+                )
+
+        # Prioridade 2: JSON — só se o modelo não tiver feature_name_
+        if self.lgbm_features is None:
+            features_path = art / "lgbm_features.json"
+            if features_path.exists():
+                with open(features_path, "r", encoding="utf-8") as f:
+                    raw = json.load(f)
+
+                # O JSON pode ter 3 formatos possíveis:
+                # (a) list direto: ["feat_a", "feat_b", ...]
+                # (b) dict com chave "features": {"features": [...], "version": "..."}
+                # (c) dict flat (legado): {"feat_a": ..., "feat_b": ...}
+                if isinstance(raw, list):
+                    self.lgbm_features = [str(x) for x in raw]
+                    logger.warning(
+                        f"LGBM features carregadas do JSON (list direto): "
+                        f"{len(self.lgbm_features)}"
+                    )
+                elif isinstance(raw, dict):
+                    # Tenta extrair da chave "features" (formato metadata)
+                    if "features" in raw and isinstance(raw["features"], list):
+                        self.lgbm_features = [str(x) for x in raw["features"]]
+                        logger.warning(
+                            f"LGBM features extraídas de raw['features']: "
+                            f"{len(self.lgbm_features)} "
+                            f"(json_version={raw.get('version', '?')})"
+                        )
+                    else:
+                        # Legado: dict flat — usa as keys (provavelmente errado)
+                        self.lgbm_features = [str(k) for k in raw.keys()]
+                        logger.error(
+                            f"⚠️  lgbm_features.json em formato dict flat "
+                            f"(sem chave 'features'). Usando keys: "
+                            f"{len(self.lgbm_features)}. Pode estar errado!"
+                        )
+                else:
+                    raise TypeError(
+                        f"lgbm_features.json tem formato inesperado: "
+                        f"{type(raw).__name__}"
+                    )
+
+        # Validação crítica: garantir que não ficamos sem features
+        if not self.lgbm_features:
+            raise RuntimeError(
+                "Não foi possível determinar LGBM features. "
+                "Modelo não tem feature_name_ e JSON não disponível/válido."
+            )
+
+        # ============================================================
+        # VALIDAÇÃO DE CONSISTÊNCIA: se temos modelo E json, eles
+        # precisam bater. Falha alto e cedo se houver mismatch.
+        # ============================================================
+        if (
+            self.lgbm_model is not None
+            and hasattr(self.lgbm_model, "feature_name_")
+            and self.lgbm_model.feature_name_
+        ):
+            model_feat_set = set(self.lgbm_model.feature_name_)
+            loaded_feat_set = set(self.lgbm_features)
+            if model_feat_set != loaded_feat_set:
+                only_model = model_feat_set - loaded_feat_set
+                only_loaded = loaded_feat_set - model_feat_set
+                logger.error(
+                    f"🚨 FEATURE MISMATCH!\n"
+                    f"  Model: {len(model_feat_set)} features\n"
+                    f"  Loaded: {len(loaded_feat_set)} features\n"
+                    f"  Only in model ({len(only_model)}): {sorted(only_model)[:5]}...\n"
+                    f"  Only in loaded ({len(only_loaded)}): {sorted(only_loaded)[:5]}..."
+                )
+                # Preferir modelo como fonte da verdade — sobrescreve
+                logger.warning(
+                    "Sobrescrevendo lgbm_features com model.feature_name_ "
+                    "(source of truth)"
+                )
+                self.lgbm_features = list(self.lgbm_model.feature_name_)
+
+
 
         # 3. Scoring Config
         scoring_path = art / "scoring_config.json"

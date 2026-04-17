@@ -675,64 +675,88 @@ class PipelineOrquestrador:
         return df
 
     def _create_sequential_features(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Cria features sequenciais usando cache de histórico por cliente."""
+        """
+        Cria features sequenciais usando cache de histórico por cliente.
+
+        v1.4.1: Correção de bug com df.loc em DataFrames de 1 linha.
+        Usa .at[] para atribuição escalar (mais estável que .loc em pandas >= 2.0).
+        """
+        # Inicializar colunas com valores default (vetorizado, sem loop)
+        default_values = {
+            "minutes_since_prev_tx": np.nan,
+            "tx_count_prev_30m": 0,
+            "receiver_tx_count_prev": 0,
+            "qt_envio_recebedor_trimestre": 0,
+            "first_receiver_flag": 1,
+            "key_tx_count_prev": 0,
+            "first_key_flag": 1,
+            "distinct_receivers_so_far": 1,
+            "distinct_keys_so_far": 1,
+            "tp_primeiro_envio_recebedor_trimestre": 1,
+        }
+        for col, default in default_values.items():
+            if col not in df.columns:
+                df[col] = default
+            else:
+                df[col] = df[col].fillna(default)
+
+        # Loop por linha para consultar histórico
         for idx in df.index:
-            customer_id = str(df.loc[idx, "customer_id"])
-            event_time = df.loc[idx, "event_datetime"]
-            receiver = str(df.loc[idx, "cd_cpf_cnpj_recebedor"])
-            pix_key = str(df.loc[idx, "ds_chave_pix"])
+            customer_id = str(df.at[idx, "customer_id"])
+            event_time = df.at[idx, "event_datetime"]
+            receiver = str(df.at[idx, "cd_cpf_cnpj_recebedor"])
+            pix_key = str(df.at[idx, "ds_chave_pix"])
 
             hist = self._customer_history.get(customer_id)
 
-            if hist is not None and pd.notna(event_time):
-                last_time = hist.get("last_event_time")
-                if last_time is not None and pd.notna(last_time):
-                    diff_min = (event_time - last_time).total_seconds() / 60.0
-                    df.loc[idx, "minutes_since_prev_tx"] = max(diff_min, 0)
-                else:
-                    df.loc[idx, "minutes_since_prev_tx"] = np.nan
+            if hist is None or not pd.notna(event_time):
+                # Sem histórico ou datetime inválido → mantém defaults
+                continue
 
-                recent_times = hist.get("recent_times", [])
-                count_30m = sum(
-                    1 for t in recent_times
-                    if pd.notna(t) and (event_time - t).total_seconds() / 60.0 <= 30
-                )
-                df.loc[idx, "tx_count_prev_30m"] = count_30m
+            # --- minutes_since_prev_tx ---
+            last_time = hist.get("last_event_time")
+            if last_time is not None and pd.notna(last_time):
+                diff_min = (event_time - last_time).total_seconds() / 60.0
+                df.at[idx, "minutes_since_prev_tx"] = max(diff_min, 0)
 
-                receiver_counts = hist.get("receiver_counts", {})
-                df.loc[idx, "receiver_tx_count_prev"] = receiver_counts.get(receiver, 0)
-                df.loc[idx, "qt_envio_recebedor_trimestre"] = receiver_counts.get(receiver, 0)
-                df.loc[idx, "first_receiver_flag"] = (
-                    1 if receiver_counts.get(receiver, 0) == 0 else 0
-                )
+            # --- tx_count_prev_30m ---
+            recent_times = hist.get("recent_times", [])
+            count_30m = sum(
+                1 for t in recent_times
+                if pd.notna(t)
+                and (event_time - t).total_seconds() / 60.0 <= 30
+            )
+            df.at[idx, "tx_count_prev_30m"] = count_30m
 
-                key_counts = hist.get("key_counts", {})
-                df.loc[idx, "key_tx_count_prev"] = key_counts.get(pix_key, 0)
-                df.loc[idx, "first_key_flag"] = 1 if key_counts.get(pix_key, 0) == 0 else 0
+            # --- Receiver counts ---
+            receiver_counts = hist.get("receiver_counts", {})
+            rcv_count = receiver_counts.get(receiver, 0)
+            df.at[idx, "receiver_tx_count_prev"] = rcv_count
+            df.at[idx, "qt_envio_recebedor_trimestre"] = rcv_count
+            df.at[idx, "first_receiver_flag"] = 1 if rcv_count == 0 else 0
+            df.at[idx, "tp_primeiro_envio_recebedor_trimestre"] = (
+                1 if rcv_count == 0 else 0
+            )
 
-                df.loc[idx, "distinct_receivers_so_far"] = len(receiver_counts) + (
-                    1 if receiver not in receiver_counts else 0
-                )
-                df.loc[idx, "distinct_keys_so_far"] = len(key_counts) + (
-                    1 if pix_key not in key_counts else 0
-                )
-                df.loc[idx, "tp_primeiro_envio_recebedor_trimestre"] = (
-                    1 if receiver_counts.get(receiver, 0) == 0 else 0
-                )
-            else:
-                df.loc[idx, "minutes_since_prev_tx"] = np.nan
-                df.loc[idx, "tx_count_prev_30m"] = 0
-                df.loc[idx, "receiver_tx_count_prev"] = 0
-                df.loc[idx, "qt_envio_recebedor_trimestre"] = 0
-                df.loc[idx, "first_receiver_flag"] = 1
-                df.loc[idx, "key_tx_count_prev"] = 0
-                df.loc[idx, "first_key_flag"] = 1
-                df.loc[idx, "distinct_receivers_so_far"] = 1
-                df.loc[idx, "distinct_keys_so_far"] = 1
-                df.loc[idx, "tp_primeiro_envio_recebedor_trimestre"] = 1
+            # --- Key counts ---
+            key_counts = hist.get("key_counts", {})
+            key_count = key_counts.get(pix_key, 0)
+            df.at[idx, "key_tx_count_prev"] = key_count
+            df.at[idx, "first_key_flag"] = 1 if key_count == 0 else 0
 
+            # --- Distinct counts ---
+            df.at[idx, "distinct_receivers_so_far"] = len(receiver_counts) + (
+                1 if receiver not in receiver_counts else 0
+            )
+            df.at[idx, "distinct_keys_so_far"] = len(key_counts) + (
+                1 if pix_key not in key_counts else 0
+            )
+
+        # burst_30m_flag é derivado de tx_count_prev_30m (vetorizado)
         df["burst_30m_flag"] = (df["tx_count_prev_30m"] >= 1).astype(int)
+
         return df
+
 
     def _update_customer_history(self, df: pd.DataFrame):
         """Atualiza o cache de histórico após inferência bem-sucedida."""

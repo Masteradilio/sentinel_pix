@@ -1,0 +1,4 @@
+veto_categoria,total,tp,fp,precision
+VETO BLOQUEAR,273,269,4,0.9853
+SEM_VETO,42,41,1,0.9762
+VETO CONFIRMAR,25,22,3,0.88

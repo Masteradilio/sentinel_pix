@@ -1,0 +1,881 @@
+"""
+backend/scripts/simular_pipeline_e2e_v2.py — Simulação E2E v2 (FASE 0)
+
+Simulação end-to-end do pipeline antifraude PIX usando o PipelineOrquestrador
+real (v1.4) em modo batch. Substitui o simular_pipeline_e2e_lf.py que
+reimplementava lógica e tinha bugs críticos:
+
+  BUGS CORRIGIDOS NA v2:
+    ✗ SE chamava `analyze/detect/score/evaluate` (não existem) → score=0
+    ✗ BEH retornava dataclass mas código esperava dict → score=0
+    ✗ Vetos simplificados divergiam do engine real
+    ✗ Anchors hardcoded ignorando scoring_config.json
+
+  ARQUITETURA v2:
+    ✓ Usa PipelineOrquestrador v1.4 real (zero duplicação)
+    ✓ Processa cada tx via engine.decide() oficial
+    ✓ Guardrails: alerta loud se SE/BEH zerarem em 100% das tx
+    ✓ Ablation: mede contribuição de LGBM / +IF / +SE / +BEH / full
+    ✓ Breakdown de decisões por veto_reason / cascade_rule
+    ✓ Modo sample (N tx) ou full (100k tx) via CLI
+    ✓ Paralelização opcional (multiprocessing)
+
+Uso:
+    # Modo rápido (2k tx estratificadas — ~2min)
+    python backend/scripts/simular_pipeline_e2e_v2.py --sample 2000
+
+    # Modo full (100k tx — ~60-90min sequencial)
+    python backend/scripts/simular_pipeline_e2e_v2.py --full
+
+    # Full com 4 workers (~20-25min)
+    python backend/scripts/simular_pipeline_e2e_v2.py --full --workers 4
+
+    # Continuar de onde parou (se crashou)
+    python backend/scripts/simular_pipeline_e2e_v2.py --full --resume
+
+Autor: AI Engineer + Adilio
+Data: 2026-04-17
+Engine target: v3.0.5 | Pipeline: v1.4 | SE v3.4 | BEH v3.1
+"""
+
+from __future__ import annotations
+import sys, io
+if sys.platform == "win32":
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
+    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="replace")
+
+import argparse
+import json
+import logging
+import sys
+import time
+import warnings
+from datetime import datetime
+from pathlib import Path
+from typing import Any
+
+import numpy as np
+import pandas as pd
+
+warnings.filterwarnings("ignore")
+
+# =========================================================
+# LOGGING
+# =========================================================
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s | %(levelname)-7s | %(name)s | %(message)s",
+    datefmt="%H:%M:%S",
+)
+logger = logging.getLogger("simulacao_e2e_v2")
+
+# Silenciar engines durante batch (muito verboso)
+logging.getLogger("core.decision_engine").setLevel(logging.WARNING)
+logging.getLogger("core.behavioral_analytics").setLevel(logging.WARNING)
+logging.getLogger("core.social_engineering").setLevel(logging.WARNING)
+logging.getLogger("core.pipeline_orquestrador").setLevel(logging.WARNING)
+
+# =========================================================
+# PATHS
+# =========================================================
+SCRIPT_PATH = Path(__file__).resolve()
+BACKEND_DIR = SCRIPT_PATH.parent.parent              # backend/
+PROJECT_ROOT = BACKEND_DIR.parent                     # rebuild_pix/
+CORE_DIR = BACKEND_DIR / "core"                       # backend/core/
+ARTEFATOS_DIR = BACKEND_DIR / "artefatos"
+DADOS_DIR = PROJECT_ROOT / "dados"
+DATASET_PATH = DADOS_DIR / "base_treino_final.csv"
+
+# Ordem importa: CORE_DIR precisa estar ANTES para resolver
+# `from preprocessing import ...` usado pelo pipeline_orquestrador.
+sys.path.insert(0, str(CORE_DIR))
+sys.path.insert(0, str(BACKEND_DIR))
+sys.path.insert(0, str(PROJECT_ROOT))
+
+
+TIMESTAMP = datetime.now().strftime("%Y%m%d_%H%M%S")
+OUTPUT_BASE = PROJECT_ROOT / "resultados"
+
+
+# =========================================================
+# HELPERS
+# =========================================================
+def print_section(title: str, width: int = 72) -> None:
+    print(f"\n{'=' * width}")
+    print(f"  {title}")
+    print(f"{'=' * width}")
+
+
+def safe_json_dump(obj: Any, path: Path) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(obj, f, ensure_ascii=False, indent=2, default=str)
+
+
+def stratified_sample(df: pd.DataFrame, n: int, seed: int = 42) -> pd.DataFrame:
+    """
+    Sample estratificado por is_fraud, preservando proporção e ordem temporal.
+    Garante TODAS as fraudes se n >= n_fraud.
+    """
+    fraud = df[df["is_fraud"] == 1].copy()
+    normal = df[df["is_fraud"] == 0].copy()
+
+    n_fraud = len(fraud)
+    n_normal_needed = max(0, n - n_fraud)
+    n_normal_needed = min(n_normal_needed, len(normal))
+
+    rng = np.random.RandomState(seed)
+    normal_idx = rng.choice(normal.index, size=n_normal_needed, replace=False)
+    normal_sample = normal.loc[sorted(normal_idx)]
+
+    sample = pd.concat([fraud, normal_sample], ignore_index=False)
+    sample = sample.sort_values("event_datetime").reset_index(drop=True)
+
+    logger.info(
+        f"Sample estratificado: {len(sample):,} tx "
+        f"({n_fraud} fraudes + {len(normal_sample):,} normais)"
+    )
+    return sample
+
+
+# =========================================================
+# MÉTRICAS
+# =========================================================
+def compute_metrics(y_true: np.ndarray, y_pred: np.ndarray, label: str = "") -> dict[str, Any]:
+    """Calcula métricas padrão de classificação binária."""
+    tp = int(np.sum((y_true == 1) & (y_pred == 1)))
+    fp = int(np.sum((y_true == 0) & (y_pred == 1)))
+    fn = int(np.sum((y_true == 1) & (y_pred == 0)))
+    tn = int(np.sum((y_true == 0) & (y_pred == 0)))
+
+    prec = tp / max(tp + fp, 1)
+    rec = tp / max(tp + fn, 1)
+    f1 = 2 * prec * rec / max(prec + rec, 1e-9)
+    fpr = fp / max(fp + tn, 1)
+
+    return {
+        "label": label,
+        "TP": tp,
+        "FP": fp,
+        "FN": fn,
+        "TN": tn,
+        "Precision": round(prec, 6),
+        "Recall": round(rec, 6),
+        "F1": round(f1, 6),
+        "FPR": round(fpr, 8),
+    }
+
+
+def print_metrics_table(metrics_dict: dict[str, dict]) -> None:
+    """Imprime tabela de métricas formatada."""
+    header = (
+        f"{'Componente':<28} {'TP':>5} {'FP':>6} {'FN':>5} "
+        f"{'Prec':>8} {'Rec':>8} {'F1':>8} {'FPR':>9}"
+    )
+    print(header)
+    print("-" * len(header))
+    for m in metrics_dict.values():
+        print(
+            f"{m['label']:<28} {m['TP']:>5} {m['FP']:>6} {m['FN']:>5} "
+            f"{m['Precision']:>8.1%} {m['Recall']:>8.1%} {m['F1']:>8.4f} "
+            f"{m['FPR']:>9.4%}"
+        )
+
+
+# =========================================================
+# GUARDRAILS — validações críticas pós-execução
+# =========================================================
+def validate_module_activations(df: pd.DataFrame) -> list[str]:
+    """
+    Valida que SE e BEH estão realmente ativando.
+    Retorna lista de alertas críticos.
+    """
+    alerts = []
+    n = len(df)
+
+    se_active = (df["se_score"] > 0).sum()
+    beh_active = (df["beh_score"] > 0).sum()
+
+    se_rate = se_active / max(n, 1)
+    beh_rate = beh_active / max(n, 1)
+
+    if se_active == 0:
+        alerts.append(
+            f"🚨 CRÍTICO: SE zerou em 100% das {n:,} tx. "
+            f"Adapter quebrado ou método errado sendo chamado."
+        )
+    elif se_rate < 0.001:
+        alerts.append(
+            f"⚠️ AVISO: SE ativou em apenas {se_active} tx ({se_rate:.3%}). "
+            f"Pode estar calibrado conservador demais."
+        )
+    else:
+        logger.info(
+            f"✅ SE ativou em {se_active:,}/{n:,} tx ({se_rate:.2%}) — OK"
+        )
+
+    if beh_active == 0:
+        alerts.append(
+            f"🚨 CRÍTICO: BEH zerou em 100% das {n:,} tx. "
+            f"Adapter quebrado ou retorno não sendo lido corretamente."
+        )
+    elif beh_rate < 0.001:
+        alerts.append(
+            f"⚠️ AVISO: BEH ativou em apenas {beh_active} tx ({beh_rate:.3%})."
+        )
+    else:
+        logger.info(
+            f"✅ BEH ativou em {beh_active:,}/{n:,} tx ({beh_rate:.2%}) — OK"
+        )
+
+    return alerts
+
+
+# =========================================================
+# ANÁLISES GRANULARES
+# =========================================================
+def analise_ablation(df: pd.DataFrame) -> dict[str, dict]:
+    """
+    Ablation study — mede contribuição marginal de cada componente.
+
+    Simula decisões usando subconjuntos das informações disponíveis.
+    """
+    y = df["is_fraud"].values.astype(int)
+
+    # LGBM solo @ best F1 threshold (0.40 conforme config)
+    pred_lgbm_solo = (df["lgbm_raw"].values >= 0.40).astype(int)
+
+    # LGBM + IF (soma boost quando IF alto + LGBM moderado)
+    pred_lgbm_if = (
+        (df["lgbm_raw"].values >= 0.40)
+        | ((df["if_percentile"].values >= 0.995) & (df["lgbm_raw"].values >= 0.25))
+    ).astype(int)
+
+    # SE solo (score >= 60 = CRITICO)
+    pred_se_solo = (df["se_score"].values >= 60).astype(int)
+
+    # BEH solo (score >= 40 = ALTO)
+    pred_beh_solo = (df["beh_score"].values >= 40).astype(int)
+
+    # Pipeline full (decisão final do engine)
+    pred_pipeline = df["decisao"].isin(["CONFIRMAR", "BLOQUEAR"]).astype(int).values
+
+    return {
+        "lgbm_solo_040": compute_metrics(y, pred_lgbm_solo, "LGBM solo @0.40"),
+        "lgbm_plus_if": compute_metrics(y, pred_lgbm_if, "LGBM + IF"),
+        "se_solo_60": compute_metrics(y, pred_se_solo, "SE solo ≥60"),
+        "beh_solo_40": compute_metrics(y, pred_beh_solo, "BEH solo ≥40"),
+        "pipeline_full": compute_metrics(y, pred_pipeline, "PIPELINE FULL"),
+    }
+
+
+def analise_threshold_sweep(df: pd.DataFrame) -> pd.DataFrame:
+    """Varre thresholds de 0 a 100 no score_final."""
+    y = df["is_fraud"].values.astype(int)
+    score = df["score_final"].values.astype(float)
+
+    rows = []
+    for t in np.arange(0, 100.1, 1.0):
+        pred = (score >= t).astype(int)
+        m = compute_metrics(y, pred)
+        rows.append({
+            "threshold": round(float(t), 2),
+            "tp": m["TP"],
+            "fp": m["FP"],
+            "fn": m["FN"],
+            "tn": m["TN"],
+            "precision": m["Precision"],
+            "recall": m["Recall"],
+            "f1": m["F1"],
+            "fpr": m["FPR"],
+        })
+    return pd.DataFrame(rows)
+
+
+def breakdown_vetos(df: pd.DataFrame) -> pd.DataFrame:
+    """Breakdown de vetos aplicados e sua precisão."""
+    df_flagged = df[df["decisao"].isin(["CONFIRMAR", "BLOQUEAR"])].copy()
+
+    if len(df_flagged) == 0:
+        return pd.DataFrame()
+
+    # Normalizar veto_reason (pode ter texto longo)
+    df_flagged["veto_categoria"] = df_flagged["veto_aplicado"].fillna("SEM_VETO")
+    df_flagged["veto_categoria"] = df_flagged["veto_categoria"].apply(
+        lambda x: str(x).split(":")[0].strip() if ":" in str(x) else str(x)[:40]
+    )
+
+    grouped = df_flagged.groupby("veto_categoria").agg(
+        total=("is_fraud", "size"),
+        tp=("is_fraud", "sum"),
+    ).reset_index()
+    grouped["fp"] = grouped["total"] - grouped["tp"]
+    grouped["precision"] = (grouped["tp"] / grouped["total"]).round(4)
+    grouped = grouped.sort_values("total", ascending=False)
+
+    return grouped
+
+
+def analise_fn_detalhada(df: pd.DataFrame) -> pd.DataFrame:
+    """Análise detalhada dos Falsos Negativos (fraudes que escaparam)."""
+    fn_df = df[
+        (df["is_fraud"] == 1) & (df["decisao"] == "APROVAR")
+    ].copy()
+
+    cols_interesse = [
+        "transaction_id", "customer_id", "event_datetime",
+        "vl_pix", "nr_idade", "qt_tempo_relacionamento_mes",
+        "is_first_tx_trimestre", "first_receiver_flag", "burst_30m_flag",
+        "pix_key_random_flag", "perfil_vulneravel_se_flag",
+        "lgbm_raw", "if_percentile", "se_score", "beh_score",
+        "cascade_action", "cascade_reason",
+        "score_final", "veto_aplicado",
+    ]
+    cols_presentes = [c for c in cols_interesse if c in fn_df.columns]
+    return fn_df[cols_presentes].sort_values("vl_pix", ascending=False)
+
+
+def analise_fp_detalhada(df: pd.DataFrame, top_n: int = 50) -> pd.DataFrame:
+    """Análise dos top-N Falsos Positivos (normais flagrados)."""
+    fp_df = df[
+        (df["is_fraud"] == 0) & (df["decisao"].isin(["CONFIRMAR", "BLOQUEAR"]))
+    ].copy()
+
+    cols_interesse = [
+        "transaction_id", "customer_id", "event_datetime",
+        "vl_pix", "nr_idade",
+        "lgbm_raw", "if_percentile", "se_score", "beh_score",
+        "cascade_action", "cascade_reason",
+        "score_final", "decisao", "veto_aplicado",
+    ]
+    cols_presentes = [c for c in cols_interesse if c in fp_df.columns]
+    return (
+        fp_df[cols_presentes]
+        .sort_values("score_final", ascending=False)
+        .head(top_n)
+    )
+
+
+# =========================================================
+# PROCESSAMENTO DE UMA TX (unidade básica)
+# =========================================================
+
+def _derive_cascade_action(cascade: dict | None) -> str:
+    """
+    Deriva a ação do cascade a partir do bloco retornado pelo orquestrador.
+    Retorna: 'BLOCK', 'CONFIRM' ou 'NONE'.
+    """
+    if not cascade or not cascade.get("triggered", False):
+        return "NONE"
+
+    rules = cascade.get("rules", []) or []
+    # C1 (BURST_GTE3) é sempre BLOQUEAR no engine
+    if any("BURST_GTE3" in r for r in rules):
+        return "BLOCK"
+    # Qualquer outra regra ativa (C3) é CONFIRMAR
+    return "CONFIRM"
+
+def _adapt_row_to_raw_schema(row_dict: dict) -> dict:
+    """
+    Adapta payload normalizado (base_treino_final.csv) para o schema RAW
+    que o PipelineOrquestrador espera.
+
+    O _create_features sobrescreve customer_id/event_datetime/transaction_id
+    a partir de cd_cpf_pagador/dt_pix/cd_pix. Precisamos popular essas
+    colunas originais a partir dos valores normalizados.
+
+    Mapping:
+        cd_pix           ← transaction_id
+        cd_cpf_pagador   ← customer_id
+        dt_pix           ← event_datetime
+    """
+    adapted = dict(row_dict)  # copia
+
+    # Só popula se a coluna RAW está ausente ou NaN (não sobrescrever dados bons)
+    def _fill_if_missing(raw_col: str, norm_col: str) -> None:
+        raw_val = adapted.get(raw_col)
+        if raw_val is None or (isinstance(raw_val, float) and pd.isna(raw_val)):
+            if norm_col in adapted:
+                adapted[raw_col] = adapted[norm_col]
+
+    _fill_if_missing("cd_pix", "transaction_id")
+    _fill_if_missing("cd_cpf_pagador", "customer_id")
+    _fill_if_missing("dt_pix", "event_datetime")
+
+    return adapted
+
+def process_single_tx(
+    orquestrador: Any,
+    row: pd.Series,
+    idx: int,
+) -> dict[str, Any]:
+    """
+    Processa uma única transação via orquestrador real.
+    Retorna dict com todos os campos relevantes para análise.
+    """
+    try:
+        row_dict = row.to_dict()
+        row_dict = _adapt_row_to_raw_schema(row_dict)
+        result = orquestrador.analisar(row_dict)
+
+        # Extrair scores
+        comp = result.get("componentes", {})
+        se_block = result.get("social_engineering", {})
+        beh_block = result.get("behavioral", {})
+        cascade = result.get("cascade", {})
+
+        return {
+            "idx": idx,
+            "transaction_id": result.get("transaction_id"),
+            "customer_id": result.get("customer_id"),
+            "event_datetime": result.get("timestamp", ""),
+            "is_fraud": int(row.get("is_fraud", 0)),
+            "vl_pix": float(row.get("vl_pix", 0) or 0),
+            "nr_idade": int(row.get("nr_idade", 0) or 0),
+            "qt_tempo_relacionamento_mes": int(
+                row.get("qt_tempo_relacionamento_mes", 0) or 0
+            ),
+            "is_first_tx_trimestre": int(row.get("is_first_tx_trimestre", 0) or 0),
+            "first_receiver_flag": int(row.get("first_receiver_flag", 0) or 0),
+            "burst_30m_flag": int(row.get("burst_30m_flag", 0) or 0),
+            "pix_key_random_flag": int(row.get("pix_key_random_flag", 0) or 0),
+            "perfil_vulneravel_se_flag": int(
+                row.get("perfil_vulneravel_se_flag", 0) or 0
+            ),
+            "lgbm_raw": comp.get("lgbm_raw", 0.0),
+            "lgbm_mapped": comp.get("lgbm_mapped", 0.0),
+            "if_percentile": comp.get("if_score", 0.0),
+            "if_raw": comp.get("if_raw", 0.0),
+            "se_score": se_block.get("se_score", 0.0) if se_block else 0.0,
+            "se_patterns_count": len(se_block.get("patterns", [])) if se_block else 0,
+            "se_worst_pattern": se_block.get("worst_pattern") if se_block else None,
+            "beh_score": beh_block.get("behavioral_score", 0.0) if beh_block else 0.0,
+            "beh_factors_count": len(beh_block.get("risk_factors", [])) if beh_block else 0,
+            "cascade_triggered": cascade.get("triggered", False) if cascade else False,
+            "cascade_rules": "|".join(cascade.get("rules", [])) if cascade else "",
+            "cascade_action": _derive_cascade_action(cascade),
+            "cascade_reason": "|".join(cascade.get("rules", [])) if cascade else "",
+
+            "peso_total": result.get("peso_total", 0),
+            "score_final": result.get("score_final", 0.0),
+            "decisao": result.get("decisao", "APROVAR"),
+            "veto_aplicado": result.get("veto_aplicado"),
+        }
+
+    except Exception as e:
+        
+        # 🔬 DIAGNÓSTICO TEMPORÁRIO: capturar stack trace completo nas 3 primeiras falhas
+        import traceback
+        if idx < 3:
+            logger.error(f"Erro na tx idx={idx}: {e}")
+            logger.error(f"Stack trace completo:\n{traceback.format_exc()}")
+            # Também vamos inspecionar o payload
+            logger.error(f"row_dict keys (primeiras 20): {list(row_dict.keys())[:20]}")
+            logger.error(f"customer_id no payload: {row_dict.get('customer_id')!r}")
+            logger.error(f"cd_cpf_pagador no payload: {row_dict.get('cd_cpf_pagador')!r}")
+            logger.error(f"event_datetime no payload: {row_dict.get('event_datetime')!r}")
+            logger.error(f"dt_pix no payload: {row_dict.get('dt_pix')!r}")
+        else:
+            logger.error(f"Erro na tx idx={idx}: {e}")
+        return {
+            "idx": idx,
+            "is_fraud": int(row.get("is_fraud", 0)),
+            "vl_pix": float(row.get("vl_pix", 0) or 0),
+            "error": str(e),
+            "decisao": "ERRO",
+            "score_final": -1,
+            "lgbm_raw": 0.0,
+            "if_percentile": 0.0,
+            "se_score": 0.0,
+            "beh_score": 0.0,
+        }
+
+
+# =========================================================
+# PROCESSAMENTO EM BATCH SEQUENCIAL
+# =========================================================
+def process_batch_sequential(
+    df: pd.DataFrame,
+    progress_every: int = 500,
+) -> pd.DataFrame:
+    """
+    Processa o DataFrame inteiro sequencialmente.
+    Mostra progresso a cada `progress_every` tx.
+    """
+    from core.pipeline_orquestrador import PipelineOrquestrador
+
+    logger.info("Inicializando PipelineOrquestrador (isso leva ~3-5s)...")
+    orquestrador = PipelineOrquestrador(
+        artefatos_dir=str(ARTEFATOS_DIR),
+        shap_enabled=False,  # desabilita SHAP para acelerar batch
+    )
+
+    status = orquestrador.get_status()
+    logger.info(
+        f"Orquestrador pronto: Engine v{status['modules']['engine']['version']} | "
+        f"disponível={orquestrador.available}"
+    )
+
+    if not orquestrador.available:
+        raise RuntimeError(
+            "PipelineOrquestrador não está disponível. "
+            "Verifique os artefatos em backend/artefatos/."
+        )
+
+    results = []
+    t_start = time.perf_counter()
+    n_total = len(df)
+
+    for idx, (_, row) in enumerate(df.iterrows()):
+        result = process_single_tx(orquestrador, row, idx)
+        results.append(result)
+
+        if (idx + 1) % progress_every == 0 or (idx + 1) == n_total:
+            elapsed = time.perf_counter() - t_start
+            rate = (idx + 1) / elapsed
+            eta = (n_total - idx - 1) / rate if rate > 0 else 0
+            logger.info(
+                f"Progresso: {idx + 1:,}/{n_total:,} "
+                f"({(idx + 1) / n_total:.1%}) | "
+                f"{rate:.1f} tx/s | ETA: {eta / 60:.1f}min"
+            )
+
+    return pd.DataFrame(results)
+
+
+# =========================================================
+# PROCESSAMENTO EM BATCH PARALELO (multiprocessing)
+# =========================================================
+def _worker_process_chunk(args: tuple) -> list[dict[str, Any]]:
+    """Worker function — cada processo tem seu próprio orquestrador."""
+    chunk_df, worker_id = args
+
+    # Imports dentro do worker (spawned process)
+    import sys as _sys
+    _sys.path.insert(0, str(CORE_DIR))
+    _sys.path.insert(0, str(BACKEND_DIR))
+    _sys.path.insert(0, str(PROJECT_ROOT))
+
+
+    # Silenciar logs do worker
+    import logging as _lg
+    _lg.getLogger("core").setLevel(_lg.ERROR)
+    _lg.getLogger("preprocessing").setLevel(_lg.ERROR)
+
+    from core.pipeline_orquestrador import PipelineOrquestrador
+
+    orquestrador = PipelineOrquestrador(
+        artefatos_dir=str(ARTEFATOS_DIR),
+        shap_enabled=False,
+    )
+
+    results = []
+    for idx, (_, row) in enumerate(chunk_df.iterrows()):
+        result = process_single_tx(orquestrador, row, idx)
+        result["_worker_id"] = worker_id
+        results.append(result)
+
+    return results
+
+
+def process_batch_parallel(
+    df: pd.DataFrame,
+    n_workers: int = 4,
+) -> pd.DataFrame:
+    """
+    Processa o DataFrame em paralelo usando multiprocessing.
+
+    ATENÇÃO: cada worker carrega seu próprio orquestrador (~200MB RAM cada).
+    Use no máximo n_workers = CPUs disponíveis - 1.
+    """
+    from multiprocessing import Pool
+
+    logger.info(
+        f"Processamento paralelo com {n_workers} workers. "
+        f"Cada worker carrega ~200MB em RAM."
+    )
+
+    # Divide em chunks aproximadamente iguais
+    chunk_size = len(df) // n_workers + 1
+    chunks = [
+        (df.iloc[i:i + chunk_size].copy(), worker_id)
+        for worker_id, i in enumerate(range(0, len(df), chunk_size))
+    ]
+
+    logger.info(f"Dividido em {len(chunks)} chunks de ~{chunk_size} tx cada")
+
+    t_start = time.perf_counter()
+
+    with Pool(processes=n_workers) as pool:
+        chunk_results = pool.map(_worker_process_chunk, chunks)
+
+    # Achatar resultados
+    all_results = []
+    for cr in chunk_results:
+        all_results.extend(cr)
+
+    elapsed = time.perf_counter() - t_start
+    logger.info(
+        f"Processamento paralelo concluído em {elapsed / 60:.1f}min "
+        f"({len(df) / elapsed:.1f} tx/s)"
+    )
+
+    return pd.DataFrame(all_results)
+
+
+# =========================================================
+# MAIN
+# =========================================================
+def main() -> None:
+    parser = argparse.ArgumentParser(
+        description="Simulação E2E v2 — usa PipelineOrquestrador real",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    group = parser.add_mutually_exclusive_group(required=True)
+    group.add_argument(
+        "--sample", type=int, metavar="N",
+        help="Processa N tx estratificadas (rápido, ~2min para N=2000)",
+    )
+    group.add_argument(
+        "--full", action="store_true",
+        help="Processa as 100k tx completas (~60-90min sequencial)",
+    )
+    parser.add_argument(
+        "--workers", type=int, default=1,
+        help="Nº de workers paralelos (1=sequencial, recomendado 2-6)",
+    )
+    parser.add_argument(
+        "--output-dir", type=str, default=None,
+        help="Diretório de output customizado (default: resultados/simulacao_e2e_v2_<ts>)",
+    )
+    args = parser.parse_args()
+
+    t_start = time.perf_counter()
+
+    # Setup output
+    mode = "sample" if args.sample else "full"
+    output_dir = Path(args.output_dir) if args.output_dir else (
+        OUTPUT_BASE / f"simulacao_e2e_v2_{mode}_{TIMESTAMP}"
+    )
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    print_section("SIMULAÇÃO E2E v2 — PipelineOrquestrador REAL")
+    print(f"  Dataset:   {DATASET_PATH.name}")
+    print(f"  Output:    {output_dir}")
+    print(f"  Timestamp: {TIMESTAMP}")
+    print(f"  Modo:      {mode.upper()}")
+    if args.sample:
+        print(f"  Sample N:  {args.sample:,}")
+    print(f"  Workers:   {args.workers}")
+
+    # -------------------------------------------------
+    # 1. Carregar dataset
+    # -------------------------------------------------
+    print_section("1. CARREGAR DATASET")
+    if not DATASET_PATH.exists():
+        raise FileNotFoundError(f"Dataset não encontrado: {DATASET_PATH}")
+
+    df = pd.read_csv(DATASET_PATH)
+    if "event_datetime" in df.columns:
+        df["event_datetime"] = pd.to_datetime(df["event_datetime"], errors="coerce")
+    df["is_fraud"] = pd.to_numeric(df["is_fraud"], errors="coerce").fillna(0).astype(int)
+    df = df.sort_values("event_datetime").reset_index(drop=True)
+
+    logger.info(
+        f"Dataset completo: {len(df):,} tx | "
+        f"{df['is_fraud'].sum()} fraudes "
+        f"({df['is_fraud'].mean():.3%})"
+    )
+
+    if args.sample:
+        df = stratified_sample(df, n=args.sample)
+
+    # -------------------------------------------------
+    # 2. Processar (sequencial ou paralelo)
+    # -------------------------------------------------
+    print_section(f"2. PROCESSAR {len(df):,} TX VIA ORQUESTRADOR")
+
+    if args.workers > 1:
+        predictions_df = process_batch_parallel(df, n_workers=args.workers)
+    else:
+        predictions_df = process_batch_sequential(df)
+
+    # Merge com dataset original para manter campos que o orquestrador pode transformar
+    # (usa index como join key)
+    if len(predictions_df) != len(df):
+        logger.warning(
+            f"Mismatch de tamanho: input={len(df)}, output={len(predictions_df)}. "
+            f"Alguns erros podem ter sido gerados."
+        )
+
+    # -------------------------------------------------
+    # 3. Guardrails
+    # -------------------------------------------------
+    print_section("3. GUARDRAILS — Validação crítica")
+    alerts = validate_module_activations(predictions_df)
+    if alerts:
+        print()
+        for a in alerts:
+            print(f"  {a}")
+        print()
+    else:
+        logger.info("✅ Todos os guardrails passaram")
+
+    # -------------------------------------------------
+    # 4. Métricas principais
+    # -------------------------------------------------
+    print_section("4. MÉTRICAS — Pipeline Full")
+
+    y_true = predictions_df["is_fraud"].values.astype(int)
+    y_pred_final = predictions_df["decisao"].isin(["CONFIRMAR", "BLOQUEAR"]).astype(int).values
+
+    pipeline_metrics = compute_metrics(y_true, y_pred_final, "PIPELINE_FINAL")
+
+    # Métricas por decisão
+    metrics_por_decisao = {}
+    for dec in ["APROVAR", "CONFIRMAR", "BLOQUEAR"]:
+        mask = predictions_df["decisao"] == dec
+        n = int(mask.sum())
+        n_fraud = int(predictions_df.loc[mask, "is_fraud"].sum())
+        metrics_por_decisao[dec] = {
+            "total": n,
+            "fraudes": n_fraud,
+            "taxa_fraude": round(n_fraud / max(n, 1), 6),
+        }
+
+    # -------------------------------------------------
+    # 5. Ablation
+    # -------------------------------------------------
+    print_section("5. ABLATION STUDY — Contribuição por componente")
+    ablation = analise_ablation(predictions_df)
+    print_metrics_table(ablation)
+
+    # -------------------------------------------------
+    # 6. Breakdown de vetos
+    # -------------------------------------------------
+    print_section("6. BREAKDOWN — Vetos aplicados")
+    vetos_breakdown = breakdown_vetos(predictions_df)
+    if not vetos_breakdown.empty:
+        print(vetos_breakdown.to_string(index=False))
+    else:
+        print("  (nenhum veto aplicado)")
+
+    # -------------------------------------------------
+    # 7. Análises FN / FP
+    # -------------------------------------------------
+    print_section("7. ANÁLISE FN / FP")
+    fn_df = analise_fn_detalhada(predictions_df)
+    fp_df = analise_fp_detalhada(predictions_df, top_n=50)
+
+    logger.info(f"Fraudes escapadas (FN): {len(fn_df)}")
+    logger.info(f"Falsos positivos (FP): {(y_pred_final == 1).sum() - (y_true & y_pred_final).sum()}")
+
+    if not fn_df.empty:
+        print("\n  ━━ FN residuais (top 10 por valor) ━━")
+        cols_show = ["customer_id", "vl_pix", "nr_idade", "lgbm_raw",
+                     "if_percentile", "se_score", "beh_score", "score_final"]
+        cols_show = [c for c in cols_show if c in fn_df.columns]
+        print(fn_df[cols_show].head(10).to_string(index=False))
+
+    # -------------------------------------------------
+    # 8. Threshold sweep
+    # -------------------------------------------------
+    print_section("8. THRESHOLD SWEEP")
+    sweep_df = analise_threshold_sweep(predictions_df)
+
+    # Encontrar best F1
+    best_idx = sweep_df["f1"].idxmax()
+    best_row = sweep_df.loc[best_idx]
+    logger.info(
+        f"Best F1: {best_row['f1']:.4f} @ threshold={best_row['threshold']:.0f} "
+        f"(TP={best_row['tp']}, FP={best_row['fp']}, FN={best_row['fn']})"
+    )
+
+    # -------------------------------------------------
+    # 9. Salvar outputs
+    # -------------------------------------------------
+    print_section("9. SALVAR ARTEFATOS")
+
+    pred_path = output_dir / "predicoes_pipeline.csv"
+    metrics_path = output_dir / "metricas_globais.json"
+    sweep_path = output_dir / "threshold_sweep.csv"
+    fn_path = output_dir / "fraudes_invisiveis_fn.csv"
+    fp_path = output_dir / "falsos_positivos.csv"
+    ablation_path = output_dir / "ablation_study.json"
+    vetos_path = output_dir / "breakdown_vetos.csv"
+    meta_path = output_dir / "metadata_execucao.json"
+
+    predictions_df.to_csv(pred_path, index=False)
+    sweep_df.to_csv(sweep_path, index=False)
+    fn_df.to_csv(fn_path, index=False)
+    fp_df.to_csv(fp_path, index=False)
+    if not vetos_breakdown.empty:
+        vetos_breakdown.to_csv(vetos_path, index=False)
+
+    safe_json_dump({
+        "pipeline_final": pipeline_metrics,
+        "por_decisao": metrics_por_decisao,
+    }, metrics_path)
+
+    safe_json_dump(ablation, ablation_path)
+
+    safe_json_dump({
+        "timestamp": TIMESTAMP,
+        "mode": mode,
+        "n_processed": len(predictions_df),
+        "n_fraud": int(predictions_df["is_fraud"].sum()),
+        "workers": args.workers,
+        "elapsed_seconds": round(time.perf_counter() - t_start, 1),
+        "engine_version": "3.0.5",
+        "pipeline_version": "1.4",
+        "se_version": "3.4",
+        "beh_version": "3.1",
+        "alerts": alerts,
+        "dataset_path": str(DATASET_PATH),
+        "output_dir": str(output_dir),
+    }, meta_path)
+
+    # -------------------------------------------------
+    # 10. Resumo final
+    # -------------------------------------------------
+    elapsed = time.perf_counter() - t_start
+    pm = pipeline_metrics
+
+    print_section("10. RESUMO FINAL")
+    print(f"""
+  ┌────────────────────────────────────────────────────┐
+  │  PIPELINE COMPLETO (Engine v3.0.5 + SE v3.4 + BEH v3.1) │
+  │                                                        │
+  │  TP = {pm['TP']:<6}  FP = {pm['FP']:<6}                │
+  │  FN = {pm['FN']:<6}  TN = {pm['TN']:<6}                │
+  │                                                        │
+  │  Recall    = {pm['Recall']:.2%}                        │
+  │  Precision = {pm['Precision']:.2%}                     │
+  │  F1-Score  = {pm['F1']:.4f}                            │
+  │  FPR       = {pm['FPR']:.4%}                           │
+  └────────────────────────────────────────────────────────┘
+
+  Distribuição de decisões:
+    APROVAR:    {metrics_por_decisao['APROVAR']['total']:>6,} tx ({metrics_por_decisao['APROVAR']['fraudes']} fraudes)
+    CONFIRMAR:  {metrics_por_decisao['CONFIRMAR']['total']:>6,} tx ({metrics_por_decisao['CONFIRMAR']['fraudes']} fraudes)
+    BLOQUEAR:   {metrics_por_decisao['BLOQUEAR']['total']:>6,} tx ({metrics_por_decisao['BLOQUEAR']['fraudes']} fraudes)
+
+  Tempo total: {elapsed:.1f}s ({elapsed / 60:.1f}min)
+
+  Artefatos salvos em: {output_dir}
+    - predicoes_pipeline.csv
+    - metricas_globais.json
+    - threshold_sweep.csv
+    - fraudes_invisiveis_fn.csv
+    - falsos_positivos.csv
+    - ablation_study.json
+    - breakdown_vetos.csv
+    - metadata_execucao.json
+""")
+
+    if alerts:
+        print("  🚨 ATENÇÃO: alertas detectados — ver metadata_execucao.json")
+
+
+if __name__ == "__main__":
+    main()

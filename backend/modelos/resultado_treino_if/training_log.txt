@@ -43,29 +43,29 @@
 
   ────────────────────────────────────────────────────────
   HOLDOUT @ 0.5:
-    ROC-AUC:  0.9624579399357172
-    AP:       0.6002895480754056
-    F1:       0.02832048754257035
+    ROC-AUC:  0.9630938629971876
+    AP:       0.6023306868515085
+    F1:       0.02819414703783012
     Recall:   0.9875  (TP=79, FN=1)
-    Precision:0.0143662484088016  (FP=5420)
-    R@5%:     0.8375
+    Precision:0.014301230992034758  (FP=5445)
+    R@5%:     0.825
     R@Top100: 0.6375
     R@Top200: 0.7125
 
   HOLDOUT @ Best F1 (th=0.9550):
-    F1:       0.20364741641337386
+    F1:       0.20333839150227617
     Recall:   0.8375  (TP=67, FN=13)
-    Precision:0.11591695501730104  (FP=511)
+    Precision:0.1157167530224525  (FP=512)
 
   Score Distribution (v2 → v3):
-    Fraud median:  0.9970 → 0.9955
-    Normal median: 0.6542 → 0.5447
-    Normal P75:    0.9148 → 0.7942
+    Fraud median:  0.9970 → 0.9956
+    Normal median: 0.6542 → 0.5444
+    Normal P75:    0.9148 → 0.7954
 
-  Tempo total: 58.1s
+  Tempo total: 66.4s
 
   Artefatos PRODUÇÃO:
-    model_isolation_forest.joblib (71412 KB)
+    model_isolation_forest.joblib (71511 KB)
     scaler_isolation_forest.joblib (1 KB)
     if_ref_raw_train.npy (79 KB)
 
