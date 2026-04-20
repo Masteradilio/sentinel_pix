@@ -332,7 +332,17 @@ class PipelineOrquestrador:
         self.engine = PixDecisionEngine(config)
 
         # --- 3. Social Engineering Detector v3.3 ---
-        self.se_detector = SocialEngineeringDetector()
+        self.se_detector = SocialEngineeringDetector(
+            pattern_config={
+                "se_pattern_residual_enabled": config.se_pattern_residual_enabled,
+                "se_pattern_residual_age_young_max": config.se_pattern_residual_age_young_max,
+                "se_pattern_residual_age_old_min": config.se_pattern_residual_age_old_min,
+                "se_pattern_residual_value_min": config.se_pattern_residual_value_min,
+                "se_pattern_residual_value_max": config.se_pattern_residual_value_max,
+                "se_pattern_residual_rel_max": config.se_pattern_residual_rel_max,
+                "se_pattern_residual_if_min": config.se_pattern_residual_if_min,
+            }
+        )
 
         # --- 4. Behavioral Analytics v3.1 ---
         self.behavioral = BehavioralAnalytics()
@@ -951,6 +961,10 @@ class PipelineOrquestrador:
                 if k not in ("transaction_id", "customer_id", "event_datetime"):
                     features_dict[k] = v
 
+        # ─── 4b. Pre-compute IF Percentile for SE ───────────
+        if_score, _, _ = self.engine._score_if(features_dict)
+        features_dict["if_percentile"] = if_score
+
         # ─── 5. Social Engineering v3.4 ─────────────────────
         t1 = time.perf_counter()
         se_result: SEAnalysisResult = self.se_detector.detect_from_pipeline(features_dict)
@@ -1192,6 +1206,9 @@ class PipelineOrquestrador:
         # ─── Veto ──────────────────────────────────────────
         if decision.veto_aplicado:
             response["veto_aplicado"] = decision.veto_aplicado
+            response["veto_reason"] = decision.veto_reason
+        if decision.veto_suppressed_reason:
+            response["veto_suppressed_reason"] = decision.veto_suppressed_reason
 
         # ─── Atenuantes — só incluir quando presentes ───────
         if decision.atenuantes:

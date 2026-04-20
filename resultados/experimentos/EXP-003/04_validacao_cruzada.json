@@ -1,0 +1,34 @@
+{
+  "winner_id": "BASELINE",
+  "seed": 123,
+  "sample": 400,
+  "metrics": {
+    "variante_id": "BASELINE",
+    "label": "Baseline atual (EXP-001 + EXP-002)",
+    "TP": 345,
+    "FP": 0,
+    "FN": 10,
+    "TN": 45,
+    "Precision": 1.0,
+    "Recall": 0.971831,
+    "F1": 0.985714,
+    "FPR": 0.0,
+    "pattern_hits": 0
+  },
+  "residual": {
+    "residual_found": true,
+    "customer_id": "32339437172",
+    "decisao": "CONFIRMAR",
+    "score_final": 66.32,
+    "se_score": 0.0,
+    "beh_score": 0.0,
+    "if_percentile": 0.917902,
+    "se_worst_pattern": null
+  },
+  "pattern": {
+    "total": 0,
+    "fraud": 0,
+    "precision": 0.0,
+    "top_por_valor": []
+  }
+}

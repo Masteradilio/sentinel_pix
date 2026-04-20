@@ -343,6 +343,20 @@ Todos os indicadores foram validados empiricamente com o dataset de calibração
 
 ---
 
+#### PADRÃO 10: IDOSO_JOVEM_VALOR_MODERADO_RESIDUAL
+
+| Campo | Valor |
+|---|---|
+| **Golpe mapeado** | Perfis de jovens/idosos coagidos a realizar transações atípicas de valor médio-alto. |
+| **Modus operandi** | Clientes jovens (≤25) ou seniores (≥60) com contas recentes (<24m) transferindo R$1.500 a R$15.000. O IF≥0.90 confirma o cenário como uma anomalia em seu histórico pessoal. |
+| **Required** | `idade_young_max` ou `idade_old_min`, `valor_moderado`, `relacionamento_conta_nova`, `if_percentile_anomalo`, `first_receiver` |
+| **min_score** | 4 |
+| **Severity** | MODERADO_ALTO |
+| **Performance** | TBD (inserido via EXP-003, FNs recuperados nativamente pelo EXP-001) |
+| **Última calibração** | 2026-04-20 |
+
+---
+
 ## 5. Performance Global do Módulo
 
 ### 5.1 Evolução v2.1 → v3.3

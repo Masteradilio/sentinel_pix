@@ -106,6 +106,8 @@ class EngineConfig:
 
     # --- Thresholds de veto (score raw 0-1) ---
     veto_threshold: float = 0.90
+    lgbm_guard_enabled: bool = False
+    lgbm_guard_threshold: float = 0.30
 
     # --- LGBM thresholds (v3.0) ---
     # threshold original do treino (melhor F1)
@@ -137,6 +139,16 @@ class EngineConfig:
 
     # --- Peso máximo teórico dos agravantes ---
     peso_maximo: int = 70
+
+    # --- EXP-003 Residual Pattern ---
+    se_pattern_residual_enabled: bool = False
+    exp003_residual_confirm_enabled: bool = False
+    se_pattern_residual_age_young_max: int = 25
+    se_pattern_residual_age_old_min: int = 60
+    se_pattern_residual_value_min: float = 1500.0
+    se_pattern_residual_value_max: float = 15000.0
+    se_pattern_residual_rel_max: int = 24
+    se_pattern_residual_if_min: float = 0.90
 
     @classmethod
     def from_dict(cls, d: Dict[str, Any]) -> "EngineConfig":
@@ -203,7 +215,9 @@ class DecisionResult:
     behavioral_factors: List[Dict[str, Any]] = field(default_factory=list)
 
     # Vetos e atenuantes
-    veto_aplicado: str | None = None
+    veto_aplicado: bool = False
+    veto_reason: str | None = None
+    veto_suppressed_reason: str | None = None
     atenuantes: List[str] = field(default_factory=list)
 
     # Metadata
@@ -243,6 +257,8 @@ class DecisionResult:
                 "risk_factors": self.behavioral_factors,
             },
             "veto_aplicado": self.veto_aplicado,
+            "veto_reason": self.veto_reason,
+            "veto_suppressed_reason": self.veto_suppressed_reason,
             "atenuantes": self.atenuantes,
             "metadata": {
                 "latency_ms": round(self.latency_ms, 2),
@@ -523,6 +539,44 @@ class PixDecisionEngine:
             self.anchors_out = np.array(
                 mapeamento.get("anchors_out", [0.0, 100.0]), dtype=np.float64
             )
+            runtime_threshold_confirmar = self._extract_runtime_threshold(
+                "confirmar"
+            )
+            runtime_threshold_bloquear = self._extract_runtime_threshold(
+                "bloquear"
+            )
+            default_config = EngineConfig()
+
+            if (
+                runtime_threshold_confirmar is not None
+                and self.config.threshold_confirmar
+                == default_config.threshold_confirmar
+            ):
+                self.config.threshold_confirmar = runtime_threshold_confirmar
+
+            if (
+                runtime_threshold_bloquear is not None
+                and self.config.threshold_bloquear
+                == default_config.threshold_bloquear
+            ):
+                self.config.threshold_bloquear = runtime_threshold_bloquear
+
+            runtime_guard_enabled = self.scoring_config.get("lgbm_guard_enabled")
+            if (
+                runtime_guard_enabled is not None
+                and self.config.lgbm_guard_enabled
+                == default_config.lgbm_guard_enabled
+            ):
+                self.config.lgbm_guard_enabled = bool(runtime_guard_enabled)
+
+            runtime_guard_threshold = self.scoring_config.get("lgbm_guard_threshold")
+            if (
+                runtime_guard_threshold is not None
+                and self.config.lgbm_guard_threshold
+                == default_config.lgbm_guard_threshold
+            ):
+                self.config.lgbm_guard_threshold = float(runtime_guard_threshold)
+
             logger.info(f"Scoring config: {len(self.anchors_raw)} âncoras")
 
         # 4. Thresholds Config
@@ -605,6 +659,21 @@ class PixDecisionEngine:
             f"Cascade={'v2 (2 rules)' if self.config.cascade_enabled else 'OFF'} | "
             f"Features: LGBM={len(self.lgbm_features)} IF={len(self.if_features)}"
         )
+
+    def _extract_runtime_threshold(self, decision_type: str) -> float | None:
+        """Extrai threshold operacional do scoring_config.json."""
+        top_level_key = f"score_final_threshold_{decision_type}"
+        top_level_value = self.scoring_config.get(top_level_key)
+        if top_level_value is not None:
+            return float(top_level_value)
+
+        faixas = self.scoring_config.get("faixas_decisao", {})
+        faixa = faixas.get(decision_type, {})
+        threshold = faixa.get("threshold")
+        if threshold is None:
+            return None
+
+        return float(threshold)
 
     # ==========================================================
     # SCORING — LGBM
@@ -1221,9 +1290,10 @@ class PixDecisionEngine:
     peso_agravantes: int = 0,
     se_score: float = 0.0,
     behavioral_score: float = 0.0,
+    se_patterns: list[str] | None = None,
     behavioral_factors: list[dict[str, Any]] | None = None,
     features: dict[str, Any] | None = None,
-) -> tuple[float, str | None]:
+) -> tuple[float, str | None, str | None]:
         """
         Aplica regras de veto v3.0.5.
 
@@ -1253,6 +1323,7 @@ class PixDecisionEngine:
         9. Behavioral velocity+age_value → CONFIRMAR
         """
         threshold = self.config.veto_threshold
+        veto_suppressed_reason: str | None = None
 
         # ══════════════════════════════════════════════════════
         # VETO 0: FAST-APPROVE OVERRIDE (v3.0.5)
@@ -1273,6 +1344,24 @@ class PixDecisionEngine:
                 f"Fast-Approve ativo: LGBM={lgbm_raw:.4f} < {FA_LGBM_MAX}, "
                 f"SE=0, BEH=0 — vetos IF-based desabilitados"
             )
+
+        lgbm_guard_active = (
+            self.config.lgbm_guard_enabled
+            and lgbm_raw < self.config.lgbm_guard_threshold
+        )
+
+        def _suppress_with_guard(reason: str) -> bool:
+            nonlocal veto_suppressed_reason
+            if not lgbm_guard_active:
+                return False
+            if veto_suppressed_reason is None:
+                veto_suppressed_reason = (
+                    "LGBM_GUARD_RAIL"
+                    f": {reason} | LGBM={lgbm_raw:.4f} < "
+                    f"{self.config.lgbm_guard_threshold:.2f}"
+                )
+                logger.info(f"Veto suprimido pelo guard rail: {veto_suppressed_reason}")
+            return True
 
         # ── Calcular sinais base ──
         lgbm_is_high = lgbm_raw >= threshold
@@ -1308,20 +1397,21 @@ class PixDecisionEngine:
             logger.info(
                 f"{desc} | Score: {score_mapped:.1f} → {score_ajustado:.1f}"
             )
-            return score_ajustado, desc
+            return score_ajustado, desc, veto_suppressed_reason
 
         # --- 2. LGBM + IF convergência → BLOQUEAR ---
         # Fast-Approve bloqueia isso (if_veto_eligible será False)
         if len(vetos) >= 2:
-            score_ajustado = max(score_mapped, self.config.threshold_bloquear)
-            desc = (
-                f"VETO BLOQUEAR: {' + '.join(vetos)} "
-                f"≥ {threshold * 100:.0f}%"
-            )
-            logger.info(
-                f"{desc} | Score: {score_mapped:.1f} → {score_ajustado:.1f}"
-            )
-            return score_ajustado, desc
+            if not _suppress_with_guard("VETO BLOQUEAR LGBM+IF"):
+                score_ajustado = max(score_mapped, self.config.threshold_bloquear)
+                desc = (
+                    f"VETO BLOQUEAR: {' + '.join(vetos)} "
+                    f"≥ {threshold * 100:.0f}%"
+                )
+                logger.info(
+                    f"{desc} | Score: {score_mapped:.1f} → {score_ajustado:.1f}"
+                )
+                return score_ajustado, desc, veto_suppressed_reason
 
         # --- 3. IF extremo + agravantes pesados → BLOQUEAR ---
         # v3.0.5: LGBM mínimo reforçado (0.05 → 0.25) + Fast-Approve guard
@@ -1336,30 +1426,32 @@ class PixDecisionEngine:
             and lgbm_raw >= LGBM_MIN_FOR_IF_EXTREME  # v3.0.5: reforçado
             and not fast_approve_active  # v3.0.5: redundante mas explícito
         ):
-            score_ajustado = max(score_mapped, self.config.threshold_bloquear)
-            desc = (
-                f"VETO BLOQUEAR: IF extremo={if_score * 100:.1f}% "
-                f"+ {peso_agravantes} pts agravantes "
-                f"+ LGBM={lgbm_raw * 100:.1f}%"
-            )
-            logger.info(
-                f"{desc} | Score: {score_mapped:.1f} → {score_ajustado:.1f}"
-            )
-            return score_ajustado, desc
+            if not _suppress_with_guard("VETO BLOQUEAR IF EXTREMO"):
+                score_ajustado = max(score_mapped, self.config.threshold_bloquear)
+                desc = (
+                    f"VETO BLOQUEAR: IF extremo={if_score * 100:.1f}% "
+                    f"+ {peso_agravantes} pts agravantes "
+                    f"+ LGBM={lgbm_raw * 100:.1f}%"
+                )
+                logger.info(
+                    f"{desc} | Score: {score_mapped:.1f} → {score_ajustado:.1f}"
+                )
+                return score_ajustado, desc, veto_suppressed_reason
 
         # --- 4. SE CRITICO + Behavioral convergência → BLOQUEAR ---
         # NÃO afetado por Fast-Approve — SE/BEH são sinais independentes do IF
         if se_score >= 60 and behavioral_score >= 25:
-            score_ajustado = max(score_mapped, self.config.threshold_bloquear)
-            desc = (
-                f"VETO BLOQUEAR: SE CRITICO ({se_score:.0f}) + "
-                f"Behavioral ({behavioral_score:.0f}) — "
-                f"convergência de sinais"
-            )
-            logger.info(
-                f"{desc} | Score: {score_mapped:.1f} → {score_ajustado:.1f}"
-            )
-            return score_ajustado, desc
+            if not _suppress_with_guard("VETO BLOQUEAR SE+BEH"):
+                score_ajustado = max(score_mapped, self.config.threshold_bloquear)
+                desc = (
+                    f"VETO BLOQUEAR: SE CRITICO ({se_score:.0f}) + "
+                    f"Behavioral ({behavioral_score:.0f}) — "
+                    f"convergência de sinais"
+                )
+                logger.info(
+                    f"{desc} | Score: {score_mapped:.1f} → {score_ajustado:.1f}"
+                )
+                return score_ajustado, desc, veto_suppressed_reason
 
         # --- 5. Cascade v3: C3 → CONFIRMAR ---
         # C3 já tem LGBM guard (>= 0.35) no evaluate(), então Fast-Approve
@@ -1378,7 +1470,24 @@ class PixDecisionEngine:
             logger.info(
                 f"{desc} | Score: {score_mapped:.1f} → {score_ajustado:.1f}"
             )
-            return score_ajustado, desc
+            if not _suppress_with_guard("VETO CONFIRMAR CASCADE C3"):
+                return score_ajustado, desc, veto_suppressed_reason
+
+        residual_pattern_active = (
+            self.config.exp003_residual_confirm_enabled
+            and bool(se_patterns)
+            and "IDOSO_JOVEM_VALOR_MODERADO_RESIDUAL" in se_patterns
+            and if_score >= self.config.se_pattern_residual_if_min
+            and _safe_int((features or {}).get("first_receiver_flag"), 0) == 1
+        )
+        if residual_pattern_active:
+            score_ajustado = max(score_mapped, self.config.threshold_confirmar)
+            desc = (
+                "VETO CONFIRMAR: RESIDUAL IDOSO_JOVEM_VALOR_MODERADO "
+                f"(IF={if_score * 100:.1f}%, first_receiver=1)"
+            )
+            if not _suppress_with_guard("VETO CONFIRMAR EXP003 RESIDUAL"):
+                return score_ajustado, desc, veto_suppressed_reason
 
         # --- 6. LGBM sozinho ≥ threshold → CONFIRMAR ---
         # NÃO afetado por Fast-Approve (se LGBM >= 0.90, FA não ativa)
@@ -1391,7 +1500,7 @@ class PixDecisionEngine:
             logger.info(
                 f"{desc} | Score: {score_mapped:.1f} → {score_ajustado:.1f}"
             )
-            return score_ajustado, desc
+            return score_ajustado, desc, veto_suppressed_reason
 
         # --- 7. SE CRITICO (≥ 60) → CONFIRMAR ---
         # NÃO afetado por Fast-Approve
@@ -1401,7 +1510,8 @@ class PixDecisionEngine:
             logger.info(
                 f"{desc} | Score: {score_mapped:.1f} → {score_ajustado:.1f}"
             )
-            return score_ajustado, desc
+            if not _suppress_with_guard("VETO CONFIRMAR SE CRITICO"):
+                return score_ajustado, desc, veto_suppressed_reason
 
         # --- 8. VETO_SE_BEH_VALOR_NOVO (v3.0.4) → CONFIRMAR ---
         # NÃO afetado por Fast-Approve (SE >= 40 → FA não ativa)
@@ -1431,7 +1541,8 @@ class PixDecisionEngine:
                     f"{desc} | Score: {score_mapped:.1f} → "
                     f"{score_ajustado:.1f}"
                 )
-                return score_ajustado, desc
+                if not _suppress_with_guard("VETO CONFIRMAR SE+BEH_VALOR_NOVO"):
+                    return score_ajustado, desc, veto_suppressed_reason
 
         # --- 9. Behavioral alto (≥ 40) com velocity E age_value → CONFIRMAR ---
         # NÃO afetado por Fast-Approve (BEH >= 40 → FA não ativa)
@@ -1455,10 +1566,11 @@ class PixDecisionEngine:
                     f"{desc} | Score: {score_mapped:.1f} → "
                     f"{score_ajustado:.1f}"
                 )
-                return score_ajustado, desc
+                if not _suppress_with_guard("VETO CONFIRMAR BEHAVIORAL"):
+                    return score_ajustado, desc, veto_suppressed_reason
 
         # Nenhum veto aplicado
-        return score_mapped, None
+        return score_mapped, None, veto_suppressed_reason
 
 
 
@@ -1576,11 +1688,12 @@ class PixDecisionEngine:
             score_com_agravantes = max(0.0, score_com_agravantes - 5.0)
 
         # --- 7. Veto (v3.0: cascade v2 + modelos + SE/BEH) ---
-        score_final, veto_desc = self._aplicar_veto(
+        score_final, veto_desc, veto_suppressed_reason = self._aplicar_veto(
             score_com_agravantes, lgbm_raw, if_score, if_active,
             cascade_results,
             peso_agravantes=peso_total,
             se_score=se_score,
+            se_patterns=se_patterns,
             behavioral_score=behavioral_score,
             behavioral_factors=behavioral_factors,
             features=features,
@@ -1603,6 +1716,7 @@ class PixDecisionEngine:
             if_boost_applied=0.0,  # v3.0: boost removido
             cascade_triggered=any(c.triggered for c in cascade_results),
             cascade_rules=cascade_rule_names,
+            veto_suppressed_reason=veto_suppressed_reason,
             rule_score_raw=_safe_float(features.get("rule_score_raw"), 0),
             rule_score_normalized=_safe_float(
                 features.get("rule_score_normalized"), 0,
@@ -1614,7 +1728,8 @@ class PixDecisionEngine:
             se_patterns=se_patterns,
             behavioral_score=behavioral_score,
             behavioral_factors=behavioral_factors,
-            veto_aplicado=veto_desc,
+            veto_aplicado=(veto_desc is not None),
+            veto_reason=veto_desc,
             atenuantes=atenuantes,
             latency_ms=latency,
             transaction_id=str(features.get("transaction_id", "")),

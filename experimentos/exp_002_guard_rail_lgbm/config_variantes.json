@@ -1,0 +1,36 @@
+{
+  "baseline": {
+    "id": "BASELINE",
+    "label": "Baseline v1.4 (threshold=62, sem guard rail)",
+    "engine_config_overrides": {
+      "lgbm_guard_enabled": false,
+      "lgbm_guard_threshold": 0.3
+    }
+  },
+  "variantes": [
+    {
+      "id": "V1",
+      "label": "Guard rail 0.30",
+      "engine_config_overrides": {
+        "lgbm_guard_enabled": true,
+        "lgbm_guard_threshold": 0.3
+      }
+    },
+    {
+      "id": "V2",
+      "label": "Guard rail 0.20",
+      "engine_config_overrides": {
+        "lgbm_guard_enabled": true,
+        "lgbm_guard_threshold": 0.2
+      }
+    },
+    {
+      "id": "V3",
+      "label": "Guard rail 0.40",
+      "engine_config_overrides": {
+        "lgbm_guard_enabled": true,
+        "lgbm_guard_threshold": 0.4
+      }
+    }
+  ]
+}

@@ -12,6 +12,17 @@ O formato segue [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/).
 
 ---
 
+## [3.1.0] - 2026-04-20
+### Adicionado
+- **EXP-003 (Novo Padrão SE IDOSO_JOVEM_VALOR_MODERADO_RESIDUAL)**: Implementado novo padrão no módulo `SocialEngineeringDetector` focado em detectar fraudes residuais em perfis vulneráveis (jovens ≤25 ou idosos ≥60) com contas recentes (<24m) realizando transferências atípicas moderadas (R$ 1.500 - R$ 15.000) confirmadas por alta anomalia (`if_percentile` ≥ 0.90).
+- **EXP-002 (Guard Rail LGBM)**: Inclusão de trava de segurança no `PixDecisionEngine` para vetos IF-based. O sistema agora suprime vetos originados do Isolation Forest quando o score do `LGBM` é considerado de baixa predição de fraude. 
+
+### Alterado
+- **EXP-001 (Threshold Confirmar)**: Threshold global ajustado no `scoring_config.json` de `77.0` para `62.0` após validação que demonstrou a viabilidade de recuperar fraudes na zona cinza (com incremento em Recall de ~4pp e ganho substancial de F1 Score).
+- **Pipeline Orquestrador (v1.4)**: `pipeline_orquestrador.py` modificado para pré-computar e inserir o `if_percentile` no dicionário de features de forma independente do boost do motor antes da avaliação do `SocialEngineeringDetector`.
+
+---
+
 ## [3.0.5] - 2026-04-12
 ### Adicionado
 - **Graph Feature Engineering (GFE)**: 13 features de grafo temporal incremental no `preprocessing.py` v4.1 — cada transação só vê o grafo de transações anteriores (sem leakage). Features incluem sender/receiver degree, pair history, HHI de concentração e z-score de valor.

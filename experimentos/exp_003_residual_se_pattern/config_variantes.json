@@ -1,0 +1,54 @@
+{
+  "baseline": {
+    "id": "BASELINE",
+    "label": "Baseline atual (EXP-001 + EXP-002)",
+    "engine_config_overrides": {
+      "se_pattern_residual_enabled": false,
+      "exp003_residual_confirm_enabled": false
+    }
+  },
+  "variantes": [
+    {
+      "id": "R1",
+      "label": "Residual R1",
+      "engine_config_overrides": {
+        "se_pattern_residual_enabled": true,
+        "exp003_residual_confirm_enabled": true,
+        "se_pattern_residual_age_young_max": 25,
+        "se_pattern_residual_age_old_min": 60,
+        "se_pattern_residual_value_min": 1500.0,
+        "se_pattern_residual_value_max": 15000.0,
+        "se_pattern_residual_rel_max": 24,
+        "se_pattern_residual_if_min": 0.9
+      }
+    },
+    {
+      "id": "R2",
+      "label": "Residual R2",
+      "engine_config_overrides": {
+        "se_pattern_residual_enabled": true,
+        "exp003_residual_confirm_enabled": true,
+        "se_pattern_residual_age_young_max": 30,
+        "se_pattern_residual_age_old_min": 55,
+        "se_pattern_residual_value_min": 1500.0,
+        "se_pattern_residual_value_max": 15000.0,
+        "se_pattern_residual_rel_max": 25,
+        "se_pattern_residual_if_min": 0.9
+      }
+    },
+    {
+      "id": "R3",
+      "label": "Residual R3",
+      "engine_config_overrides": {
+        "se_pattern_residual_enabled": true,
+        "exp003_residual_confirm_enabled": true,
+        "se_pattern_residual_age_young_max": 25,
+        "se_pattern_residual_age_old_min": 60,
+        "se_pattern_residual_value_min": 1000.0,
+        "se_pattern_residual_value_max": 15000.0,
+        "se_pattern_residual_rel_max": 36,
+        "se_pattern_residual_if_min": 0.9
+      }
+    }
+  ]
+}

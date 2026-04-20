@@ -1,0 +1,5 @@
+variante_id,label,TP,FP,FN,TN,Precision,Recall,F1,FPR,pattern_hits,delta_TP,delta_FP,delta_FN,delta_F1
+BASELINE,Baseline atual (EXP-001 + EXP-002),345,0,10,45,1.0,0.971831,0.985714,0.0,0,0,0,0,0.0
+R1,Residual R1,345,0,10,45,1.0,0.971831,0.985714,0.0,8,0,0,0,0.0
+R2,Residual R2,345,0,10,45,1.0,0.971831,0.985714,0.0,10,0,0,0,0.0
+R3,Residual R3,345,0,10,45,1.0,0.971831,0.985714,0.0,10,0,0,0,0.0

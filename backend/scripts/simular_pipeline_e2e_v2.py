@@ -92,6 +92,9 @@ sys.path.insert(0, str(CORE_DIR))
 sys.path.insert(0, str(BACKEND_DIR))
 sys.path.insert(0, str(PROJECT_ROOT))
 
+from core.decision_engine import EngineConfig
+from core.pipeline_orquestrador import PipelineOrquestrador
+
 
 TIMESTAMP = datetime.now().strftime("%Y%m%d_%H%M%S")
 OUTPUT_BASE = PROJECT_ROOT / "resultados"
@@ -460,6 +463,8 @@ def process_single_tx(
             "score_final": result.get("score_final", 0.0),
             "decisao": result.get("decisao", "APROVAR"),
             "veto_aplicado": result.get("veto_aplicado"),
+            "veto_reason": result.get("veto_reason"),
+            "veto_suppressed_reason": result.get("veto_suppressed_reason"),
         }
 
     except Exception as e:
@@ -497,16 +502,19 @@ def process_single_tx(
 def process_batch_sequential(
     df: pd.DataFrame,
     progress_every: int = 500,
+    engine_config_overrides: dict[str, Any] | None = None,
 ) -> pd.DataFrame:
     """
     Processa o DataFrame inteiro sequencialmente.
     Mostra progresso a cada `progress_every` tx.
     """
-    from core.pipeline_orquestrador import PipelineOrquestrador
-
     logger.info("Inicializando PipelineOrquestrador (isso leva ~3-5s)...")
     orquestrador = PipelineOrquestrador(
         artefatos_dir=str(ARTEFATOS_DIR),
+        engine_config=EngineConfig(
+            artefatos_dir=str(ARTEFATOS_DIR),
+            **(engine_config_overrides or {}),
+        ),
         shap_enabled=False,  # desabilita SHAP para acelerar batch
     )
 
@@ -548,7 +556,7 @@ def process_batch_sequential(
 # =========================================================
 def _worker_process_chunk(args: tuple) -> list[dict[str, Any]]:
     """Worker function — cada processo tem seu próprio orquestrador."""
-    chunk_df, worker_id = args
+    chunk_df, worker_id, engine_config_overrides = args
 
     # Imports dentro do worker (spawned process)
     import sys as _sys
@@ -562,10 +570,12 @@ def _worker_process_chunk(args: tuple) -> list[dict[str, Any]]:
     _lg.getLogger("core").setLevel(_lg.ERROR)
     _lg.getLogger("preprocessing").setLevel(_lg.ERROR)
 
-    from core.pipeline_orquestrador import PipelineOrquestrador
-
     orquestrador = PipelineOrquestrador(
         artefatos_dir=str(ARTEFATOS_DIR),
+        engine_config=EngineConfig(
+            artefatos_dir=str(ARTEFATOS_DIR),
+            **(engine_config_overrides or {}),
+        ),
         shap_enabled=False,
     )
 
@@ -581,6 +591,7 @@ def _worker_process_chunk(args: tuple) -> list[dict[str, Any]]:
 def process_batch_parallel(
     df: pd.DataFrame,
     n_workers: int = 4,
+    engine_config_overrides: dict[str, Any] | None = None,
 ) -> pd.DataFrame:
     """
     Processa o DataFrame em paralelo usando multiprocessing.
@@ -598,7 +609,11 @@ def process_batch_parallel(
     # Divide em chunks aproximadamente iguais
     chunk_size = len(df) // n_workers + 1
     chunks = [
-        (df.iloc[i:i + chunk_size].copy(), worker_id)
+        (
+            df.iloc[i:i + chunk_size].copy(),
+            worker_id,
+            engine_config_overrides,
+        )
         for worker_id, i in enumerate(range(0, len(df), chunk_size))
     ]
 

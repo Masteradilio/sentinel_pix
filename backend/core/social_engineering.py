@@ -193,7 +193,7 @@ class SocialEngineeringDetector:
     REMOVIDO: PRIMEIRA_TX_SUSPEITA (Prec 2.8% no leakage-free, 4395 FP)
     """
 
-    VERSION = "3.4"
+    VERSION = "3.5"
 
     # Indicadores de "fase 2" — dados do Big Data que podem faltar em RT
     PHASE2_INDICATORS = [
@@ -202,7 +202,8 @@ class SocialEngineeringDetector:
         "segmento_alto_patrimonio_raw",
     ]
 
-    def __init__(self):
+    def __init__(self, pattern_config: Dict[str, Any] | None = None):
+        self.pattern_config = pattern_config or {}
         self._setup_indicators()
         self._setup_patterns()
         logger.info(
@@ -276,6 +277,7 @@ class SocialEngineeringDetector:
         f["perfil_vulneravel_se_flag"] = _safe_int(
             features.get("perfil_vulneravel_se_flag"), 0
         )
+        f["if_percentile"] = _safe_float(features.get("if_percentile"), 0.0)
 
         # --- Recebedor ---
         f["first_receiver_flag"] = _safe_int(features.get("first_receiver_flag"), 0)
@@ -717,6 +719,26 @@ class SocialEngineeringDetector:
                     )
                 )
 
+        if self._match_residual_pattern(f):
+            detected.append(
+                PatternMatch(
+                    pattern_name="IDOSO_JOVEM_VALOR_MODERADO_RESIDUAL",
+                    severity="ALTO",
+                    score=55,
+                    matched_indicators=[
+                        "idade_vulneravel_residual",
+                        "valor_moderado_residual",
+                        "conta_nova_residual",
+                        "if_anomalo_residual",
+                        "first_receiver_residual",
+                    ],
+                    description=(
+                        "Perfil vulneravel com valor moderado, conta nova, "
+                        "recebedor novo e IF alto - cluster residual pos EXP-001/002"
+                    ),
+                )
+            )
+
         # Ordenar por severidade, depois por score
         detected.sort(
             key=lambda x: (_SEVERITY_ORDER.get(x.severity, 99), -x.score)
@@ -731,6 +753,48 @@ class SocialEngineeringDetector:
             active_indicators=active_indicators,
             phase2_indicators_missing=phase2_missing,
         )
+
+    def _match_residual_pattern(self, f: Dict[str, Any]) -> bool:
+        if not self.pattern_config.get("se_pattern_residual_enabled", False):
+            return False
+
+        age_young_max = _safe_int(
+            self.pattern_config.get("se_pattern_residual_age_young_max"), 25
+        )
+        age_old_min = _safe_int(
+            self.pattern_config.get("se_pattern_residual_age_old_min"), 60
+        )
+        value_min = _safe_float(
+            self.pattern_config.get("se_pattern_residual_value_min"), 1500.0
+        ) or 1500.0
+        value_max = _safe_float(
+            self.pattern_config.get("se_pattern_residual_value_max"), 15000.0
+        ) or 15000.0
+        rel_max = _safe_int(
+            self.pattern_config.get("se_pattern_residual_rel_max"), 24
+        )
+        if_min = _safe_float(
+            self.pattern_config.get("se_pattern_residual_if_min"), 0.90
+        ) or 0.90
+
+        idade = _safe_int(f.get("nr_idade"), 0)
+        valor = _safe_float(f.get("vl_pix"), 0.0) or 0.0
+        relacionamento = _safe_int(f.get("qt_tempo_relacionamento_mes"), 999)
+        if_percentile = _safe_float(f.get("if_percentile"), 0.0) or 0.0
+        first_receiver = _safe_int(f.get("first_receiver_flag"), 0)
+
+        is_vulneravel = idade <= age_young_max or idade >= age_old_min
+        is_valor_moderado = value_min <= valor <= value_max
+        is_conta_nova = relacionamento < rel_max
+        is_anomalo = if_percentile >= if_min
+
+        return all([
+            is_vulneravel,
+            is_valor_moderado,
+            is_conta_nova,
+            is_anomalo,
+            first_receiver == 1,
+        ])
 
     def detect_patterns(
         self, features: Dict[str, Any]

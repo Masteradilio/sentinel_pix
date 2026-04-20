@@ -1,0 +1,48 @@
+{
+  "experiment_id": "EXP-001",
+  "titulo": "Ajuste do Threshold Final do Score (77 -> 62)",
+  "baseline": {
+    "threshold_confirmar": 77,
+    "threshold_bloquear": 90,
+    "label": "BASELINE (atual, threshold=77)"
+  },
+  "variantes": [
+    {
+      "id": "V1",
+      "threshold_confirmar": 62,
+      "threshold_bloquear": 90,
+      "label": "V1 (threshold=62, F1 ótimo)",
+      "racional": "Ponto de F1 ótimo segundo threshold sweep da FASE 0"
+    },
+    {
+      "id": "V2",
+      "threshold_confirmar": 65,
+      "threshold_bloquear": 90,
+      "label": "V2 (threshold=65, conservador)",
+      "racional": "Trade-off mais conservador entre recall e precision"
+    },
+    {
+      "id": "V3",
+      "threshold_confirmar": 70,
+      "threshold_bloquear": 90,
+      "label": "V3 (threshold=70, intermediario)",
+      "racional": "Ponto intermediario entre baseline e F1 otimo"
+    }
+  ],
+  "sweep_fino": {
+    "threshold_min": 40,
+    "threshold_max": 90,
+    "step": 1
+  },
+  "sample": {
+    "n": 6000,
+    "seed_principal": 42,
+    "seed_validacao": 123
+  },
+  "criterios_aceitacao": {
+    "f1_min_margem": 0.005,
+    "recall_min": 0.95,
+    "fpr_max": 0.005,
+    "precision_min": 0.90
+  }
+}
