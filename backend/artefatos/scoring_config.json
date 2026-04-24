@@ -123,8 +123,20 @@
       "range": "[95.0, 100]",
       "threshold": 95.0,
       "acao": "Parar transação para análise humana"
-    }
+    },
+
+  {
+    "guard_exception_alto_valor_se_beh_enabled": true,
+    "guard_exception_alto_valor_min": 15000.0,
+    "guard_exception_alto_valor_rel_max": 12.0,
+    "guard_exception_alto_valor_if_min": 0.985,
+    "guard_exception_alto_valor_lgbm_min": 0.01,
+    "guard_exception_alto_valor_age_min": 18,
+    "guard_exception_alto_valor_age_max": 90,
+    "guard_exception_alto_valor_require_first_receiver": true,
+    "guard_exception_alto_valor_require_pf": true
   },
+
   "lgbm_guard_enabled": true,
   "lgbm_guard_threshold": 0.3,
   "se_pattern_residual_enabled": false,

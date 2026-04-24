@@ -1,0 +1,26 @@
+{
+  "BASELINE": {
+    "total": 0,
+    "fraud": 0,
+    "precision": 0.0,
+    "top_por_valor": []
+  },
+  "R1": {
+    "total": 0,
+    "fraud": 0,
+    "precision": 0.0,
+    "top_por_valor": []
+  },
+  "R2": {
+    "total": 0,
+    "fraud": 0,
+    "precision": 0.0,
+    "top_por_valor": []
+  },
+  "R3": {
+    "total": 0,
+    "fraud": 0,
+    "precision": 0.0,
+    "top_por_valor": []
+  }
+}

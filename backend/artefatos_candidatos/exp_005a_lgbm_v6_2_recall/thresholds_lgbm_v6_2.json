@@ -1,0 +1,21 @@
+{
+  "version": "v6.2-recall-candidate",
+  "experiment_id": "EXP-005A",
+  "candidate_variant_id": "LGBM_C_SPW_2_0X",
+  "model_only_threshold": 0.0524338379,
+  "policy_id": "P3_RECALL_098",
+  "selected_reason": "best_f1_at_recall_ge_0.98",
+  "holdout_metrics": {
+    "TP": 99,
+    "FP": 40,
+    "FN": 2,
+    "TN": 19930,
+    "Precision": 0.71223,
+    "Recall": 0.980198,
+    "F1": 0.825,
+    "FPR": 0.002003,
+    "AUC": 0.999644,
+    "AP": 0.935179
+  },
+  "important_note": "Este threshold e model-only. Nao promover diretamente para runtime. Usar EXP-005B para calibrar Decision Engine, thresholds e guard rail."
+}

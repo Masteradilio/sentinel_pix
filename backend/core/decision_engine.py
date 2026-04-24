@@ -79,6 +79,7 @@ from __future__ import annotations
 import json
 import logging
 import time
+import re
 import numpy as np
 import joblib
 from dataclasses import dataclass, field, asdict
@@ -413,6 +414,73 @@ class PixDecisionEngine:
 
         # Carregar
         self._load_all()
+        
+    def _is_pessoa_fisica_like(self, features: dict | None, idade: float) -> bool:
+        if not features:
+            return False
+
+        for key in ("tipo_pessoa", "tp_pessoa", "ds_tipo_pessoa"):
+            val = str(features.get(key, "") or "").strip().upper()
+            if val.startswith("F"):
+                return True
+            if val.startswith("J"):
+                return False
+
+        doc = (
+            features.get("customer_id")
+            or features.get("cd_cpf_pagador")
+            or features.get("cpf_pagador")
+            or ""
+        )
+        digits = re.sub(r"\D", "", str(doc))
+
+        if len(digits) == 14:
+            return False
+
+        return 1 <= idade <= 110
+
+
+    def _match_guard_exception_alto_valor_se_beh(
+        self,
+        features: dict | None,
+        *,
+        lgbm_raw: float,
+        if_score: float,
+        se_score: float,
+        behavioral_score: float,
+    ) -> bool:
+        if not self.config.guard_exception_alto_valor_se_beh_enabled:
+            return False
+
+        if features is None:
+            return False
+
+        vl_pix = _safe_float(features.get("vl_pix"), 0)
+        rel_mes = _safe_float(features.get("qt_tempo_relacionamento_mes"), 999)
+        idade = _safe_float(features.get("nr_idade"), 0)
+        first_receiver = _safe_int(features.get("first_receiver_flag"), 0)
+
+        if self.config.guard_exception_alto_valor_require_pf:
+            if not self._is_pessoa_fisica_like(features, idade):
+                return False
+
+        if self.config.guard_exception_alto_valor_require_first_receiver:
+            if first_receiver != 1:
+                return False
+
+        return (
+            self.config.lgbm_guard_enabled
+            and lgbm_raw < self.config.lgbm_guard_threshold
+            and lgbm_raw >= self.config.guard_exception_alto_valor_lgbm_min
+            and if_score >= self.config.guard_exception_alto_valor_if_min
+            and se_score >= 40
+            and behavioral_score >= 15
+            and vl_pix >= self.config.guard_exception_alto_valor_min
+            and rel_mes <= self.config.guard_exception_alto_valor_rel_max
+            and self.config.guard_exception_alto_valor_age_min
+                <= idade
+                <= self.config.guard_exception_alto_valor_age_max
+        )
 
     # ==========================================================
     # LOADING
@@ -525,7 +593,49 @@ class PixDecisionEngine:
                 )
                 self.lgbm_features = list(self.lgbm_model.feature_name_)
 
+        def _coerce_config_value(self, default_value, raw_value):
+            if isinstance(default_value, bool):
+                if isinstance(raw_value, str):
+                    return raw_value.strip().lower() in {"1", "true", "yes", "sim"}
+                return bool(raw_value)
 
+            if isinstance(default_value, int) and not isinstance(default_value, bool):
+                return int(raw_value)
+
+            if isinstance(default_value, float):
+                return float(raw_value)
+
+            return raw_value
+
+
+        def _hydrate_config_from_scoring_config(self, default_config: EngineConfig) -> None:
+            for name in EngineConfig.__dataclass_fields__:
+                if name not in self.scoring_config:
+                    continue
+
+                # thresholds ja sao tratados por faixas_decisao
+                if name in {"threshold_confirmar", "threshold_bloquear"}:
+                    continue
+
+                current_value = getattr(self.config, name)
+                default_value = getattr(default_config, name)
+
+                # Nao sobrescrever override passado explicitamente no construtor.
+                if current_value != default_value:
+                    continue
+
+                try:
+                    setattr(
+                        self.config,
+                        name,
+                        self._coerce_config_value(default_value, self.scoring_config[name]),
+                    )
+                except Exception as exc:
+                    logger.warning(
+                        "Falha ao hidratar EngineConfig.%s a partir do scoring_config: %s",
+                        name,
+                        exc,
+                    )
 
         # 3. Scoring Config
         scoring_path = art / "scoring_config.json"
@@ -546,6 +656,7 @@ class PixDecisionEngine:
                 "bloquear"
             )
             default_config = EngineConfig()
+            self._hydrate_config_from_scoring_config(default_config)
 
             if (
                 runtime_threshold_confirmar is not None
@@ -1521,28 +1632,50 @@ class PixDecisionEngine:
                 features.get("qt_tempo_relacionamento_mes"), 999,
             )
 
-            if (
-                se_score >= 40
-                and behavioral_score >= 15
-                and vl_pix >= 15000
-                and rel_mes <= 12
+        if (
+            se_score >= 40
+            and behavioral_score >= 15
+            and vl_pix >= 15000
+            and rel_mes <= 12
+        ):
+            score_ajustado = max(
+                score_mapped,
+                self.config.threshold_confirmar,
+            )
+
+            if self._match_guard_exception_alto_valor_se_beh(
+                features,
+                lgbm_raw=lgbm_raw,
+                if_score=if_score,
+                se_score=se_score,
+                behavioral_score=behavioral_score,
             ):
-                score_ajustado = max(
-                    score_mapped, self.config.threshold_confirmar,
-                )
                 desc = (
-                    f"VETO CONFIRMAR: SE({se_score:.0f}) + "
-                    f"BEH({behavioral_score:.0f}) + "
-                    f"valor(R${vl_pix:,.0f}) + "
-                    f"conta_nova({rel_mes:.0f}m) — "
-                    f"veto cirúrgico v1.3"
+                    "VETO CONFIRMAR: EXP004 GUARD_EXCEPTION_ALTO_VALOR_SE_BEH "
+                    f"SE({se_score:.0f}) + BEH({behavioral_score:.0f}) + "
+                    f"valor(R${vl_pix:,.0f}) + conta_nova({rel_mes:.0f}m) + "
+                    f"IF={if_score * 100:.1f}% + LGBM={lgbm_raw:.4f}"
                 )
                 logger.info(
-                    f"{desc} | Score: {score_mapped:.1f} → "
-                    f"{score_ajustado:.1f}"
+                    f"{desc} | Score: {score_mapped:.1f} → {score_ajustado:.1f}"
                 )
-                if not _suppress_with_guard("VETO CONFIRMAR SE+BEH_VALOR_NOVO"):
-                    return score_ajustado, desc, veto_suppressed_reason
+                return score_ajustado, desc, veto_suppressed_reason
+
+            desc = (
+                f"VETO CONFIRMAR: SE({se_score:.0f}) + "
+                f"BEH({behavioral_score:.0f}) + "
+                f"valor(R${vl_pix:,.0f}) + "
+                f"conta_nova({rel_mes:.0f}m) — "
+                f"veto cirúrgico v1.3"
+            )
+
+            logger.info(
+                f"{desc} | Score: {score_mapped:.1f} → "
+                f"{score_ajustado:.1f}"
+            )
+
+            if not _suppress_with_guard("VETO CONFIRMAR SE+BEH_VALOR_NOVO"):
+                return score_ajustado, desc, veto_suppressed_reason
 
         # --- 9. Behavioral alto (≥ 40) com velocity E age_value → CONFIRMAR ---
         # NÃO afetado por Fast-Approve (BEH >= 40 → FA não ativa)

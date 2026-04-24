@@ -1,0 +1,6 @@
+﻿variante_id,label,TP,FP,FN,TN,Precision,Recall,F1,FPR,policy_hits,policy_hits_fraud,policy_precision,upgrades_aprovar_para_confirmar,upgrades_fraude,upgrades_legitima,valor_fn_recuperado,valor_fp_adicionado,delta_TP,delta_FP,delta_FN,delta_F1,delta_Recall,delta_Precision,utility
+BASELINE,Baseline atual EXP-001 + EXP-002,345,15,10,5630,0.958333,0.971831,0.965035,0.00265722,0,0,0.0,0,0,0,0.0,0.0,0,0,0,0.0,0.0,0.0,0.0
+V1_GUARD_CONTEXTUAL,Excecao cirurgica ao guard rail: alto valor SE+BEH,346,15,9,5630,0.958449,0.974648,0.96648,0.00265722,1,1,1.0,1,1,0,20000.0,0.0,1,0,-1,0.001445,0.002817,0.000116,10.0
+V2_RATE_LIMIT,RATE_LIMIT_ANOMALO comportamental,345,15,10,5630,0.958333,0.971831,0.965035,0.00265722,57,57,1.0,0,0,0,0.0,0.0,0,0,0,0.0,0.0,0.0,0.0
+V3_PRIMEIRO_RECEIVER,PRIMEIRO_RECEIVER_VALOR_ANOMALO,346,95,9,5550,0.78458,0.974648,0.869347,0.01682905,208,122,0.586538,81,1,80,20000.0,252863.72,1,80,-1,-0.095688,0.002817,-0.173753,-70.0
+V4_COMBO_FINAL,Guard contextual + Rate limit + Primeiro receiver,346,95,9,5550,0.78458,0.974648,0.869347,0.01682905,264,178,0.674242,81,1,80,20000.0,252863.72,1,80,-1,-0.095688,0.002817,-0.173753,-70.0
