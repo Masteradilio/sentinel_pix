@@ -17,20 +17,17 @@
       "fn_recuperados_sample_6k": {
         "total": 14,
         "perfil_dominante": "first_receiver_flag=1 (12/14) + pix_key_random_flag=1 (10/14)",
-        "valor_mediano": 995.0,
-        "valor_maximo": 10000.0,
+        "valor_mediano": 995.00,
+        "valor_maximo": 10000.00,
         "idosos_60plus": 4,
         "jovens_abaixo_25": 3,
-        "score_final_range": [
-          65.41,
-          74.8
-        ],
+        "score_final_range": [65.41, 74.80],
         "interpretacao": "Assinatura classica de golpe: primeira transferencia para conta desconhecida com chave Pix aleatoria."
       },
       "fp_novos_sample_6k": {
         "total": 9,
         "valor_mediano": 1173.74,
-        "valor_maximo": 7350.0,
+        "valor_maximo": 7350.00,
         "idosos_60plus": 3,
         "alertas": [
           "2 FP com valor >= R$5.000 requerem monitoramento humano pos-deploy"
@@ -71,25 +68,13 @@
       "criterios_aceitacao": {
         "delta_f1_min": 0.005,
         "recall_min": 0.95,
-        "precision_min": 0.9,
+        "precision_min": 0.90,
         "fpr_max": 0.005,
         "resultados": {
-          "delta_f1": {
-            "obtido": 0.008392,
-            "passou": true
-          },
-          "recall": {
-            "obtido": 0.974648,
-            "passou": true
-          },
-          "precision": {
-            "obtido": 0.953168,
-            "passou": true
-          },
-          "fpr": {
-            "obtido": 0.00301151,
-            "passou": true
-          }
+          "delta_f1": {"obtido": 0.008392, "passou": true},
+          "recall": {"obtido": 0.974648, "passou": true},
+          "precision": {"obtido": 0.953168, "passou": true},
+          "fpr": {"obtido": 0.00301151, "passou": true}
         },
         "todos_passaram": true
       },
@@ -105,79 +90,22 @@
         "Anchors de mapeamento mantidos (v1.2)"
       ],
       "fn_recuperados": [
-        {
-          "idx": 36694,
-          "vl_pix": 1000.0,
-          "lgbm_raw": 0.709,
-          "score": 78.74,
-          "via": "threshold_77"
-        },
-        {
-          "idx": 30588,
-          "vl_pix": 400.0,
-          "lgbm_raw": 0.678,
-          "score": 77.83,
-          "via": "threshold_77"
-        },
-        {
-          "idx": 58511,
-          "vl_pix": 1000.0,
-          "lgbm_raw": 0.671,
-          "score": 77.63,
-          "via": "threshold_77"
-        },
-        {
-          "idx": 93105,
-          "vl_pix": 20000.0,
-          "lgbm_raw": 0.013,
-          "score": 31.68,
-          "via": "veto_se_beh_valor_novo"
-        }
+        {"idx": 36694, "vl_pix": 1000.00, "lgbm_raw": 0.709, "score": 78.74, "via": "threshold_77"},
+        {"idx": 30588, "vl_pix": 400.00,  "lgbm_raw": 0.678, "score": 77.83, "via": "threshold_77"},
+        {"idx": 58511, "vl_pix": 1000.00, "lgbm_raw": 0.671, "score": 77.63, "via": "threshold_77"},
+        {"idx": 93105, "vl_pix": 20000.00,"lgbm_raw": 0.013, "score": 31.68, "via": "veto_se_beh_valor_novo"}
       ],
       "fn_irredutiveis": [
-        {
-          "idx": 90197,
-          "vl_pix": 498.96,
-          "lgbm_raw": 0.455,
-          "motivo": "Score 71.3, sem SE/BEH. Threshold 71 custaria +87 FP"
-        },
-        {
-          "idx": 98992,
-          "vl_pix": 2478.98,
-          "lgbm_raw": 0.148,
-          "motivo": "LGBM baixo, sem sinais SE/BEH. Invisível ao ensemble"
-        },
-        {
-          "idx": 13814,
-          "vl_pix": 188.82,
-          "lgbm_raw": 0.023,
-          "motivo": "Nenhum sinal em nenhum componente. Indistinguível de normal"
-        }
+        {"idx": 90197, "vl_pix": 498.96,  "lgbm_raw": 0.455, "motivo": "Score 71.3, sem SE/BEH. Threshold 71 custaria +87 FP"},
+        {"idx": 98992, "vl_pix": 2478.98, "lgbm_raw": 0.148, "motivo": "LGBM baixo, sem sinais SE/BEH. Invisível ao ensemble"},
+        {"idx": 13814, "vl_pix": 188.82,  "lgbm_raw": 0.023, "motivo": "Nenhum sinal em nenhum componente. Indistinguível de normal"}
       ]
     }
   },
   "score_input": "lgbm_raw",
   "mapeamento": {
-    "anchors_raw": [
-      0.0,
-      0.001,
-      0.01,
-      0.07,
-      0.918859,
-      0.919859,
-      0.9599,
-      1.0
-    ],
-    "anchors_out": [
-      0.0,
-      10.0,
-      30.0,
-      60.0,
-      84.9,
-      85.0,
-      95.0,
-      100.0
-    ],
+    "anchors_raw": [0.0, 0.001, 0.01, 0.07, 0.918859, 0.919859, 0.9599, 1.0],
+    "anchors_out": [0.0, 10.0, 30.0, 60.0, 84.9, 85.0, 95.0, 100.0],
     "metodo": "numpy.interp v1.2 — mantido de v1.2 (anchors não alterados)"
   },
   "faixas_decisao": {
@@ -195,8 +123,20 @@
       "range": "[95.0, 100]",
       "threshold": 95.0,
       "acao": "Parar transação para análise humana"
-    }
+    },
+
+  {
+    "guard_exception_alto_valor_se_beh_enabled": true,
+    "guard_exception_alto_valor_min": 15000.0,
+    "guard_exception_alto_valor_rel_max": 12.0,
+    "guard_exception_alto_valor_if_min": 0.985,
+    "guard_exception_alto_valor_lgbm_min": 0.01,
+    "guard_exception_alto_valor_age_min": 18,
+    "guard_exception_alto_valor_age_max": 90,
+    "guard_exception_alto_valor_require_first_receiver": true,
+    "guard_exception_alto_valor_require_pf": true
   },
+
   "lgbm_guard_enabled": true,
   "lgbm_guard_threshold": 0.3,
   "se_pattern_residual_enabled": false,
@@ -265,59 +205,5 @@
       "fpr_estimado": 0.00301,
       "nota": "Metricas de SAMPLE nao sao diretamente comparaveis com metricas full-dataset da v1.3 devido a diferencas de prevalencia e distribuicao."
     }
-  },
-  "guard_exception_alto_valor_se_beh_enabled": true,
-  "guard_exception_alto_valor_min": 15000.0,
-  "guard_exception_alto_valor_rel_max": 12.0,
-  "guard_exception_alto_valor_if_min": 0.985,
-  "guard_exception_alto_valor_lgbm_min": 0.01,
-  "guard_exception_alto_valor_age_min": 18,
-  "guard_exception_alto_valor_age_max": 90,
-  "guard_exception_alto_valor_require_first_receiver": true,
-  "guard_exception_alto_valor_require_pf": true,
-  "threshold_confirmar": 62.0,
-  "threshold_bloquear": 95.0,
-  "_metadata_fase2_patch": {
-    "patched_at": "2026-04-30T18:01:22",
-    "patch": "FASE2_BASELINE_PERMANENTE",
-    "diagnostics": {
-      "loaded_mode": "line_based_orphan_guard_block_removed",
-      "repairs": [
-        "orphan_guard_exception_block_removed_by_lines"
-      ],
-      "orphan_keys_merged": [
-        "guard_exception_alto_valor_age_max",
-        "guard_exception_alto_valor_age_min",
-        "guard_exception_alto_valor_if_min",
-        "guard_exception_alto_valor_lgbm_min",
-        "guard_exception_alto_valor_min",
-        "guard_exception_alto_valor_rel_max",
-        "guard_exception_alto_valor_require_first_receiver",
-        "guard_exception_alto_valor_require_pf",
-        "guard_exception_alto_valor_se_beh_enabled"
-      ],
-      "raw_error": "Expecting property name enclosed in double quotes: line 128 column 3 (char 5502)",
-      "sanitized_error": "Expecting property name enclosed in double quotes: line 128 column 3 (char 5502)"
-    },
-    "notes": [
-      "JSON validado e reformatado.",
-      "Bloco órfão guard_exception, se existia, foi removido por linhas e mesclado ao objeto principal.",
-      "Promovido baseline pós-FASE 1.",
-      "LGBM v6.2 ainda não promovido; será testado temporariamente no EXP-005B-E2E."
-    ]
-  },
-  "_metadata_exp005b_decision": {
-    "decided_at": "2026-04-30T19:41:14",
-    "experiment": "EXP-005B-E2E",
-    "decision": "REJEITAR_LGBM_V6_2_PARA_RUNTIME",
-    "promote_lgbm_v6_2": false,
-    "promote_candidate_thresholds": false,
-    "keep_baseline_fase1": true,
-    "reason": [
-      "E2E real não reduziu FN: baseline e candidatos ficaram com FN=9.",
-      "Candidatos aumentaram FP e reduziram F1.",
-      "CAND_007_RECALL foi escolhido pelo seletor do experimento, mas não superou baseline.",
-      "LGBM v6.2 deve permanecer apenas em artefatos_candidatos."
-    ]
   }
 }

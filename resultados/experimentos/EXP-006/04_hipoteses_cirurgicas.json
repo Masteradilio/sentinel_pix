@@ -1,0 +1,66 @@
+{
+  "status": "OK",
+  "grid_decision": {
+    "keep_baseline": true,
+    "reject_candidates": {
+      "CAND_007_RECALL": {
+        "reject": true,
+        "reason": "FN não melhora, FP aumenta e F1 piora vs baseline"
+      },
+      "CAND_015_BALANCED": {
+        "reject": true,
+        "reason": "FN não melhora, FP aumenta e F1 piora vs baseline"
+      },
+      "CAND_020_MAIN": {
+        "reject": true,
+        "reason": "FN não melhora, FP aumenta e F1 piora vs baseline"
+      },
+      "CAND_030_CONSERVATIVE": {
+        "reject": true,
+        "reason": "FN não melhora, FP aumenta e F1 piora vs baseline"
+      }
+    }
+  },
+  "hypotheses": [
+    {
+      "id": "H1_FIRST_RECEIVER_EH_SINAL_MAS_NAO_REGRA",
+      "status": "NAO_PROMOVER_COMO_REGRA",
+      "evidence": {
+        "fn_recuperados_com_first_receiver": 8,
+        "fp_adicionados_com_first_receiver": 20
+      },
+      "interpretation": "first_receiver aparece nos FNs recuperados, mas também domina FPs adicionados. Não deve virar regra hardcoded; deve entrar apenas como feature/explicação.",
+      "next_action": "Não criar regra first_receiver. Usar em meta-learner shadow e análise de reputação de recebedor."
+    },
+    {
+      "id": "H2_RECALIBRACAO_LGBM_TROCA_FRAUDES",
+      "status": "REJEITAR_LGBM_V6_2_RUNTIME",
+      "evidence": {
+        "fn_recuperados": 8,
+        "tp_perdidos": 8,
+        "fp_adicionados": 20,
+        "fp_removidos": 2
+      },
+      "interpretation": "O candidato recupera alguns FNs, mas perde TPs em quantidade similar e adiciona FP. Isso confirma que a fronteira do LGBM v6.2 não melhora o pipeline real.",
+      "next_action": "Manter baseline pós-FASE 1 e usar LGBM v6.2 apenas como evidência diagnóstica."
+    },
+    {
+      "id": "H3_FRAUDES_COM_SINAL_FRACO_PODEM_SER_IRREDUTIVEIS",
+      "status": "INVESTIGAR_RESIDUAL",
+      "evidence": {
+        "tps_perdidos_sinal_fraco": 8
+      },
+      "interpretation": "Há fraudes capturadas pelo baseline que ficam com LGBM muito baixo e SE/BEH zerados no candidato. Se também estiverem entre os FNs residuais, dependem de novos sinais ou ajustes no engine.",
+      "next_action": "Criar relatório dos 9 FNs residuais completos e marcar DATA_LIMITED quando todos os módulos estiverem cegos."
+    },
+    {
+      "id": "H4_VETO_SUPPRESSED_DEVE_SER_CAMPO_DIAGNOSTICO",
+      "status": "MANTER_CORRECAO_NAN_E_USAR_NO_EXP006B",
+      "evidence": {
+        "casos_com_veto_suppressed_reason": 3
+      },
+      "interpretation": "veto_suppressed_reason aparece em alguns casos e pode explicar decisões suprimidas. O bug de NaN precisa continuar corrigido para não contaminar classificação de FN.",
+      "next_action": "No EXP-006B, gerar contrafactual de veto sem reprocessar E2E completo."
+    }
+  ]
+}

@@ -1,0 +1,30 @@
+{
+  "fns_recuperados": 0,
+  "fps_adicionados": 1,
+  "tps_perdidos": 0,
+  "fps_removidos": 0,
+  "rule_hits": 1,
+  "top_fns_recuperados": [],
+  "top_fps_adicionados": [
+    {
+      "transaction_id": "E0000020820260218170908884219525",
+      "customer_id": "33360839153",
+      "vl_pix": 76.0,
+      "nr_idade": 70,
+      "qt_tempo_relacionamento_mes": 508,
+      "first_receiver_flag": 1,
+      "pix_key_random_flag": 1,
+      "candidate_lgbm_v6_2_raw": 0.17289932309843462,
+      "lgbm_raw": 2.224e-05,
+      "if_percentile": 0.857797,
+      "se_score": 0.0,
+      "beh_score": 0.0,
+      "score_final": 62.0,
+      "decisao": "CONFIRMAR",
+      "exp006c_r2_hit": true,
+      "exp006c_reason": "R2_LOW_VALUE_GRAY_FIRST_RECEIVER: APROVAR->CONFIRMAR | first_receiver=1, vl_pix<500, candidate_lgbm_v6_2 in [0.08,0.20), SE=0, BEH=0"
+    }
+  ],
+  "top_tps_perdidos": [],
+  "top_fps_removidos": []
+}

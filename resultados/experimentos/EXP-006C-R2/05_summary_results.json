@@ -1,0 +1,117 @@
+{
+  "generated_at": "2026-04-30T20:17:09",
+  "results": [
+    {
+      "seed": 42,
+      "sample_size": 6000,
+      "baseline_metrics": {
+        "label": "BASELINE_seed_42",
+        "TP": 346,
+        "FP": 14,
+        "FN": 9,
+        "TN": 5631,
+        "Precision": 0.961111,
+        "Recall": 0.974648,
+        "F1": 0.967832,
+        "FPR": 0.00248007
+      },
+      "candidate_metrics": {
+        "label": "R2_seed_42",
+        "TP": 346,
+        "FP": 15,
+        "FN": 9,
+        "TN": 5630,
+        "Precision": 0.958449,
+        "Recall": 0.974648,
+        "F1": 0.96648,
+        "FPR": 0.00265722
+      },
+      "delta": {
+        "fns_recuperados": 0,
+        "fps_adicionados": 1,
+        "tps_perdidos": 0,
+        "fps_removidos": 0,
+        "rule_hits": 1,
+        "top_fns_recuperados": [],
+        "top_fps_adicionados": [
+          {
+            "transaction_id": "E0000020820251222115029673543525",
+            "customer_id": "53854640153",
+            "vl_pix": 405.0,
+            "nr_idade": 55,
+            "qt_tempo_relacionamento_mes": 443,
+            "first_receiver_flag": 1,
+            "pix_key_random_flag": 0,
+            "candidate_lgbm_v6_2_raw": 0.09537533501416008,
+            "lgbm_raw": 0.02610432,
+            "if_percentile": 0.964176,
+            "se_score": 0.0,
+            "beh_score": 0.0,
+            "score_final": 62.0,
+            "decisao": "CONFIRMAR",
+            "exp006c_r2_hit": true,
+            "exp006c_reason": "R2_LOW_VALUE_GRAY_FIRST_RECEIVER: APROVAR->CONFIRMAR | first_receiver=1, vl_pix<500, candidate_lgbm_v6_2 in [0.08,0.20), SE=0, BEH=0"
+          }
+        ],
+        "top_tps_perdidos": [],
+        "top_fps_removidos": []
+      }
+    },
+    {
+      "seed": 123,
+      "sample_size": 6000,
+      "baseline_metrics": {
+        "label": "BASELINE_seed_123",
+        "TP": 346,
+        "FP": 12,
+        "FN": 9,
+        "TN": 5633,
+        "Precision": 0.96648,
+        "Recall": 0.974648,
+        "F1": 0.970547,
+        "FPR": 0.00212578
+      },
+      "candidate_metrics": {
+        "label": "R2_seed_123",
+        "TP": 346,
+        "FP": 13,
+        "FN": 9,
+        "TN": 5632,
+        "Precision": 0.963788,
+        "Recall": 0.974648,
+        "F1": 0.969188,
+        "FPR": 0.00230292
+      },
+      "delta": {
+        "fns_recuperados": 0,
+        "fps_adicionados": 1,
+        "tps_perdidos": 0,
+        "fps_removidos": 0,
+        "rule_hits": 1,
+        "top_fns_recuperados": [],
+        "top_fps_adicionados": [
+          {
+            "transaction_id": "E0000020820260218170908884219525",
+            "customer_id": "33360839153",
+            "vl_pix": 76.0,
+            "nr_idade": 70,
+            "qt_tempo_relacionamento_mes": 508,
+            "first_receiver_flag": 1,
+            "pix_key_random_flag": 1,
+            "candidate_lgbm_v6_2_raw": 0.17289932309843462,
+            "lgbm_raw": 2.224e-05,
+            "if_percentile": 0.857797,
+            "se_score": 0.0,
+            "beh_score": 0.0,
+            "score_final": 62.0,
+            "decisao": "CONFIRMAR",
+            "exp006c_r2_hit": true,
+            "exp006c_reason": "R2_LOW_VALUE_GRAY_FIRST_RECEIVER: APROVAR->CONFIRMAR | first_receiver=1, vl_pix<500, candidate_lgbm_v6_2 in [0.08,0.20), SE=0, BEH=0"
+          }
+        ],
+        "top_tps_perdidos": [],
+        "top_fps_removidos": []
+      }
+    }
+  ]
+}

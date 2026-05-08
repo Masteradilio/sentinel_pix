@@ -1,0 +1,21 @@
+{
+  "runtime_ready_for_e2e": false,
+  "checks": {
+    "scoring_config": {
+      "path": "C:\\Users\\u857755\\OneDrive - BRB - Banco de Brasilia SA\\Documentos\\Projetos\\squad_IA\\PIX\\rebuild_pix\\backend\\artefatos\\scoring_config.json",
+      "exists": true,
+      "valid_json": false,
+      "error": "Expecting property name enclosed in double quotes: line 128 column 3 (char 5502)"
+    },
+    "lgbm_features_atual": {
+      "path": "C:\\Users\\u857755\\OneDrive - BRB - Banco de Brasilia SA\\Documentos\\Projetos\\squad_IA\\PIX\\rebuild_pix\\backend\\artefatos\\lgbm_features.json",
+      "exists": true,
+      "valid_json": true,
+      "type": "dict"
+    },
+    "candidate_model_exists": true,
+    "candidate_features_exists": true,
+    "candidate_thresholds_exists": true
+  },
+  "note": "EXP-005B model-only pode rodar mesmo com runtime_ready_for_e2e=false. Para E2E real, corrija scoring_config.json antes."
+}

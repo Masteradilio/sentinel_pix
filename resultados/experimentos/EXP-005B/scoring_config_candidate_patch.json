@@ -1,0 +1,57 @@
+{
+  "experiment_id": "EXP-005B",
+  "candidate_from": "EXP-005A LGBM_C_SPW_2_0X",
+  "status": "candidate_patch_not_runtime_deployed",
+  "lgbm_candidate": {
+    "model_path": "C:\\Users\\u857755\\OneDrive - BRB - Banco de Brasilia SA\\Documentos\\Projetos\\squad_IA\\PIX\\rebuild_pix\\backend\\artefatos_candidatos\\exp_005a_lgbm_v6_2_recall\\lgbm_v6_2_recall_candidate.joblib",
+    "features_path": "C:\\Users\\u857755\\OneDrive - BRB - Banco de Brasilia SA\\Documentos\\Projetos\\squad_IA\\PIX\\rebuild_pix\\backend\\artefatos_candidatos\\exp_005a_lgbm_v6_2_recall\\lgbm_features_v6_2.json",
+    "model_only_threshold_selected": 0.07,
+    "selection_tier": "strong"
+  },
+  "suggested_engine_grid_for_e2e": {
+    "threshold_confirmar": [
+      60,
+      62,
+      65
+    ],
+    "threshold_bloquear": [
+      95
+    ],
+    "lgbm_effective_threshold": [
+      0.07,
+      0.1,
+      0.15,
+      0.2
+    ],
+    "lgbm_guard_threshold": [
+      0.1,
+      0.2,
+      0.3
+    ],
+    "lgbm_guard_enabled": [
+      true
+    ],
+    "guard_exception_alto_valor_se_beh_enabled": [
+      true
+    ]
+  },
+  "recommended_first_e2e_config": {
+    "threshold_confirmar": 62.0,
+    "threshold_bloquear": 95.0,
+    "lgbm_effective_threshold": 0.07,
+    "lgbm_guard_enabled": true,
+    "lgbm_guard_threshold": 0.2,
+    "guard_exception_alto_valor_se_beh_enabled": true
+  },
+  "baseline_fase2_reference": {
+    "TP": 346,
+    "FP": 15,
+    "FN": 9,
+    "Precision": 0.958449,
+    "Recall": 0.974648,
+    "F1": 0.9665,
+    "FPR": 0.002657,
+    "descricao": "Baseline pos-FASE 1 consolidado, apos EXP-004-FINAL V1_GUARD_CONTEXTUAL"
+  },
+  "important_note": "Este patch nao deve ser copiado diretamente para producao. Ele orienta o EXP-005B E2E apos corrigir scoring_config.json."
+}

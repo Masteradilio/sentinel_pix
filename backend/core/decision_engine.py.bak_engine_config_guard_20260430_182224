@@ -109,17 +109,6 @@ class EngineConfig:
     veto_threshold: float = 0.90
     lgbm_guard_enabled: bool = False
     lgbm_guard_threshold: float = 0.30
-    # --- EXP-004-FINAL: excecao cirurgica ao guard rail LGBM ---
-    guard_exception_alto_valor_se_beh_enabled: bool = False
-    guard_exception_alto_valor_min: float = 15000.0
-    guard_exception_alto_valor_rel_max: float = 12.0
-    guard_exception_alto_valor_if_min: float = 0.985
-    guard_exception_alto_valor_lgbm_min: float = 0.01
-    guard_exception_alto_valor_age_min: int = 18
-    guard_exception_alto_valor_age_max: int = 90
-    guard_exception_alto_valor_require_first_receiver: bool = True
-    guard_exception_alto_valor_require_pf: bool = True
-
 
     # --- LGBM thresholds (v3.0) ---
     # threshold original do treino (melhor F1)

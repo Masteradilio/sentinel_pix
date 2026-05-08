@@ -305,19 +305,5 @@
       "Promovido baseline pós-FASE 1.",
       "LGBM v6.2 ainda não promovido; será testado temporariamente no EXP-005B-E2E."
     ]
-  },
-  "_metadata_exp005b_decision": {
-    "decided_at": "2026-04-30T19:41:14",
-    "experiment": "EXP-005B-E2E",
-    "decision": "REJEITAR_LGBM_V6_2_PARA_RUNTIME",
-    "promote_lgbm_v6_2": false,
-    "promote_candidate_thresholds": false,
-    "keep_baseline_fase1": true,
-    "reason": [
-      "E2E real não reduziu FN: baseline e candidatos ficaram com FN=9.",
-      "Candidatos aumentaram FP e reduziram F1.",
-      "CAND_007_RECALL foi escolhido pelo seletor do experimento, mas não superou baseline.",
-      "LGBM v6.2 deve permanecer apenas em artefatos_candidatos."
-    ]
   }
 }
