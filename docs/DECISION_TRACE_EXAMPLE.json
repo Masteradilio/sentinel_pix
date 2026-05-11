@@ -1,0 +1,37 @@
+{
+  "decision_id": "decision_example_exp006f_c1",
+  "transaction_id": "E0000020820260205003505340630525",
+  "customer_id_hash": "hash_4321433355",
+  "created_at": "2026-05-09T14:07:11",
+  "model_version": "post_fase2_c1",
+  "decision_engine_version": "v3.0.5_post_c1",
+  "scoring_config_version": "post_fase2_c1",
+  "decisao": "CONFIRMAR",
+  "score_final": 62.0,
+  "score_final_original": 58.01,
+  "lgbm_raw": 0.063164,
+  "lgbm_mapped": null,
+  "if_percentile": null,
+  "se_score": 0.0,
+  "beh_score": 0.0,
+  "rules_applied": [
+    "C1_NEAR_THRESHOLD_REL_CURTO_FIRST_RECEIVER"
+  ],
+  "guardrails_applied": [],
+  "veto_reason": null,
+  "veto_suppressed_reason": null,
+  "decision_reason": "C1_NEAR_THRESHOLD_REL_CURTO_FIRST_RECEIVER aplicou APROVAR->CONFIRMAR: rel<=12, first_receiver=1, pix_random=0, 100<=vl<500, 0.06<=lgbm<0.10, 58<=score<62, SE=0, BEH=0.",
+  "review_recommended": true,
+  "rule_details": {
+    "exp006f_c1_applied": true,
+    "exp006f_c1_reason": "C1_NEAR_THRESHOLD_REL_CURTO_FIRST_RECEIVER: APROVAR->CONFIRMAR",
+    "decisao_original_exp006f_c1": "APROVAR",
+    "score_final_original_exp006f_c1": 58.01,
+    "config": {
+      "exp006f_c1_min_score": 58.0,
+      "exp006f_c1_max_score": 62.0,
+      "exp006f_c1_min_lgbm_raw": 0.06,
+      "exp006f_c1_max_lgbm_raw": 0.1
+    }
+  }
+}

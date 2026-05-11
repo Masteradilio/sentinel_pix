@@ -1,0 +1,142 @@
+{
+  "manifest_schema_version": "1.0",
+  "generated_at": "2026-05-09T15:30:00",
+  "model_version": "post_fase2_c1",
+  "decision_engine_version": "v3.0.5_post_c1_exp008d",
+  "project_phase": "FASE_3_CONSOLIDACAO_OPERACIONAL",
+  "status": "ACTIVE_BASELINE",
+  "active_lgbm": "baseline_producao_pre_lgbm_v6_2",
+  "active_rules": [
+    "V1_GUARD_CONTEXTUAL",
+    "C1_NEAR_THRESHOLD_REL_CURTO_FIRST_RECEIVER"
+  ],
+  "active_guardrails": [
+    "LGBM_GUARD_RAIL"
+  ],
+  "rejected_candidates": [
+    {
+      "id": "LGBM_C_SPW_2_0X",
+      "source": "EXP-005A/EXP-005B",
+      "reason": "Promissor model-only, mas não reduziu FN líquido no engine real e aumentou FP."
+    },
+    {
+      "id": "R2_LOW_VALUE_GRAY_FIRST_RECEIVER",
+      "source": "EXP-006C",
+      "reason": "Recuperou 0 FN e adicionou FP."
+    },
+    {
+      "id": "META_LEARNER_SHADOW",
+      "source": "EXP-007A",
+      "reason": "Não encontrou candidato seguro para overlay adicional."
+    }
+  ],
+  "disabled_rules": [
+    "EXP003_RESIDUAL",
+    "SE_PATTERN_RESIDUAL"
+  ],
+  "official_metrics": {
+    "seed_42": {
+      "TP": 347,
+      "FP": 14,
+      "FN": 8,
+      "Precision": 0.961219,
+      "Recall": 0.977465,
+      "F1": 0.9693
+    },
+    "seed_123": {
+      "TP": 347,
+      "FP": 12,
+      "FN": 8,
+      "Precision": 0.966574,
+      "Recall": 0.977465,
+      "F1": 0.972
+    }
+  },
+  "known_limitations": [
+    "Restam 8 FNs residuais após C1.",
+    "EXP-007A não encontrou overlay seguro com os sinais atuais.",
+    "Melhoria adicional de recall depende provavelmente de novas fontes de dados/sinais."
+  ],
+  "active_config": {
+    "threshold_confirmar": 62.0,
+    "threshold_bloquear": 95.0,
+    "lgbm_guard_enabled": true,
+    "lgbm_guard_threshold": 0.3,
+    "guard_exception_alto_valor_se_beh_enabled": true,
+    "guard_exception_alto_valor_min": 15000.0,
+    "guard_exception_alto_valor_rel_max": 12.0,
+    "guard_exception_alto_valor_if_min": 0.985,
+    "guard_exception_alto_valor_lgbm_min": 0.01,
+    "guard_exception_alto_valor_require_first_receiver": true,
+    "guard_exception_alto_valor_require_pf": true,
+    "exp006f_c1_enabled": true,
+    "exp006f_c1_min_score": 58.0,
+    "exp006f_c1_max_score": 62.0,
+    "exp006f_c1_min_valor": 100.0,
+    "exp006f_c1_max_valor": 500.0,
+    "exp006f_c1_max_rel_meses": 12.0,
+    "exp006f_c1_min_lgbm_raw": 0.06,
+    "exp006f_c1_max_lgbm_raw": 0.1,
+    "exp006f_c1_require_first_receiver": true,
+    "exp006f_c1_require_not_pix_random": true,
+    "exp006f_c1_max_se_score": 0.0,
+    "exp006f_c1_max_beh_score": 0.0,
+    "se_pattern_residual_enabled": false,
+    "exp003_residual_confirm_enabled": false
+  },
+  "artifact_hashes": {
+    "scoring_config_sha256": "4cd7a15fc1a61c1b1c17fab23b196ccdd7f8e604c388c272818640345e11b49f",
+    "validation_report_sha256": "22454d6196f0a83db487653aa6dfee58a7807299cd3f8078efc70e657703ea88",
+    "rules_catalog_sha256": "5fcbf788c8068b5b8aee81d739ecb07547cbf013d0bf4e64693cfede88428c13",
+    "decision_trace_spec_sha256": "e7bb0d8b9064612b997b5a6534e3c918336b3fec50f650ca05116d7429bddbba",
+    "decision_trace_example_sha256": "0f40e49d3c556aac5388d52082c71fd9cecfc138fb89bc83e92f750e1748ada6",
+    "regression_test_sha256": "911e1b6a6a554af0d545a8724298f7189c0f0e4b300e1a9e5741c5db6d6e371e"
+  },
+  "regression": {
+    "ran_at": "2026-05-09T15:30:00",
+    "all_passed": true,
+    "results": [
+      {
+        "command": "E:\\Projetos\\rebuild_pix\\venv\\Scripts\\python.exe -m py_compile backend/core/decision_engine.py",
+        "returncode": 0,
+        "stdout": "",
+        "stderr": ""
+      },
+      {
+        "command": "E:\\Projetos\\rebuild_pix\\venv\\Scripts\\python.exe -m py_compile backend/core/pipeline_orquestrador.py",
+        "returncode": 0,
+        "stdout": "",
+        "stderr": ""
+      },
+      {
+        "command": "E:\\Projetos\\rebuild_pix\\venv\\Scripts\\python.exe -m py_compile backend/scripts/simular_pipeline_e2e_v2.py",
+        "returncode": 0,
+        "stdout": "",
+        "stderr": ""
+      },
+      {
+        "command": "E:\\Projetos\\rebuild_pix\\venv\\Scripts\\python.exe -m pytest tests/test_regression_post_fase2.py -q",
+        "returncode": 0,
+        "stdout": "......                                                                   [100%]\n6 passed in 2.51s",
+        "stderr": ""
+      },
+      {
+        "command": "E:\\Projetos\\rebuild_pix\\venv\\Scripts\\python.exe -m pytest tests/test_regression_post_fase2.py -q -m slow",
+        "returncode": 0,
+        "stdout": ".                                                                        [100%]\n1 passed, 5 deselected in 2.32s",
+        "stderr": ""
+      }
+    ]
+  },
+  "required_regression_commands": [
+    "python -m pytest tests\\test_regression_post_fase2.py -q",
+    "python -m pytest tests\\test_regression_post_fase2.py -q -m slow"
+  ],
+  "notes": [
+    "EXP-008D aprovado com restrição.",
+    "Wrapper efetivo da C1 permanece em backend/scripts/simular_pipeline_e2e_v2.py.",
+    "Wrapper redundante no pipeline_orquestrador.py foi mantido por segurança.",
+    "Binding defensivo _hydrate_config_from_scoring_config foi reposto no decision_engine.py.",
+    "Journal criado no EXP-008E para registrar decisões técnicas sem inflar o plano de melhoria."
+  ]
+}

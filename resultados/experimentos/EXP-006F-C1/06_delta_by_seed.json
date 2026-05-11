@@ -1,0 +1,68 @@
+{
+  "42": {
+    "fns_recuperados": 1,
+    "fps_adicionados": 0,
+    "tps_perdidos": 0,
+    "fps_removidos": 0,
+    "rule_hits": 1,
+    "top_fns_recuperados": [
+      {
+        "seed": 42,
+        "transaction_id": "E0000020820260205003505340630525",
+        "customer_id": 4321433355,
+        "vl_pix": 381.0,
+        "nr_idade": 34,
+        "qt_tempo_relacionamento_mes": 6,
+        "first_receiver_flag": 1,
+        "pix_key_random_flag": 0,
+        "lgbm_raw": 0.06847418,
+        "lgbm_mapped": 59.24,
+        "if_percentile": 0.446114,
+        "se_score": 0.0,
+        "beh_score": 0.0,
+        "score_final": 62.0,
+        "decisao": "CONFIRMAR",
+        "exp006f_c1_hit": true,
+        "exp006f_original_decisao": "APROVAR",
+        "exp006f_original_score_final": 60.67,
+        "exp006f_reason": "C1_NEAR_THRESHOLD_REL_CURTO_FIRST_RECEIVER: APROVAR->CONFIRMAR | rel<=12, first_receiver=1, pix_random=0, 100<=vl<500, 0.06<=lgbm<0.10, 60<=score<62, SE=0, BEH=0"
+      }
+    ],
+    "top_fps_adicionados": [],
+    "top_tps_perdidos": [],
+    "top_fps_removidos": []
+  },
+  "123": {
+    "fns_recuperados": 1,
+    "fps_adicionados": 0,
+    "tps_perdidos": 0,
+    "fps_removidos": 0,
+    "rule_hits": 1,
+    "top_fns_recuperados": [
+      {
+        "seed": 123,
+        "transaction_id": "E0000020820260205003505340630525",
+        "customer_id": 4321433355,
+        "vl_pix": 381.0,
+        "nr_idade": 34,
+        "qt_tempo_relacionamento_mes": 6,
+        "first_receiver_flag": 1,
+        "pix_key_random_flag": 0,
+        "lgbm_raw": 0.06847418,
+        "lgbm_mapped": 59.24,
+        "if_percentile": 0.446114,
+        "se_score": 0.0,
+        "beh_score": 0.0,
+        "score_final": 62.0,
+        "decisao": "CONFIRMAR",
+        "exp006f_c1_hit": true,
+        "exp006f_original_decisao": "APROVAR",
+        "exp006f_original_score_final": 60.67,
+        "exp006f_reason": "C1_NEAR_THRESHOLD_REL_CURTO_FIRST_RECEIVER: APROVAR->CONFIRMAR | rel<=12, first_receiver=1, pix_random=0, 100<=vl<500, 0.06<=lgbm<0.10, 60<=score<62, SE=0, BEH=0"
+      }
+    ],
+    "top_fps_adicionados": [],
+    "top_tps_perdidos": [],
+    "top_fps_removidos": []
+  }
+}

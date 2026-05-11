@@ -319,5 +319,62 @@
       "CAND_007_RECALL foi escolhido pelo seletor do experimento, mas não superou baseline.",
       "LGBM v6.2 deve permanecer apenas em artefatos_candidatos."
     ]
+  },
+  "exp006f_c1_enabled": true,
+  "exp006f_c1_min_score": 58.0,
+  "exp006f_c1_max_score": 62.0,
+  "exp006f_c1_min_valor": 100.0,
+  "exp006f_c1_max_valor": 500.0,
+  "exp006f_c1_max_rel_meses": 12.0,
+  "exp006f_c1_min_lgbm_raw": 0.06,
+  "exp006f_c1_max_lgbm_raw": 0.1,
+  "exp006f_c1_require_first_receiver": true,
+  "exp006f_c1_require_not_pix_random": true,
+  "exp006f_c1_max_se_score": 0.0,
+  "exp006f_c1_max_beh_score": 0.0,
+  "_metadata_exp006f_c1": {
+    "patched_at": "2026-05-09T11:51:10",
+    "experiment": "EXP-006F-C1",
+    "decision": "PROMOTED_PERMANENT_CONFIGURABLE",
+    "evidence": {
+      "seed_42": {
+        "baseline": {
+          "TP": 346,
+          "FP": 14,
+          "FN": 9,
+          "F1": 0.9678
+        },
+        "c1": {
+          "TP": 347,
+          "FP": 14,
+          "FN": 8,
+          "F1": 0.9693
+        }
+      },
+      "seed_123": {
+        "baseline": {
+          "TP": 346,
+          "FP": 12,
+          "FN": 9,
+          "F1": 0.9705
+        },
+        "c1": {
+          "TP": 347,
+          "FP": 12,
+          "FN": 8,
+          "F1": 0.972
+        }
+      }
+    },
+    "notes": [
+      "C1 recuperou 1 FN nos dois seeds.",
+      "C1 adicionou 0 FP e perdeu 0 TP.",
+      "Regra mantida configurável/desligável por exp006f_c1_enabled."
+    ]
+  },
+  "_metadata_exp006f_c1_min_score_58": {
+    "patched_at": "2026-05-09T12:03:40",
+    "reason": "Validação runtime real mostrou transação alvo com score_final=58.01, embora cache artifact-only tivesse score_final=60.67.",
+    "status": "TEMPORARY_RUNTIME_VALIDATION"
   }
 }

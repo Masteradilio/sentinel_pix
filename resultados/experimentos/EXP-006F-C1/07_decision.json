@@ -1,0 +1,9 @@
+{
+  "status": "APROVADO_PARA_PATCH_PERMANENTE",
+  "per_seed_pass": {
+    "123": true,
+    "42": true
+  },
+  "all_pass": true,
+  "next_action": "Gerar patch permanente no DecisionEngine/scoring_config para C1, mantendo flag configurável e desligável."
+}

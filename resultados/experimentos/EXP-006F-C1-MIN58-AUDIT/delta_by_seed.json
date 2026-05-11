@@ -1,0 +1,48 @@
+{
+  "42": {
+    "fns_recuperados": 1,
+    "fps_adicionados": 0,
+    "tps_perdidos": 0,
+    "rule_hits": 1,
+    "hits": [
+      {
+        "seed": 42,
+        "transaction_id": "E0000020820260205003505340630525",
+        "customer_id": 4321433355,
+        "is_fraud": 1,
+        "vl_pix": 381.0,
+        "qt_tempo_relacionamento_mes": 6,
+        "first_receiver_flag": 1,
+        "pix_key_random_flag": 0,
+        "lgbm_raw": 0.06847418,
+        "score_final": 62.0,
+        "decisao": "CONFIRMAR",
+        "exp006f_c1_min58_hit": true
+      }
+    ],
+    "fps_adicionados_rows": []
+  },
+  "123": {
+    "fns_recuperados": 1,
+    "fps_adicionados": 0,
+    "tps_perdidos": 0,
+    "rule_hits": 1,
+    "hits": [
+      {
+        "seed": 123,
+        "transaction_id": "E0000020820260205003505340630525",
+        "customer_id": 4321433355,
+        "is_fraud": 1,
+        "vl_pix": 381.0,
+        "qt_tempo_relacionamento_mes": 6,
+        "first_receiver_flag": 1,
+        "pix_key_random_flag": 0,
+        "lgbm_raw": 0.06847418,
+        "score_final": 62.0,
+        "decisao": "CONFIRMAR",
+        "exp006f_c1_min58_hit": true
+      }
+    ],
+    "fps_adicionados_rows": []
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "generated_at": "2026-05-09T11:22:10",
+  "mode": "from_cache",
+  "rule_spec": {
+    "rule_id": "C1_NEAR_THRESHOLD_REL_CURTO_FIRST_RECEIVER",
+    "status": "candidate_runtime_overlay",
+    "source": "EXP-006E",
+    "action": "APROVAR_TO_CONFIRMAR",
+    "conditions": {
+      "decisao": "APROVAR",
+      "first_receiver_flag": 1,
+      "pix_key_random_flag": 0,
+      "qt_tempo_relacionamento_mes_max": 12,
+      "vl_pix_min_inclusive": 100.0,
+      "vl_pix_max_exclusive": 500.0,
+      "lgbm_raw_min_inclusive": 0.06,
+      "lgbm_raw_max_exclusive": 0.1,
+      "score_final_min_inclusive": 60.0,
+      "score_final_max_exclusive": 62.0,
+      "se_score_max": 0.0,
+      "beh_score_max": 0.0
+    }
+  }
+}

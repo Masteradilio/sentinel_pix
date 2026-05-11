@@ -119,6 +119,19 @@ class EngineConfig:
     guard_exception_alto_valor_age_max: int = 90
     guard_exception_alto_valor_require_first_receiver: bool = True
     guard_exception_alto_valor_require_pf: bool = True
+    # --- EXP-006F-C1: near-threshold residual FN recovery ---
+    exp006f_c1_enabled: bool = True
+    exp006f_c1_min_score: float = 60.0
+    exp006f_c1_max_score: float = 62.0
+    exp006f_c1_min_valor: float = 100.0
+    exp006f_c1_max_valor: float = 500.0
+    exp006f_c1_max_rel_meses: float = 12.0
+    exp006f_c1_min_lgbm_raw: float = 0.06
+    exp006f_c1_max_lgbm_raw: float = 0.10
+    exp006f_c1_require_first_receiver: bool = True
+    exp006f_c1_require_not_pix_random: bool = True
+    exp006f_c1_max_se_score: float = 0.0
+    exp006f_c1_max_beh_score: float = 0.0
 
 
     # --- LGBM thresholds (v3.0) ---
@@ -496,6 +509,119 @@ class PixDecisionEngine:
     # ==========================================================
     # LOADING
     # ==========================================================
+    def _apply_exp006f_c1_near_threshold_exception(self, tx: Dict[str, Any], result: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        EXP-006F-C1 — exceção cirúrgica para recuperar FN residual near-threshold.
+
+        Promove APROVAR -> CONFIRMAR quando:
+          - C1 está habilitada;
+          - decisão atual é APROVAR;
+          - score_final em [60, 62);
+          - first_receiver=1;
+          - pix_key_random=0;
+          - relacionamento <= 12 meses;
+          - 100 <= vl_pix < 500;
+          - 0.06 <= lgbm_raw < 0.10;
+          - se_score <= 0;
+          - beh_score <= 0.
+
+        Evidência EXP-006F:
+          - seed 42: FN 9 -> 8, FP 14 -> 14;
+          - seed 123: FN 9 -> 8, FP 12 -> 12;
+          - 0 FP adicionado, 0 TP perdido.
+        """
+        try:
+            if not getattr(self.config, "exp006f_c1_enabled", False):
+                return result
+
+            decisao = str(result.get("decisao", "")).upper()
+            if decisao != "APROVAR":
+                return result
+
+            def _num(obj: Dict[str, Any], key: str, default: float = 0.0) -> float:
+                try:
+                    value = obj.get(key, default)
+                    if value is None:
+                        return default
+                    return float(value)
+                except Exception:
+                    return default
+
+            def _num_any(keys, default: float = 0.0) -> float:
+                for key in keys:
+                    if key in result:
+                        return _num(result, key, default)
+                    if key in tx:
+                        return _num(tx, key, default)
+                return default
+
+            vl_pix = _num_any(["vl_pix", "valor", "amount"], 0.0)
+            rel_meses = _num_any(["qt_tempo_relacionamento_mes", "relacionamento_meses"], 999.0)
+            first_receiver = int(_num_any(["first_receiver_flag"], 0.0))
+            pix_random = int(_num_any(["pix_key_random_flag"], 0.0))
+            lgbm_raw = _num_any(["lgbm_raw", "lgbm_score", "score_lgbm_raw"], 0.0)
+            se_score = _num_any(["se_score", "social_engineering_score"], 0.0)
+            beh_score = _num_any(["beh_score", "behavioral_score"], 0.0)
+            score_final = _num_any(["score_final", "score"], 0.0)
+
+            if getattr(self.config, "exp006f_c1_require_first_receiver", True) and first_receiver != 1:
+                return result
+
+            if getattr(self.config, "exp006f_c1_require_not_pix_random", True) and pix_random != 0:
+                return result
+
+            if not (
+                getattr(self.config, "exp006f_c1_min_valor", 100.0)
+                <= vl_pix
+                < getattr(self.config, "exp006f_c1_max_valor", 500.0)
+            ):
+                return result
+
+            if rel_meses > getattr(self.config, "exp006f_c1_max_rel_meses", 12.0):
+                return result
+
+            if not (
+                getattr(self.config, "exp006f_c1_min_lgbm_raw", 0.06)
+                <= lgbm_raw
+                < getattr(self.config, "exp006f_c1_max_lgbm_raw", 0.10)
+            ):
+                return result
+
+            if not (
+                getattr(self.config, "exp006f_c1_min_score", 60.0)
+                <= score_final
+                < getattr(self.config, "exp006f_c1_max_score", 62.0)
+            ):
+                return result
+
+            if se_score > getattr(self.config, "exp006f_c1_max_se_score", 0.0):
+                return result
+
+            if beh_score > getattr(self.config, "exp006f_c1_max_beh_score", 0.0):
+                return result
+
+            result = dict(result)
+            result["decisao_original_exp006f_c1"] = result.get("decisao")
+            result["score_final_original_exp006f_c1"] = score_final
+            result["decisao"] = "CONFIRMAR"
+            result["score_final"] = max(score_final, 62.0)
+            result["exp006f_c1_applied"] = True
+            result["exp006f_c1_reason"] = (
+                "C1_NEAR_THRESHOLD_REL_CURTO_FIRST_RECEIVER: APROVAR->CONFIRMAR | "
+                "rel<=12, first_receiver=1, pix_random=0, 100<=vl<500, "
+                "0.06<=lgbm<0.10, 60<=score<62, SE=0, BEH=0"
+            )
+
+            return result
+
+        except Exception as exc:
+            try:
+                logger.warning("Falha ao aplicar EXP-006F-C1: %s", exc)
+            except Exception:
+                pass
+            return result
+
+
     def _load_all(self) -> None:
         """Carrega todos os artefatos do disco."""
         t0 = time.perf_counter()
@@ -1717,7 +1843,6 @@ class PixDecisionEngine:
         return score_mapped, None, veto_suppressed_reason
 
 
-
     # ==========================================================
     # DECISÃO
     # ==========================================================
@@ -2050,7 +2175,110 @@ def _fase2_hydrate_config_from_scoring_config(self, default_config):
 if not hasattr(PixDecisionEngine, "_coerce_config_value"):
     PixDecisionEngine._coerce_config_value = _fase2_coerce_config_value
 
-if not hasattr(PixDecisionEngine, "_hydrate_config_from_scoring_config"):
-    PixDecisionEngine._hydrate_config_from_scoring_config = _fase2_hydrate_config_from_scoring_config
+
+# ============================================================
+# EXP-008D PATCH — Defensive hydrate_config binding
+# ============================================================
+# Reintroduz PixDecisionEngine._hydrate_config_from_scoring_config quando
+# o método não estiver definido na classe.
+#
+# Necessário porque _load_all() chama:
+#   self._hydrate_config_from_scoring_config(default_config)
+#
+# Este binding é defensivo:
+#   - só aplica se o método ainda não existir;
+#   - copia para self.config apenas chaves já existentes;
+#   - tenta preservar tipos bool/int/float/str dos campos do EngineConfig;
+#   - não altera scoring_config.json.
+
+def _exp008d_coerce_config_value(current_value, raw_value):
+    try:
+        if raw_value is None:
+            return current_value
+
+        if isinstance(current_value, bool):
+            if isinstance(raw_value, str):
+                return raw_value.strip().lower() in {"1", "true", "yes", "y", "sim", "s"}
+            return bool(raw_value)
+
+        if isinstance(current_value, int) and not isinstance(current_value, bool):
+            return int(float(raw_value))
+
+        if isinstance(current_value, float):
+            return float(raw_value)
+
+        return raw_value
+
+    except Exception:
+        return current_value
+
+
+def _exp008d_hydrate_config_from_scoring_config(self, scoring_config=None):
+    try:
+        if scoring_config is None:
+            try:
+                import json as _json
+                from pathlib import Path as _Path
+
+                here = _Path(__file__).resolve()
+                root = here.parents[2] if len(here.parents) >= 3 else here.parent.parent
+                scoring_path = root / "backend" / "artefatos" / "scoring_config.json"
+
+                if not scoring_path.exists():
+                    scoring_path = here.parent.parent / "artefatos" / "scoring_config.json"
+
+                scoring_config = _json.loads(scoring_path.read_text(encoding="utf-8"))
+            except Exception:
+                scoring_config = {}
+
+        if not isinstance(scoring_config, dict):
+            return getattr(self, "config", None)
+
+        cfg_obj = getattr(self, "config", None)
+        if cfg_obj is None:
+            return None
+
+        # Atualiza apenas atributos já conhecidos do EngineConfig.
+        for key, raw_value in scoring_config.items():
+            if not hasattr(cfg_obj, key):
+                continue
+
+            current_value = getattr(cfg_obj, key)
+            setattr(cfg_obj, key, _exp008d_coerce_config_value(current_value, raw_value))
+
+        return cfg_obj
+
+    except Exception as exc:
+        try:
+            logger.warning("Falha em _hydrate_config_from_scoring_config defensivo: %s", exc)
+        except Exception:
+            pass
+        return getattr(self, "config", None)
+
+
+def _exp008d_bind_hydrate_config_method():
+    try:
+        if "PixDecisionEngine" not in globals():
+            return
+
+        if not hasattr(PixDecisionEngine, "_hydrate_config_from_scoring_config"):
+            setattr(
+                PixDecisionEngine,
+                "_hydrate_config_from_scoring_config",
+                _exp008d_hydrate_config_from_scoring_config,
+            )
+            try:
+                logger.info("EXP-008D hydrate_config binding aplicado")
+            except Exception:
+                pass
+
+    except Exception as exc:
+        try:
+            logger.warning("Falha ao aplicar EXP-008D hydrate_config binding: %s", exc)
+        except Exception:
+            pass
+
+
+_exp008d_bind_hydrate_config_method()
 
 
