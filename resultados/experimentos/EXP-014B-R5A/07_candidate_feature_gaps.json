@@ -1,0 +1,26 @@
+[
+  {
+    "gap_id": "missing_pix_key_age",
+    "description": "No explicit PIX key age feature was found.",
+    "suggested_phase": "Fase 3",
+    "inferred_from_column_names": true
+  },
+  {
+    "gap_id": "missing_receiver_account_age",
+    "description": "No explicit receiver account age feature was found.",
+    "suggested_phase": "Fase 3",
+    "inferred_from_column_names": true
+  },
+  {
+    "gap_id": "missing_receiver_fraud_rate",
+    "description": "No historical receiver fraud rate feature was found.",
+    "suggested_phase": "Fase 3",
+    "inferred_from_column_names": true
+  },
+  {
+    "gap_id": "missing_receiver_temporal_stability",
+    "description": "No explicit receiver temporal stability score was found.",
+    "suggested_phase": "Fase 3",
+    "inferred_from_column_names": true
+  }
+]

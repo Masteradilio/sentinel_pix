@@ -1,0 +1,9 @@
+{
+  "status": "FAIL_R5B17_E2E_FROZEN_ALIGNMENT_GAP",
+  "e2e_fraud_rows": 1465,
+  "e2e_approve_frauds": 711,
+  "e2e_approve_frauds_that_frozen_would_intervene": 711,
+  "e2e_approve_frauds_that_frozen_would_block": 709,
+  "e2e_approve_frauds_that_frozen_would_confirm": 2,
+  "crosstab_csv": "resultados\\experimentos\\EXP-014B-R5B17-PIPELINE-HOMOLOGATION\\06_fraud_only_e2e_vs_frozen_crosstab.csv"
+}

@@ -1,0 +1,26 @@
+{
+  "timestamp": "20260612_151225",
+  "mode": "sample",
+  "n_processed": 2000,
+  "n_fraud": 1465,
+  "workers": 1,
+  "elapsed_seconds": 352.1,
+  "engine_version": "3.0.5",
+  "pipeline_version": "1.4",
+  "se_version": "3.4",
+  "beh_version": "3.1",
+  "alerts": [
+    "🚨 CRÍTICO: SE zerou em 100% das 2,000 tx. Adapter quebrado ou método errado sendo chamado."
+  ],
+  "dataset_path": "C:\\Users\\adili\\projetos_offline\\rebuild_pix\\dados\\hmo_ml_tb_pix_dataset_v3_features_180d_v1.csv",
+  "r4g_frozen_path": "C:\\Users\\adili\\projetos_offline\\rebuild_pix\\resultados\\experimentos\\EXP-014B-R4G-FAST-FROZEN\\06_predictions_frozen.csv",
+  "official_policy_path": "C:\\Users\\adili\\projetos_offline\\rebuild_pix\\backend\\artefatos\\r5b22_official_baseline_policy.json",
+  "official_policy_id": "R5B22_OFFICIAL_CONSTRAINED_BASELINE",
+  "enabled_policies": {
+    "r5b14_operational_zero_fn": "1",
+    "r5b16_frozen_contract": "1",
+    "r5b22_official_baseline": "1",
+    "use_precomputed_features": "1"
+  },
+  "output_dir": "C:\\Users\\adili\\projetos_offline\\rebuild_pix\\resultados\\simulacao_e2e_v2_sample_20260612_151225"
+}

@@ -1,0 +1,69 @@
+{
+  "experiment": "EXP-014B-R5B7-BLOCK-SEVERITY-SHADOW",
+  "source_experiment": "EXP-014B-R5B5-TRUST-FEATURE-DEESCALATION",
+  "status": "NO_R5B7_MATERIAL_SAFE_THRESHOLD_FOUND",
+  "all_pass": false,
+  "elapsed_seconds": 4.02,
+  "n_features": 109,
+  "trust_features_present": {
+    "payer_history_strength_score": true,
+    "receiver_reputation_score": true,
+    "relationship_strength_score": true,
+    "receiver_novelty_risk_score": true,
+    "transaction_normality_score": true,
+    "payer_receiver_trust_score": true,
+    "trust_bucket": true,
+    "receiver_rep_bucket": true,
+    "relationship_bucket": true,
+    "novelty_bucket": true
+  },
+  "best_iteration": 16,
+  "scale_pos_weight": 10.916666666666666,
+  "selected_threshold": {
+    "threshold": 0.0645117720286907,
+    "validation_normals_demoted": 1,
+    "validation_frauds_demoted": 0,
+    "validation_total_demoted": 1
+  },
+  "validation_auc": 0.791676,
+  "holdout_auc": 0.720858,
+  "validation_average_precision": 0.427079,
+  "holdout_average_precision": 0.350632,
+  "block_fp_demoted_to_confirm_incremental": 4,
+  "block_tp_demoted_to_confirm_incremental": 0,
+  "non_train_frauds_demoted": 0,
+  "holdout_frauds_demoted": 0,
+  "remaining_block_normals": 2820,
+  "remaining_block_frauds": 279,
+  "remaining_approve_frauds": 682,
+  "base_block_metrics": {
+    "tp": 279,
+    "fp": 2824,
+    "fn": 1186,
+    "tn": 109555,
+    "precision": 0.08991299,
+    "recall": 0.19044369,
+    "f1": 0.12215412,
+    "fpr": 0.02512925
+  },
+  "final_block_metrics": {
+    "tp": 279,
+    "fp": 2820,
+    "fn": 1186,
+    "tn": 109559,
+    "precision": 0.09002904,
+    "recall": 0.19044369,
+    "f1": 0.12226117,
+    "fpr": 0.02509366
+  },
+  "final_intervention_metrics": {
+    "tp": 783,
+    "fp": 15584,
+    "fn": 682,
+    "tn": 96795,
+    "precision": 0.04784017,
+    "recall": 0.53447099,
+    "f1": 0.08781965,
+    "fpr": 0.1386736
+  }
+}

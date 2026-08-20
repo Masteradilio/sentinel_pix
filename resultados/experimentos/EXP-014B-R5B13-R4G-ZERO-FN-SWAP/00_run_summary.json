@@ -1,0 +1,37 @@
+{
+  "experiment": "EXP-014B-R5B13-R4G-ZERO-FN-SWAP",
+  "status": "PASS_R5B13_ZERO_FN_FPR_LT1",
+  "input_file": "resultados\\experimentos\\EXP-014B-R4G-FAST-FROZEN\\06_predictions_frozen.csv",
+  "base_action_col": "r4g_fast_frozen_decisao_recommended",
+  "final_action_col": "r5b13_zero_fn_decisao",
+  "approve_frauds_promoted_to_block": 2,
+  "approve_normals_promoted_to_block": 47,
+  "confirm_normals_demoted_to_approve_for_compensation": 47,
+  "remaining_approve_frauds": 0,
+  "remaining_confirm_frauds": 0,
+  "final_intervention_metrics": {
+    "tp": 1465,
+    "fp": 1123,
+    "fn": 0,
+    "tn": 111256,
+    "precision": 0.56607419,
+    "recall": 1.0,
+    "f1": 0.72292129,
+    "fpr": 0.00999297
+  },
+  "final_block_metrics": {
+    "tp": 1465,
+    "fp": 835,
+    "fn": 0,
+    "tn": 111544,
+    "precision": 0.63695652,
+    "recall": 1.0,
+    "f1": 0.77822045,
+    "fpr": 0.00743021
+  },
+  "global_gates": {
+    "fpr_lt_1pct": true,
+    "fn_eq_0": true
+  },
+  "n_selected_approve_rules": 2
+}

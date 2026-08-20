@@ -215,6 +215,110 @@ def robust_divide(a, b):
     return np.where((pd.isna(a)) | (pd.isna(b)) | (b == 0), np.nan, a / b)
 
 
+def _numeric_feature(df: pd.DataFrame, col: str, default: float = 0.0) -> pd.Series:
+    """Retorna coluna numérica alinhada ao índice, com fallback para default."""
+    if col not in df.columns:
+        return pd.Series(default, index=df.index, dtype=float)
+    return pd.to_numeric(df[col], errors="coerce")
+
+
+def _safe_log1p(series: pd.Series) -> pd.Series:
+    """log1p para valores não negativos, preservando estabilidade de NaN."""
+    return np.log1p(series.fillna(0).clip(lower=0))
+
+
+def create_trust_features(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Cria scores explicáveis de confiança/reputação pagador-recebedor.
+
+    As entradas usadas são históricas e pré-evento no dataset v3. Quando uma
+    coluna ainda não existe no contrato runtime, a feature cai para fallback
+    conservador sem quebrar inferência.
+    """
+    df = df.copy()
+
+    payer_count_180 = _numeric_feature(df, "qtd_pix_pagador_180d")
+    payer_value_180 = _numeric_feature(df, "valor_total_pagador_180d")
+    payer_max_180 = _numeric_feature(df, "valor_maximo_pix_pagador_180d")
+    receiver_count_180 = _numeric_feature(df, "qtd_pix_recebidos_180d")
+    receiver_value_180 = _numeric_feature(df, "valor_total_recebido_180d")
+    receiver_distinct_payers = _numeric_feature(df, "soma_pagadores_distintos_dia_recebedor_180d")
+    pair_count_180 = _numeric_feature(df, "qtd_pix_mesmo_recebedor_180d")
+    pair_value_180 = _numeric_feature(df, "valor_total_para_recebedor_180d")
+    pair_days = _numeric_feature(df, "dias_desde_primeiro_envio_recebedor")
+    value = _numeric_feature(df, "vl_pix")
+    ratio_payer_mean = _numeric_feature(df, "ratio_valor_media_pagador_90d")
+    lgbm = _numeric_feature(df, "lgbm_raw")
+
+    if "first_receiver_flag_real" in df.columns:
+        first_receiver = _numeric_feature(df, "first_receiver_flag_real").fillna(1)
+    else:
+        first_receiver = _numeric_feature(df, "first_receiver_flag").fillna(1)
+
+    df["payer_history_strength_score"] = (
+        _safe_log1p(payer_count_180) * 12.0
+        + _safe_log1p(payer_value_180) * 4.0
+        + _safe_log1p(payer_max_180) * 3.0
+    ).clip(0, 100)
+
+    df["receiver_reputation_score"] = (
+        _safe_log1p(receiver_count_180) * 14.0
+        + _safe_log1p(receiver_value_180) * 4.0
+        + _safe_log1p(receiver_distinct_payers) * 12.0
+    ).clip(0, 100)
+
+    df["relationship_strength_score"] = (
+        _safe_log1p(pair_count_180) * 22.0
+        + _safe_log1p(pair_value_180) * 4.0
+        + np.minimum(pair_days.fillna(0).clip(lower=0), 180.0) / 180.0 * 30.0
+    ).clip(0, 100)
+
+    df["receiver_novelty_risk_score"] = (
+        (first_receiver == 1).astype(float) * 35.0
+        + (receiver_count_180.fillna(0) <= 0).astype(float) * 30.0
+        + (receiver_value_180.fillna(0) <= 0).astype(float) * 20.0
+        + (pair_count_180.fillna(0) <= 0).astype(float) * 15.0
+    ).clip(0, 100)
+
+    df["transaction_normality_score"] = (
+        100.0
+        - np.minimum(ratio_payer_mean.fillna(0).clip(lower=0), 25.0) * 2.4
+        - np.minimum(value.fillna(0).clip(lower=0) / 1000.0, 30.0)
+        - np.minimum(lgbm.fillna(0).clip(lower=0) * 300.0, 60.0)
+    ).clip(0, 100)
+
+    df["payer_receiver_trust_score"] = (
+        df["payer_history_strength_score"] * 0.25
+        + df["receiver_reputation_score"] * 0.30
+        + df["relationship_strength_score"] * 0.30
+        + df["transaction_normality_score"] * 0.15
+        - df["receiver_novelty_risk_score"] * 0.35
+    ).clip(0, 100)
+
+    df["trust_bucket"] = pd.cut(
+        df["payer_receiver_trust_score"],
+        bins=[-0.01, 20, 40, 60, 80, 100],
+        labels=["trust_00_20", "trust_20_40", "trust_40_60", "trust_60_80", "trust_80_100"],
+    ).astype(str)
+    df["receiver_rep_bucket"] = pd.cut(
+        df["receiver_reputation_score"],
+        bins=[-0.01, 20, 40, 60, 80, 100],
+        labels=["rep_00_20", "rep_20_40", "rep_40_60", "rep_60_80", "rep_80_100"],
+    ).astype(str)
+    df["relationship_bucket"] = pd.cut(
+        df["relationship_strength_score"],
+        bins=[-0.01, 20, 40, 60, 80, 100],
+        labels=["rel_00_20", "rel_20_40", "rel_40_60", "rel_60_80", "rel_80_100"],
+    ).astype(str)
+    df["novelty_bucket"] = pd.cut(
+        df["receiver_novelty_risk_score"],
+        bins=[-0.01, 20, 40, 60, 80, 100],
+        labels=["nov_00_20", "nov_20_40", "nov_40_60", "nov_60_80", "nov_80_100"],
+    ).astype(str)
+
+    return df
+
+
 def normalize_device_name(x):
     """Normaliza nome de dispositivo."""
     if pd.isna(x):
@@ -696,6 +800,8 @@ def create_all_features(df: pd.DataFrame) -> pd.DataFrame:
     )
 
     # --- REGRAS HEURÍSTICAS ---
+    df = create_trust_features(df)
+
     df["rule_age_score"] = np.select(
         [df["nr_idade"].between(60, 65), df["nr_idade"].between(66, 75), df["nr_idade"] >= 76],
         [1, 2, 3], default=0,
@@ -1226,6 +1332,23 @@ def select_final_columns(df: pd.DataFrame) -> pd.DataFrame:
         "graph_receiver_value_ratio",
         "graph_receiver_concentration_hhi",
         "graph_degree_ratio",
+        # === FEATURES DE RELACIONAMENTO V3.1 (5 novas — Fase 2) ===
+        "qtd_pix_mesmo_recebedor_7d",
+        "valor_medio_para_recebedor_180d",
+        "dias_desde_ultima_transacao_recebedor",
+        "ratio_valor_pix_vs_max_recebedor_180d",
+        "is_recebedor_recorrente_180d",
+        # === FEATURES DE TRUST / REPUTACAO (R5B5) ===
+        "payer_history_strength_score",
+        "receiver_reputation_score",
+        "relationship_strength_score",
+        "receiver_novelty_risk_score",
+        "transaction_normality_score",
+        "payer_receiver_trust_score",
+        "trust_bucket",
+        "receiver_rep_bucket",
+        "relationship_bucket",
+        "novelty_bucket",
     ]
 
     for c in final_cols:

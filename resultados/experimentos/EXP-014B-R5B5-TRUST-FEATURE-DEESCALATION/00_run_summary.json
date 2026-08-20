@@ -1,0 +1,43 @@
+{
+  "experiment": "EXP-014B-R5B5-TRUST-FEATURE-DEESCALATION",
+  "source_experiment": "EXP-014B-R5B4-ROBUST-BLOCK-DEESCALATION",
+  "status": "PASS_R5B5_TRUST_DEESCALATION_FOUND",
+  "all_pass": true,
+  "n_candidates": 1752,
+  "n_selected_rules": 5,
+  "block_fp_demoted_to_confirm_incremental": 358,
+  "block_tp_demoted_to_confirm_incremental": 0,
+  "remaining_block_normals": 2824,
+  "remaining_block_frauds": 279,
+  "remaining_approve_frauds": 682,
+  "base_block_metrics": {
+    "tp": 279,
+    "fp": 3182,
+    "fn": 1186,
+    "tn": 109197,
+    "precision": 0.08061254,
+    "recall": 0.19044369,
+    "f1": 0.11327649,
+    "fpr": 0.0283149
+  },
+  "final_block_metrics": {
+    "tp": 279,
+    "fp": 2824,
+    "fn": 1186,
+    "tn": 109555,
+    "precision": 0.08991299,
+    "recall": 0.19044369,
+    "f1": 0.12215412,
+    "fpr": 0.02512925
+  },
+  "final_intervention_metrics": {
+    "tp": 783,
+    "fp": 15584,
+    "fn": 682,
+    "tn": 96795,
+    "precision": 0.04784017,
+    "recall": 0.53447099,
+    "f1": 0.08781965,
+    "fpr": 0.1386736
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "experiment": "EXP-014B-R5A",
+  "status": "DONE",
+  "baseline_experiment": "EXP-014B-R4G-FAST-FROZEN",
+  "input_predictions_path": "C:\\Users\\u857755\\OneDrive - BRB - Banco de Brasilia SA\\Documentos\\Projetos\\squad_IA\\PIX\\rebuild_pix\\resultados\\experimentos\\EXP-014B-R4G-FAST-FROZEN\\06_predictions_frozen.csv",
+  "used_fallback": false,
+  "n_rows": 113844,
+  "n_columns": 205,
+  "label_col": "is_fraud",
+  "action_col": "r4g_fast_frozen_decisao_recommended",
+  "approve_fraud_count": 2,
+  "block_normal_count": 766,
+  "block_fraud_count": 1458,
+  "approve_normal_count": 111256,
+  "confirm_fraud_count": 5,
+  "confirm_normal_count": 357,
+  "n_candidate_feature_gaps": 4,
+  "output_dir": "C:\\Users\\u857755\\OneDrive - BRB - Banco de Brasilia SA\\Documentos\\Projetos\\squad_IA\\PIX\\rebuild_pix\\resultados\\experimentos\\EXP-014B-R5A"
+}

@@ -1,0 +1,12 @@
+{
+  "contract_ok": true,
+  "missing": [],
+  "n_rows": 113844,
+  "n_frauds": 1465,
+  "score_cols_present": [
+    "lgbm_r4_score",
+    "lgbm_mapped",
+    "lgbm_raw",
+    "score_final"
+  ]
+}

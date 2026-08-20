@@ -47,6 +47,7 @@ if sys.platform == "win32":
 import argparse
 import json
 import logging
+import os
 import sys
 import time
 import warnings
@@ -84,7 +85,20 @@ PROJECT_ROOT = BACKEND_DIR.parent                     # rebuild_pix/
 CORE_DIR = BACKEND_DIR / "core"                       # backend/core/
 ARTEFATOS_DIR = BACKEND_DIR / "artefatos"
 DADOS_DIR = PROJECT_ROOT / "dados"
-DATASET_PATH = DADOS_DIR / "base_treino_final.csv"
+DATASET_PATH = DADOS_DIR / "hmo_ml_tb_pix_dataset_v3_features_180d_v1.csv"
+R4G_FROZEN_PATH = (
+    PROJECT_ROOT
+    / "resultados"
+    / "experimentos"
+    / "EXP-014B-R4G-FAST-FROZEN"
+    / "06_predictions_frozen.csv"
+)
+OFFICIAL_POLICY_PATH = ARTEFATOS_DIR / "r5b22_official_baseline_policy.json"
+
+os.environ.setdefault("ENABLE_R5B14_POLICY", "1")
+os.environ.setdefault("ENABLE_R5B16_FROZEN_CONTRACT", "1")
+os.environ.setdefault("ENABLE_R5B22_OFFICIAL_BASELINE", "1")
+os.environ.setdefault("USE_PRECOMPUTED_FEATURES", "1")
 
 # Ordem importa: CORE_DIR precisa estar ANTES para resolver
 # `from preprocessing import ...` usado pelo pipeline_orquestrador.
@@ -139,6 +153,45 @@ def stratified_sample(df: pd.DataFrame, n: int, seed: int = 42) -> pd.DataFrame:
         f"({n_fraud} fraudes + {len(normal_sample):,} normais)"
     )
     return sample
+
+
+def enrich_with_r5b22_frozen_contract(df: pd.DataFrame) -> pd.DataFrame:
+    """Adiciona ao E2E as colunas congeladas usadas pelo contrato R5B16/R5B22."""
+    if "transaction_id" not in df.columns or not R4G_FROZEN_PATH.exists():
+        return df
+
+    required_cols = [
+        "transaction_id",
+        "r4g_fast_frozen_decisao_recommended",
+        "score_bin",
+        "lgbm_bin",
+        "ratio_bin",
+        "if_bin",
+        "lgbm_r4_score",
+        "lgbm_raw",
+        "lgbm_mapped",
+        "if_percentile",
+        "score_final",
+        "se_score",
+        "beh_score",
+        "module_quiet",
+    ]
+    frozen_header = pd.read_csv(R4G_FROZEN_PATH, nrows=0).columns
+    merge_cols = [
+        col
+        for col in required_cols
+        if col == "transaction_id" or (col in frozen_header and col not in df.columns)
+    ]
+    if len(merge_cols) <= 1:
+        return df
+
+    frozen = pd.read_csv(R4G_FROZEN_PATH, usecols=merge_cols)
+    enriched = df.merge(frozen, on="transaction_id", how="left")
+    logger.info(
+        "Contrato frozen R4G carregado para R5B16/R5B22: %s colunas adicionadas",
+        len(merge_cols) - 1,
+    )
+    return enriched
 
 
 # =========================================================
@@ -462,6 +515,15 @@ def process_single_tx(
             "peso_total": result.get("peso_total", 0),
             "score_final": result.get("score_final", 0.0),
             "decisao": result.get("decisao", "APROVAR"),
+            "decisao_runtime_original": result.get("decisao_runtime_original"),
+            "r5b16_frozen_contract_applied": bool(result.get("r5b16_frozen_contract_applied", False)),
+            "decisao_original_r5b14": result.get("decisao_original_r5b14"),
+            "r5b14_policy_applied": bool(result.get("r5b14_policy_applied", False)),
+            "r5b14_rule_applied": result.get("r5b14_rule_applied"),
+            "r5b14_layer_applied": result.get("r5b14_layer_applied"),
+            "decisao_original_r5b22": result.get("decisao_original_r5b22"),
+            "r5b22_policy_applied": bool(result.get("r5b22_policy_applied", False)),
+            "r5b22_rule_applied": result.get("r5b22_rule_applied"),
             "veto_aplicado": result.get("veto_aplicado"),
             "veto_reason": result.get("veto_reason"),
             "veto_suppressed_reason": result.get("veto_suppressed_reason"),
@@ -691,6 +753,7 @@ def main() -> None:
         raise FileNotFoundError(f"Dataset não encontrado: {DATASET_PATH}")
 
     df = pd.read_csv(DATASET_PATH)
+    df = enrich_with_r5b22_frozen_contract(df)
     if "event_datetime" in df.columns:
         df["event_datetime"] = pd.to_datetime(df["event_datetime"], errors="coerce")
     df["is_fraud"] = pd.to_numeric(df["is_fraud"], errors="coerce").fillna(0).astype(int)
@@ -847,6 +910,15 @@ def main() -> None:
         "beh_version": "3.1",
         "alerts": alerts,
         "dataset_path": str(DATASET_PATH),
+        "r4g_frozen_path": str(R4G_FROZEN_PATH),
+        "official_policy_path": str(OFFICIAL_POLICY_PATH),
+        "official_policy_id": "R5B22_OFFICIAL_CONSTRAINED_BASELINE",
+        "enabled_policies": {
+            "r5b14_operational_zero_fn": os.environ.get("ENABLE_R5B14_POLICY"),
+            "r5b16_frozen_contract": os.environ.get("ENABLE_R5B16_FROZEN_CONTRACT"),
+            "r5b22_official_baseline": os.environ.get("ENABLE_R5B22_OFFICIAL_BASELINE"),
+            "use_precomputed_features": os.environ.get("USE_PRECOMPUTED_FEATURES"),
+        },
         "output_dir": str(output_dir),
     }, meta_path)
 

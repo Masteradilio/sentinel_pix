@@ -1,0 +1,11 @@
+{
+  "experiment": "EXP-014B-R5B3-RESIDUAL-FEATURE-GAP",
+  "source_experiment": "EXP-014B-R5B2-FROZEN",
+  "n_rows": 113844,
+  "groups": {
+    "block_normal": 3153,
+    "block_fraud": 279,
+    "approve_fraud": 682,
+    "approve_normal": 96795
+  }
+}

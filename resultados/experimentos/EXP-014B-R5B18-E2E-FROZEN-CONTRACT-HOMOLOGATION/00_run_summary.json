@@ -1,0 +1,113 @@
+{
+  "experiment": "EXP-014B-R5B18-E2E-FROZEN-CONTRACT-HOMOLOGATION",
+  "status": "PASS_R5B18_E2E_FROZEN_CONTRACT_HOMOLOGATION",
+  "policy_metadata": {
+    "policy_id": "EXP-014B-R5B16-CONSOLIDATED-OPERATIONAL-BASELINE",
+    "rule_set_version": "2026-06-12",
+    "base_action_col": "r4g_fast_frozen_decisao_recommended",
+    "base_policy": "EXP-014B-R4G-FAST-FROZEN",
+    "overlay_policy": "EXP-014B-R5B14-OPERATIONAL-ZERO-FN-REPLAY",
+    "layers": [
+      {
+        "layer": "CONFIRM_TO_BLOCK",
+        "base_action": "CONFIRMAR",
+        "target_action": "BLOQUEAR",
+        "rules": [
+          {
+            "rule_id": "R5B14_CTB_01_LGBM_RAW_HIGH",
+            "description": "lgbm_raw >= 0.10711783"
+          },
+          {
+            "rule_id": "R5B14_CTB_02_SCORE_2_3_LGBM_R4_HIGH",
+            "description": "score_bin == score_2_3 AND lgbm_r4_score >= 0.475472966916"
+          },
+          {
+            "rule_id": "R5B14_CTB_03_SCORE_2_3_LGBM_R4_MED",
+            "description": "score_bin == score_2_3 AND lgbm_r4_score >= 0.318070929491"
+          },
+          {
+            "rule_id": "R5B14_CTB_04_DOC_PHONE_HIGH_PAYER_COUNT",
+            "description": "ds_tipo_chave_norm == DOCUMENTO_TELEFONE AND qtd_pix_pagador_180d >= 207"
+          },
+          {
+            "rule_id": "R5B14_CTB_05_OUTROS_RATIO_MAX_HIGH",
+            "description": "ds_tipo_chave_norm == OUTROS AND ratio_valor_maximo_pagador_180d >= 4.9674631165863596"
+          }
+        ]
+      },
+      {
+        "layer": "APPROVE_TO_BLOCK",
+        "base_action": "APROVAR",
+        "target_action": "BLOQUEAR",
+        "rules": [
+          {
+            "rule_id": "R5B14_ATB_01_DOC_PHONE_MORNING_SCORE_HIGH",
+            "description": "ds_tipo_chave_norm == DOCUMENTO_TELEFONE AND periodo_dia == manha AND score_bin == score_GE_10 AND lgbm_bin == lgbm_GE_0.1"
+          },
+          {
+            "rule_id": "R5B14_ATB_02_NIGHT_SCORE_1_2_RATIO_HIGH",
+            "description": "periodo_dia == noite AND score_bin == score_1_2 AND lgbm_bin == lgbm_GE_0.1 AND ratio_bin == ratio_GE_5"
+          }
+        ]
+      },
+      {
+        "layer": "CONFIRM_TO_APPROVE",
+        "base_action": "CONFIRMAR",
+        "target_action": "APROVAR",
+        "rules": [
+          {
+            "rule_id": "R5B14_CTA_01_LOW_LGBM_RAW_COMPENSATION",
+            "description": "lgbm_raw <= 1.966e-05"
+          }
+        ]
+      }
+    ]
+  },
+  "input_file": "dados\\hmo_ml_tb_pix_dataset_v3_features_180d_v1.csv",
+  "frozen_file": "resultados\\experimentos\\EXP-014B-R4G-FAST-FROZEN\\06_predictions_frozen.csv",
+  "elapsed_seconds": 3250.2,
+  "runtime_flags": {
+    "ENABLE_R5B16_FROZEN_CONTRACT": "1",
+    "ENABLE_R5B14_POLICY": "1",
+    "USE_PRECOMPUTED_FEATURES": "1"
+  },
+  "fn_budget": 10,
+  "vectorized_contract": {
+    "n_rows": 113844,
+    "n_frauds": 1465,
+    "remaining_approve_frauds": 0,
+    "remaining_confirm_frauds": 0,
+    "fn_outside_block": 0,
+    "global_intervention_metrics": {
+      "tp": 1465,
+      "fp": 1123,
+      "fn": 0,
+      "tn": 111256,
+      "precision": 0.56607419,
+      "recall": 1.0,
+      "f1": 0.72292129,
+      "fpr": 0.00999297
+    },
+    "block_metrics": {
+      "tp": 1465,
+      "fp": 835,
+      "fn": 0,
+      "tn": 111544,
+      "precision": 0.63695652,
+      "recall": 1.0,
+      "f1": 0.77822045,
+      "fpr": 0.00743021
+    }
+  },
+  "e2e_sample": {
+    "sample_n": 113844,
+    "sample_frauds": 1465,
+    "mismatches": 0,
+    "csv": "02_e2e_sample_predictions.csv"
+  },
+  "target_gates": {
+    "fpr_lt_1pct": true,
+    "fn_outside_block_lte_budget": true,
+    "e2e_sample_matches_vectorized_contract": true
+  }
+}

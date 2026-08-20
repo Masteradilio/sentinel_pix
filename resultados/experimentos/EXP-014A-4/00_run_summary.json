@@ -1,0 +1,56 @@
+{
+  "experiment": "EXP-014A-4",
+  "status": "DONE",
+  "objective_status": "DONE_CONTRACT_OK_BUILT",
+  "input_path": "C:\\Users\\u857755\\OneDrive - BRB - Banco de Brasilia SA\\Documentos\\Projetos\\squad_IA\\PIX\\rebuild_pix\\dados\\exp014a_lgbm_scored_partial.csv",
+  "target_path": "C:\\Users\\u857755\\OneDrive - BRB - Banco de Brasilia SA\\Documentos\\Projetos\\squad_IA\\PIX\\rebuild_pix\\dados\\exp014a_expanded_scored_input.csv",
+  "original_rows": 113844,
+  "original_frauds": 1465,
+  "active_rows": 113844,
+  "active_frauds": 1465,
+  "sample": 0,
+  "workers": 6,
+  "chunk_size": 5000,
+  "runtime_shape": [
+    113844,
+    34
+  ],
+  "runtime_error": null,
+  "before_contract": {
+    "contract_ok": false,
+    "missing": [
+      "base_or_final_prediction_column",
+      "feature_or_bin:if_bin",
+      "feature_or_bin:score_bin"
+    ],
+    "final_pred_cols_present": [],
+    "base_pred_cols_present": [],
+    "has_score_final": false,
+    "has_if_percentile": false,
+    "has_decisao": false
+  },
+  "after_contract": {
+    "contract_ok": true,
+    "missing": [],
+    "final_pred_cols_present": [
+      "exp014a_frozen_pred",
+      "exp013k_residual_fp_pred"
+    ],
+    "base_pred_cols_present": [],
+    "has_score_final": true,
+    "has_if_percentile": true,
+    "has_decisao": true
+  },
+  "built": true,
+  "metric_preview": {
+    "tp": 59,
+    "fp": 31,
+    "fn": 1406,
+    "tn": 112348,
+    "precision": 0.6555555555555556,
+    "recall": 0.040273037542662114,
+    "fpr": 0.00027585224997552925
+  },
+  "elapsed_seconds": 6606.58,
+  "output_dir": "C:\\Users\\u857755\\OneDrive - BRB - Banco de Brasilia SA\\Documentos\\Projetos\\squad_IA\\PIX\\rebuild_pix\\resultados\\experimentos\\EXP-014A-4"
+}

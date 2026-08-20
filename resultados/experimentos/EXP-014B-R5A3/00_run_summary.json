@@ -1,0 +1,11 @@
+{
+  "experiment": "EXP-014B-R5A3",
+  "status": "SUCCESS",
+  "timestamp": "2026-06-10 20:58:40",
+  "reconciliation_status": "DONE_ALL_CONTRACTS_AUDITED",
+  "datasets_inventoried_count": 10,
+  "features_mapped_count": 131,
+  "hql_features_extracted_count": 29,
+  "policy_artifact_normalized": true,
+  "notes": "Todos os artefatos da Fase 1.3 foram gerados com sucesso."
+}

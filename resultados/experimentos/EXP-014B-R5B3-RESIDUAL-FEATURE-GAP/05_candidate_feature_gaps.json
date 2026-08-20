@@ -1,0 +1,573 @@
+{
+  "block_normal_vs_block_fraud": {
+    "top_numeric_median_deltas": [
+      {
+        "feature": "valor_total_pagador_180d",
+        "block_normal_n": 3153,
+        "block_fraud_n": 279,
+        "block_normal_missing_rate": 0.0,
+        "block_fraud_missing_rate": 0.0,
+        "block_normal_median": 34732.189999999995,
+        "block_fraud_median": 16026.770000000002,
+        "median_delta_a_minus_b": 18705.41999999999,
+        "block_normal_p90": 938466.0380000004,
+        "block_fraud_p90": 89536.28,
+        "abs_median_delta": 18705.41999999999
+      },
+      {
+        "feature": "valor_total_pagador_90d",
+        "block_normal_n": 3153,
+        "block_fraud_n": 279,
+        "block_normal_missing_rate": 0.0,
+        "block_fraud_missing_rate": 0.0,
+        "block_normal_median": 30888.220000000005,
+        "block_fraud_median": 15052.049999999996,
+        "median_delta_a_minus_b": 15836.17000000001,
+        "block_normal_p90": 803802.6640000012,
+        "block_fraud_p90": 88065.16000000006,
+        "abs_median_delta": 15836.17000000001
+      },
+      {
+        "feature": "valor_maximo_pix_pagador_180d",
+        "block_normal_n": 3153,
+        "block_fraud_n": 279,
+        "block_normal_missing_rate": 0.0,
+        "block_fraud_missing_rate": 0.0,
+        "block_normal_median": 6600.0,
+        "block_fraud_median": 2600.0,
+        "median_delta_a_minus_b": 4000.0,
+        "block_normal_p90": 97488.00000000012,
+        "block_fraud_p90": 21000.0,
+        "abs_median_delta": 4000.0
+      },
+      {
+        "feature": "vl_pix",
+        "block_normal_n": 3153,
+        "block_fraud_n": 279,
+        "block_normal_missing_rate": 0.0,
+        "block_fraud_missing_rate": 0.0,
+        "block_normal_median": 6077.47,
+        "block_fraud_median": 2998.91,
+        "median_delta_a_minus_b": 3078.5600000000004,
+        "block_normal_p90": 25000.0,
+        "block_fraud_p90": 12115.00000000001,
+        "abs_median_delta": 3078.5600000000004
+      },
+      {
+        "feature": "dias_desde_primeiro_envio_recebedor",
+        "block_normal_n": 952,
+        "block_fraud_n": 25,
+        "block_normal_missing_rate": 0.698065,
+        "block_fraud_missing_rate": 0.910394,
+        "block_normal_median": 46.0,
+        "block_fraud_median": 5.0,
+        "median_delta_a_minus_b": 41.0,
+        "block_normal_p90": 121.0,
+        "block_fraud_p90": 8.0,
+        "abs_median_delta": 41.0
+      },
+      {
+        "feature": "qtd_pix_pagador_30d",
+        "block_normal_n": 3153,
+        "block_fraud_n": 279,
+        "block_normal_missing_rate": 0.0,
+        "block_fraud_missing_rate": 0.0,
+        "block_normal_median": 35.0,
+        "block_fraud_median": 27.0,
+        "median_delta_a_minus_b": 8.0,
+        "block_normal_p90": 122.0,
+        "block_fraud_p90": 88.60000000000005,
+        "abs_median_delta": 8.0
+      },
+      {
+        "feature": "ratio_valor_media_pagador_90d",
+        "block_normal_n": 3153,
+        "block_fraud_n": 279,
+        "block_normal_missing_rate": 0.0,
+        "block_fraud_missing_rate": 0.0,
+        "block_normal_median": 8.74858479597642,
+        "block_fraud_median": 14.728897745249888,
+        "median_delta_a_minus_b": -5.980312949273468,
+        "block_normal_p90": 50.78823089446984,
+        "block_fraud_p90": 60.84120888868262,
+        "abs_median_delta": 5.980312949273468
+      },
+      {
+        "feature": "qtd_pix_pagador_180d",
+        "block_normal_n": 3153,
+        "block_fraud_n": 279,
+        "block_normal_missing_rate": 0.0,
+        "block_fraud_missing_rate": 0.0,
+        "block_normal_median": 67.0,
+        "block_fraud_median": 72.0,
+        "median_delta_a_minus_b": -5.0,
+        "block_normal_p90": 338.8000000000002,
+        "block_fraud_p90": 210.60000000000005,
+        "abs_median_delta": 5.0
+      },
+      {
+        "feature": "soma_recebedores_distintos_dia_180d",
+        "block_normal_n": 3153,
+        "block_fraud_n": 279,
+        "block_normal_missing_rate": 0.0,
+        "block_fraud_missing_rate": 0.0,
+        "block_normal_median": 62.0,
+        "block_fraud_median": 64.0,
+        "median_delta_a_minus_b": -2.0,
+        "block_normal_p90": 305.0,
+        "block_fraud_p90": 193.40000000000003,
+        "abs_median_delta": 2.0
+      },
+      {
+        "feature": "max_qtd_pix_dia_pagador_30d",
+        "block_normal_n": 3153,
+        "block_fraud_n": 279,
+        "block_normal_missing_rate": 0.0,
+        "block_fraud_missing_rate": 0.0,
+        "block_normal_median": 6.0,
+        "block_fraud_median": 5.0,
+        "median_delta_a_minus_b": 1.0,
+        "block_normal_p90": 19.0,
+        "block_fraud_p90": 11.0,
+        "abs_median_delta": 1.0
+      },
+      {
+        "feature": "qtd_pix_pagador_7d",
+        "block_normal_n": 3153,
+        "block_fraud_n": 279,
+        "block_normal_missing_rate": 0.0,
+        "block_fraud_missing_rate": 0.0,
+        "block_normal_median": 12.0,
+        "block_fraud_median": 11.0,
+        "median_delta_a_minus_b": 1.0,
+        "block_normal_p90": 35.80000000000018,
+        "block_fraud_p90": 22.0,
+        "abs_median_delta": 1.0
+      },
+      {
+        "feature": "qtd_pix_pagador_90d",
+        "block_normal_n": 3153,
+        "block_fraud_n": 279,
+        "block_normal_missing_rate": 0.0,
+        "block_fraud_missing_rate": 0.0,
+        "block_normal_median": 61.0,
+        "block_fraud_median": 60.0,
+        "median_delta_a_minus_b": 1.0,
+        "block_normal_p90": 280.0,
+        "block_fraud_p90": 182.0,
+        "abs_median_delta": 1.0
+      }
+    ],
+    "top_categorical_rate_deltas": [
+      {
+        "feature": "sample_strategy",
+        "value": "N2_MATCHED_CONTROLS",
+        "block_normal_n": 3153,
+        "block_fraud_n": 0,
+        "block_normal_rate": 1.0,
+        "block_fraud_rate": 0.0,
+        "rate_delta_a_minus_b": 1.0,
+        "abs_rate_delta": 1.0
+      },
+      {
+        "feature": "sample_strategy",
+        "value": "P1_MAF_RECENTE_180D",
+        "block_normal_n": 0,
+        "block_fraud_n": 279,
+        "block_normal_rate": 0.0,
+        "block_fraud_rate": 1.0,
+        "rate_delta_a_minus_b": -1.0,
+        "abs_rate_delta": 1.0
+      },
+      {
+        "feature": "value_band",
+        "value": "D_1000_5000",
+        "block_normal_n": 1004,
+        "block_fraud_n": 180,
+        "block_normal_rate": 0.318427,
+        "block_fraud_rate": 0.645161,
+        "rate_delta_a_minus_b": -0.326734,
+        "abs_rate_delta": 0.326734
+      },
+      {
+        "feature": "qtd_rec_bin",
+        "value": "rec_0",
+        "block_normal_n": 1684,
+        "block_fraud_n": 222,
+        "block_normal_rate": 0.534095,
+        "block_fraud_rate": 0.795699,
+        "rate_delta_a_minus_b": -0.261604,
+        "abs_rate_delta": 0.261604
+      },
+      {
+        "feature": "valor_rec_bin",
+        "value": "val_rec_0",
+        "block_normal_n": 1684,
+        "block_fraud_n": 222,
+        "block_normal_rate": 0.534095,
+        "block_fraud_rate": 0.795699,
+        "rate_delta_a_minus_b": -0.261604,
+        "abs_rate_delta": 0.261604
+      },
+      {
+        "feature": "qtd_rec_bin",
+        "value": "rec_1_10",
+        "block_normal_n": 1333,
+        "block_fraud_n": 51,
+        "block_normal_rate": 0.422772,
+        "block_fraud_rate": 0.182796,
+        "rate_delta_a_minus_b": 0.239976,
+        "abs_rate_delta": 0.239976
+      },
+      {
+        "feature": "lgbm_bin",
+        "value": "lgbm_LT_0.05",
+        "block_normal_n": 1051,
+        "block_fraud_n": 27,
+        "block_normal_rate": 0.333333,
+        "block_fraud_rate": 0.096774,
+        "rate_delta_a_minus_b": 0.236559,
+        "abs_rate_delta": 0.236559
+      },
+      {
+        "feature": "first_receiver_flag_real",
+        "value": "1",
+        "block_normal_n": 2201,
+        "block_fraud_n": 254,
+        "block_normal_rate": 0.698065,
+        "block_fraud_rate": 0.910394,
+        "rate_delta_a_minus_b": -0.212329,
+        "abs_rate_delta": 0.212329
+      },
+      {
+        "feature": "first_receiver_flag_real",
+        "value": "0",
+        "block_normal_n": 952,
+        "block_fraud_n": 25,
+        "block_normal_rate": 0.301935,
+        "block_fraud_rate": 0.089606,
+        "rate_delta_a_minus_b": 0.212329,
+        "abs_rate_delta": 0.212329
+      },
+      {
+        "feature": "lgbm_bin",
+        "value": "lgbm_0.15_0.35",
+        "block_normal_n": 111,
+        "block_fraud_n": 69,
+        "block_normal_rate": 0.035205,
+        "block_fraud_rate": 0.247312,
+        "rate_delta_a_minus_b": -0.212107,
+        "abs_rate_delta": 0.212107
+      },
+      {
+        "feature": "valor_rec_bin",
+        "value": "val_rec_gt_5k",
+        "block_normal_n": 948,
+        "block_fraud_n": 28,
+        "block_normal_rate": 0.300666,
+        "block_fraud_rate": 0.100358,
+        "rate_delta_a_minus_b": 0.200308,
+        "abs_rate_delta": 0.200308
+      },
+      {
+        "feature": "value_band",
+        "value": "F_10000_PLUS",
+        "block_normal_n": 1060,
+        "block_fraud_n": 43,
+        "block_normal_rate": 0.336188,
+        "block_fraud_rate": 0.154122,
+        "rate_delta_a_minus_b": 0.182066,
+        "abs_rate_delta": 0.182066
+      }
+    ],
+    "hypothesis": "Normais ainda em BLOQUEAR devem ser separados por confiança/reputação do recebedor, relacionamento recorrente e baixa evidência supervisionada."
+  },
+  "approve_fraud_vs_approve_normal": {
+    "top_numeric_median_deltas": [
+      {
+        "feature": "valor_total_pagador_180d",
+        "approve_fraud_n": 682,
+        "approve_normal_n": 96795,
+        "approve_fraud_missing_rate": 0.0,
+        "approve_normal_missing_rate": 0.0,
+        "approve_fraud_median": 5050.0,
+        "approve_normal_median": 13162.389999999998,
+        "median_delta_a_minus_b": -8112.389999999998,
+        "approve_fraud_p90": 57295.93099999991,
+        "approve_normal_p90": 125204.20200000003,
+        "abs_median_delta": 8112.389999999998
+      },
+      {
+        "feature": "valor_total_pagador_90d",
+        "approve_fraud_n": 682,
+        "approve_normal_n": 96795,
+        "approve_fraud_missing_rate": 0.0,
+        "approve_normal_missing_rate": 0.0,
+        "approve_fraud_median": 4221.320000000001,
+        "approve_normal_median": 10622.87,
+        "median_delta_a_minus_b": -6401.55,
+        "approve_fraud_p90": 46965.532999999974,
+        "approve_normal_p90": 99461.55200000004,
+        "abs_median_delta": 6401.55
+      },
+      {
+        "feature": "valor_total_recebido_180d",
+        "approve_fraud_n": 682,
+        "approve_normal_n": 96795,
+        "approve_fraud_missing_rate": 0.0,
+        "approve_normal_missing_rate": 0.0,
+        "approve_fraud_median": 0.0,
+        "approve_normal_median": 3650.0,
+        "median_delta_a_minus_b": -3650.0,
+        "approve_fraud_p90": 7730.063999999997,
+        "approve_normal_p90": 3110937.78,
+        "abs_median_delta": 3650.0
+      },
+      {
+        "feature": "valor_total_recebido_90d",
+        "approve_fraud_n": 682,
+        "approve_normal_n": 96795,
+        "approve_fraud_missing_rate": 0.0,
+        "approve_normal_missing_rate": 0.0,
+        "approve_fraud_median": 0.0,
+        "approve_normal_median": 2948.33,
+        "median_delta_a_minus_b": -2948.33,
+        "approve_fraud_p90": 7730.063999999997,
+        "approve_normal_p90": 2677358.6220000032,
+        "abs_median_delta": 2948.33
+      },
+      {
+        "feature": "valor_total_recebido_30d",
+        "approve_fraud_n": 682,
+        "approve_normal_n": 96795,
+        "approve_fraud_missing_rate": 0.0,
+        "approve_normal_missing_rate": 0.0,
+        "approve_fraud_median": 0.0,
+        "approve_normal_median": 1059.79,
+        "median_delta_a_minus_b": -1059.79,
+        "approve_fraud_p90": 6339.1,
+        "approve_normal_p90": 1473604.4100000015,
+        "abs_median_delta": 1059.79
+      },
+      {
+        "feature": "vl_pix",
+        "approve_fraud_n": 682,
+        "approve_normal_n": 96795,
+        "approve_fraud_missing_rate": 0.0,
+        "approve_normal_missing_rate": 0.0,
+        "approve_fraud_median": 996.5,
+        "approve_normal_median": 500.0,
+        "median_delta_a_minus_b": 496.5,
+        "approve_fraud_p90": 6589.999999999998,
+        "approve_normal_p90": 5053.070000000002,
+        "abs_median_delta": 496.5
+      },
+      {
+        "feature": "valor_maximo_pix_pagador_180d",
+        "approve_fraud_n": 572,
+        "approve_normal_n": 92839,
+        "approve_fraud_missing_rate": 0.16129,
+        "approve_normal_missing_rate": 0.04087,
+        "approve_fraud_median": 1700.0,
+        "approve_normal_median": 2000.0,
+        "median_delta_a_minus_b": -300.0,
+        "approve_fraud_p90": 13899.999999999978,
+        "approve_normal_p90": 20000.0,
+        "abs_median_delta": 300.0
+      },
+      {
+        "feature": "valor_total_para_recebedor_180d",
+        "approve_fraud_n": 682,
+        "approve_normal_n": 96795,
+        "approve_fraud_missing_rate": 0.0,
+        "approve_normal_missing_rate": 0.0,
+        "approve_fraud_median": 0.0,
+        "approve_normal_median": 190.6,
+        "median_delta_a_minus_b": -190.6,
+        "approve_fraud_p90": 1949.9999999999886,
+        "approve_normal_p90": 11800.0,
+        "abs_median_delta": 190.6
+      },
+      {
+        "feature": "valor_total_para_recebedor_90d",
+        "approve_fraud_n": 682,
+        "approve_normal_n": 96795,
+        "approve_fraud_missing_rate": 0.0,
+        "approve_normal_missing_rate": 0.0,
+        "approve_fraud_median": 0.0,
+        "approve_normal_median": 145.0,
+        "median_delta_a_minus_b": -145.0,
+        "approve_fraud_p90": 1949.9999999999886,
+        "approve_normal_p90": 9639.900000000009,
+        "abs_median_delta": 145.0
+      },
+      {
+        "feature": "dias_desde_primeiro_envio_recebedor",
+        "approve_fraud_n": 128,
+        "approve_normal_n": 59520,
+        "approve_fraud_missing_rate": 0.812317,
+        "approve_normal_missing_rate": 0.385092,
+        "approve_fraud_median": 7.5,
+        "approve_normal_median": 60.0,
+        "median_delta_a_minus_b": -52.5,
+        "approve_fraud_p90": 64.3,
+        "approve_normal_p90": 140.0,
+        "abs_median_delta": 52.5
+      },
+      {
+        "feature": "score_final",
+        "approve_fraud_n": 682,
+        "approve_normal_n": 96795,
+        "approve_fraud_missing_rate": 0.0,
+        "approve_normal_missing_rate": 0.0,
+        "approve_fraud_median": 56.05423332019704,
+        "approve_normal_median": 14.428683960591131,
+        "median_delta_a_minus_b": 41.62554935960591,
+        "approve_fraud_p90": 76.04526432906405,
+        "approve_normal_p90": 42.7828284216749,
+        "abs_median_delta": 41.62554935960591
+      },
+      {
+        "feature": "qtd_pix_pagador_180d",
+        "approve_fraud_n": 682,
+        "approve_normal_n": 96795,
+        "approve_fraud_missing_rate": 0.0,
+        "approve_normal_missing_rate": 0.0,
+        "approve_fraud_median": 20.0,
+        "approve_normal_median": 56.0,
+        "median_delta_a_minus_b": -36.0,
+        "approve_fraud_p90": 141.89999999999998,
+        "approve_normal_p90": 299.0,
+        "abs_median_delta": 36.0
+      }
+    ],
+    "top_categorical_rate_deltas": [
+      {
+        "feature": "sample_strategy",
+        "value": "P1_MAF_RECENTE_180D",
+        "approve_fraud_n": 682,
+        "approve_normal_n": 0,
+        "approve_fraud_rate": 1.0,
+        "approve_normal_rate": 0.0,
+        "rate_delta_a_minus_b": 1.0,
+        "abs_rate_delta": 1.0
+      },
+      {
+        "feature": "sample_strategy",
+        "value": "N2_MATCHED_CONTROLS",
+        "approve_fraud_n": 0,
+        "approve_normal_n": 92241,
+        "approve_fraud_rate": 0.0,
+        "approve_normal_rate": 0.952952,
+        "rate_delta_a_minus_b": -0.952952,
+        "abs_rate_delta": 0.952952
+      },
+      {
+        "feature": "lgbm_bin",
+        "value": "lgbm_0.05_0.15",
+        "approve_fraud_n": 559,
+        "approve_normal_n": 15279,
+        "approve_fraud_rate": 0.819648,
+        "approve_normal_rate": 0.157849,
+        "rate_delta_a_minus_b": 0.661799,
+        "abs_rate_delta": 0.661799
+      },
+      {
+        "feature": "lgbm_bin",
+        "value": "lgbm_LT_0.05",
+        "approve_fraud_n": 123,
+        "approve_normal_n": 81516,
+        "approve_fraud_rate": 0.180352,
+        "approve_normal_rate": 0.842151,
+        "rate_delta_a_minus_b": -0.661799,
+        "abs_rate_delta": 0.661799
+      },
+      {
+        "feature": "qtd_rec_bin",
+        "value": "rec_0",
+        "approve_fraud_n": 404,
+        "approve_normal_n": 13588,
+        "approve_fraud_rate": 0.592375,
+        "approve_normal_rate": 0.140379,
+        "rate_delta_a_minus_b": 0.451996,
+        "abs_rate_delta": 0.451996
+      },
+      {
+        "feature": "valor_rec_bin",
+        "value": "val_rec_0",
+        "approve_fraud_n": 404,
+        "approve_normal_n": 13588,
+        "approve_fraud_rate": 0.592375,
+        "approve_normal_rate": 0.140379,
+        "rate_delta_a_minus_b": 0.451996,
+        "abs_rate_delta": 0.451996
+      },
+      {
+        "feature": "first_receiver_flag_real",
+        "value": "1",
+        "approve_fraud_n": 554,
+        "approve_normal_n": 37275,
+        "approve_fraud_rate": 0.812317,
+        "approve_normal_rate": 0.385092,
+        "rate_delta_a_minus_b": 0.427225,
+        "abs_rate_delta": 0.427225
+      },
+      {
+        "feature": "first_receiver_flag_real",
+        "value": "0",
+        "approve_fraud_n": 128,
+        "approve_normal_n": 59520,
+        "approve_fraud_rate": 0.187683,
+        "approve_normal_rate": 0.614908,
+        "rate_delta_a_minus_b": -0.427225,
+        "abs_rate_delta": 0.427225
+      },
+      {
+        "feature": "qtd_rec_bin",
+        "value": "rec_11_plus",
+        "approve_fraud_n": 62,
+        "approve_normal_n": 45983,
+        "approve_fraud_rate": 0.090909,
+        "approve_normal_rate": 0.475056,
+        "rate_delta_a_minus_b": -0.384146,
+        "abs_rate_delta": 0.384146
+      },
+      {
+        "feature": "valor_rec_bin",
+        "value": "val_rec_gt_5k",
+        "approve_fraud_n": 83,
+        "approve_normal_n": 44416,
+        "approve_fraud_rate": 0.121701,
+        "approve_normal_rate": 0.458867,
+        "rate_delta_a_minus_b": -0.337166,
+        "abs_rate_delta": 0.337166
+      },
+      {
+        "feature": "module_quiet",
+        "value": "module_quiet",
+        "approve_fraud_n": 501,
+        "approve_normal_n": 50320,
+        "approve_fraud_rate": 0.734604,
+        "approve_normal_rate": 0.519862,
+        "rate_delta_a_minus_b": 0.214743,
+        "abs_rate_delta": 0.214743
+      },
+      {
+        "feature": "module_quiet",
+        "value": "module_strong",
+        "approve_fraud_n": 181,
+        "approve_normal_n": 46475,
+        "approve_fraud_rate": 0.265396,
+        "approve_normal_rate": 0.480138,
+        "rate_delta_a_minus_b": -0.214743,
+        "abs_rate_delta": 0.214743
+      }
+    ],
+    "hypothesis": "Fraudes ainda em APROVAR exigem resgate por sinais fracos combinados ou novo score high-recall; a etapa R5B2 não tinha headroom de FP para isso."
+  },
+  "recommended_next_steps": [
+    "Validar subconjunto produtivo das regras BLOQUEAR->CONFIRMAR com critérios de robustez por mês/split.",
+    "Criar features explícitas de trust do recebedor e força do par pagador-recebedor para reduzir bloqueio indevido.",
+    "Abrir experimento separado de resgate APROVAR->CONFIRMAR, pois 682 fraudes ainda ficam aprovadas."
+  ]
+}

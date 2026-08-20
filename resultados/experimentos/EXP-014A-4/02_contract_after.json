@@ -1,0 +1,12 @@
+{
+  "contract_ok": true,
+  "missing": [],
+  "final_pred_cols_present": [
+    "exp014a_frozen_pred",
+    "exp013k_residual_fp_pred"
+  ],
+  "base_pred_cols_present": [],
+  "has_score_final": true,
+  "has_if_percentile": true,
+  "has_decisao": true
+}

@@ -1,0 +1,74 @@
+{
+  "experiment": "EXP-014B-R5B9-FROZEN-SEVERITY-POLICY-REPLAY",
+  "source_r5b5": "EXP-014B-R5B5-TRUST-FEATURE-DEESCALATION",
+  "source_r5b8": "EXP-014B-R5B8-BROAD-RESIDUAL-RULE-MINING",
+  "status": "PASS_R5B9_FROZEN_REPLAY_MATCHED_R5B8",
+  "all_pass": true,
+  "policy": {
+    "policy_id": "EXP-014B-R5B8-BROAD-RESIDUAL-RULE-MINING",
+    "rule_set_version": "2026-06-11",
+    "base_action": "BLOQUEAR",
+    "target_action": "CONFIRMAR",
+    "rules": [
+      {
+        "rule_id": "R5B8_01_RELATIONSHIP_AGE_GTE_35D",
+        "description": "dias_desde_primeiro_envio_recebedor >= 35",
+        "target_action": "CONFIRMAR"
+      },
+      {
+        "rule_id": "R5B8_02_LOW_RECEIVER_REP_LOW_PAYER_COUNT",
+        "description": "receiver_reputation_score > 70.57506297 AND qtd_pix_pagador_180d > 175",
+        "target_action": "CONFIRMAR"
+      },
+      {
+        "rule_id": "R5B8_03_LOW_RECEIVER_VALUE_LOW_PAYER_VALUE",
+        "description": "valor_rec_bin == val_rec_lt_5k AND valor_total_pagador_180d > 212416.178",
+        "target_action": "CONFIRMAR"
+      }
+    ]
+  },
+  "n_rows": 113844,
+  "action_mismatches_vs_r5b8": 0,
+  "move_mismatches_vs_r5b8": 0,
+  "total_mismatches_vs_r5b8": 0,
+  "block_fp_demoted_to_confirm": 469,
+  "block_tp_demoted_to_confirm": 0,
+  "remaining_block_normals": 2355,
+  "remaining_block_frauds": 279,
+  "remaining_approve_frauds": 682,
+  "base_block_metrics": {
+    "tp": 279,
+    "fp": 2824,
+    "fn": 1186,
+    "tn": 109555,
+    "precision": 0.08991299,
+    "recall": 0.19044369,
+    "f1": 0.12215412,
+    "fpr": 0.02512925
+  },
+  "final_block_metrics": {
+    "tp": 279,
+    "fp": 2355,
+    "fn": 1186,
+    "tn": 110024,
+    "precision": 0.10592255,
+    "recall": 0.19044369,
+    "f1": 0.13613076,
+    "fpr": 0.02095587
+  },
+  "final_intervention_metrics": {
+    "tp": 783,
+    "fp": 15584,
+    "fn": 682,
+    "tn": 96795,
+    "precision": 0.04784017,
+    "recall": 0.53447099,
+    "f1": 0.08781965,
+    "fpr": 0.1386736
+  },
+  "rule_counts": {
+    "R5B8_01_RELATIONSHIP_AGE_GTE_35D": 357,
+    "R5B8_02_LOW_RECEIVER_REP_LOW_PAYER_COUNT": 58,
+    "R5B8_03_LOW_RECEIVER_VALUE_LOW_PAYER_VALUE": 54
+  }
+}

@@ -1,0 +1,61 @@
+{
+  "model": "Isolation Forest Canônico v3",
+  "timestamp": "2026-06-10 21:31:42",
+  "contamination": 0.005,
+  "n_estimators": 800,
+  "features": [
+    "vl_pix",
+    "log_vl_pix",
+    "topaz_risk_score",
+    "qtd_pix_pagador_180d",
+    "max_qtd_pix_dia_pagador_7d",
+    "soma_recebedores_distintos_dia_180d",
+    "first_receiver_flag_real",
+    "burst_daily_7d_flag",
+    "dias_desde_primeiro_envio_recebedor",
+    "valor_total_para_recebedor_180d",
+    "valor_x_burst",
+    "burst_x_distinct_recv",
+    "ratio_valor_media_pagador_90d",
+    "ratio_valor_maximo_pagador_180d"
+  ],
+  "train_metrics": {
+    "threshold": 0.5,
+    "tp": 518,
+    "fp": 38785,
+    "fn": 594,
+    "tn": 38783,
+    "roc_auc": 0.49261929797127646,
+    "average_precision": 0.014376233296294802,
+    "precision": 0.01317965549703585,
+    "recall": 0.4658273381294964,
+    "f1": 0.025634046764815045,
+    "fpr": 0.5000128919141914
+  },
+  "validation_metrics": {
+    "threshold": 0.5,
+    "tp": 140,
+    "fp": 13955,
+    "fn": 89,
+    "tn": 3608,
+    "roc_auc": 0.3038972363247766,
+    "average_precision": 0.008394219349538842,
+    "precision": 0.009932600212841433,
+    "recall": 0.611353711790393,
+    "f1": 0.019547612398771293,
+    "fpr": 0.7945681261743438
+  },
+  "holdout_metrics": {
+    "threshold": 0.5,
+    "tp": 87,
+    "fp": 14355,
+    "fn": 37,
+    "tn": 2893,
+    "roc_auc": 0.31167896044048116,
+    "average_precision": 0.004689836312154185,
+    "precision": 0.006024096385542169,
+    "recall": 0.7016129032258065,
+    "f1": 0.011945626802141975,
+    "fpr": 0.8322704081632653
+  }
+}

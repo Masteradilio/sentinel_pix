@@ -1,0 +1,107 @@
+{
+  "experiment": "EXP-014B-R5B8-BROAD-RESIDUAL-RULE-MINING",
+  "source_experiment": "EXP-014B-R5B5-TRUST-FEATURE-DEESCALATION",
+  "status": "PASS_R5B8_BROAD_RULES_FOUND",
+  "all_pass": true,
+  "n_candidates": 2158,
+  "n_selected_rules": 3,
+  "derived_bin_columns": [
+    "lgbm_raw__qbin",
+    "topaz_risk_score__qbin",
+    "transaction_normality_score__qbin",
+    "receiver_reputation_score__qbin",
+    "payer_history_strength_score__qbin",
+    "qtd_pix_pagador_180d__qbin",
+    "valor_total_pagador_180d__qbin",
+    "valor_total_recebido_30d__qbin"
+  ],
+  "derived_bin_edges": {
+    "lgbm_raw__qbin": [
+      "-inf",
+      0.02720694,
+      0.0708729,
+      0.10552599,
+      0.13615378,
+      "inf"
+    ],
+    "topaz_risk_score__qbin": [
+      "-inf",
+      26.0,
+      "inf"
+    ],
+    "transaction_normality_score__qbin": [
+      "-inf",
+      5.51729004,
+      33.21568639,
+      50.96853316,
+      66.12465481,
+      "inf"
+    ],
+    "receiver_reputation_score__qbin": [
+      "-inf",
+      70.57506297,
+      "inf"
+    ],
+    "payer_history_strength_score__qbin": [
+      "-inf",
+      93.62856509,
+      "inf"
+    ],
+    "qtd_pix_pagador_180d__qbin": [
+      "-inf",
+      15.4,
+      43.8,
+      86.2,
+      175.0,
+      "inf"
+    ],
+    "valor_total_pagador_180d__qbin": [
+      "-inf",
+      6424.36,
+      18611.254,
+      47913.944,
+      212416.178,
+      "inf"
+    ],
+    "valor_total_recebido_30d__qbin": [
+      "-inf",
+      2645.04,
+      "inf"
+    ]
+  },
+  "block_fp_demoted_to_confirm_incremental": 469,
+  "block_tp_demoted_to_confirm_incremental": 0,
+  "remaining_block_normals": 2355,
+  "remaining_block_frauds": 279,
+  "remaining_approve_frauds": 682,
+  "base_block_metrics": {
+    "tp": 279,
+    "fp": 2824,
+    "fn": 1186,
+    "tn": 109555,
+    "precision": 0.08991299,
+    "recall": 0.19044369,
+    "f1": 0.12215412,
+    "fpr": 0.02512925
+  },
+  "final_block_metrics": {
+    "tp": 279,
+    "fp": 2355,
+    "fn": 1186,
+    "tn": 110024,
+    "precision": 0.10592255,
+    "recall": 0.19044369,
+    "f1": 0.13613076,
+    "fpr": 0.02095587
+  },
+  "final_intervention_metrics": {
+    "tp": 783,
+    "fp": 15584,
+    "fn": 682,
+    "tn": 96795,
+    "precision": 0.04784017,
+    "recall": 0.53447099,
+    "f1": 0.08781965,
+    "fpr": 0.1386736
+  }
+}

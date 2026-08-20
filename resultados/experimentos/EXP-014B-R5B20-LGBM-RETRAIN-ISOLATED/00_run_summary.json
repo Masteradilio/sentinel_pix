@@ -1,0 +1,80 @@
+{
+  "experiment": "EXP-014B-R5B20-LGBM-RETRAIN-ISOLATED",
+  "status": "FAIL_R5B20_LGBM_RETRAIN_ISOLATED",
+  "fn_budget_full": 10,
+  "best_model": {
+    "score_key": 1.06240457,
+    "config_id": "cfg_1",
+    "config": {
+      "num_leaves": 31,
+      "learning_rate": 0.03,
+      "n_estimators": 500,
+      "scale_pos_weight": 69.75539568345324
+    },
+    "n_features": 53,
+    "categorical_features": [
+      "ds_chave_pix",
+      "ds_tipo_chave_norm",
+      "periodo_dia",
+      "value_band",
+      "device_name",
+      "app_version",
+      "ip_address",
+      "session_id"
+    ],
+    "validation_selected_threshold": 0.017545242779211198,
+    "metrics_by_scope": {
+      "validation": {
+        "tp": 228,
+        "fp": 16151,
+        "fn": 1,
+        "tn": 1412,
+        "precision": 0.01392026,
+        "recall": 0.99563319,
+        "f1": 0.02745665,
+        "fpr": 0.91960371
+      },
+      "holdout": {
+        "tp": 124,
+        "fp": 15758,
+        "fn": 0,
+        "tn": 1490,
+        "precision": 0.00780758,
+        "recall": 1.0,
+        "f1": 0.01549419,
+        "fpr": 0.91361317
+      },
+      "full": {
+        "tp": 1464,
+        "fp": 102842,
+        "fn": 1,
+        "tn": 9537,
+        "precision": 0.01403563,
+        "recall": 0.99931741,
+        "f1": 0.02768245,
+        "fpr": 0.91513539
+      }
+    },
+    "ratios_to_r5b18_by_scope": {
+      "validation": {
+        "precision_ratio": 0.02346384,
+        "recall_ratio": 0.99563319,
+        "f1_ratio": 0.03686865
+      },
+      "holdout": {
+        "precision_ratio": 0.01404105,
+        "recall_ratio": 1.0,
+        "f1_ratio": 0.02167937
+      },
+      "full": {
+        "precision_ratio": 0.02479468,
+        "recall_ratio": 0.99931741,
+        "f1_ratio": 0.03829248
+      }
+    }
+  },
+  "target_gates": {
+    "full_precision_recall_f1_ratio_gte_80pct": false,
+    "full_fn_lte_10": true
+  }
+}

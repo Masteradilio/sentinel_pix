@@ -1,0 +1,8 @@
+{
+  "base_predictions_path": "C:\\Users\\u857755\\OneDrive - BRB - Banco de Brasilia SA\\Documentos\\Projetos\\squad_IA\\PIX\\rebuild_pix\\resultados\\experimentos\\EXP-014B-R4F-FROZEN\\06_predictions_frozen.csv",
+  "artifact_path": "C:\\Users\\u857755\\OneDrive - BRB - Banco de Brasilia SA\\Documentos\\Projetos\\squad_IA\\PIX\\rebuild_pix\\resultados\\experimentos\\EXP-014B-R4G-FAST\\10_policy_artifact_recommended.json",
+  "label_col": "is_fraud",
+  "base_action_col": "r4f_frozen_decisao_recommended",
+  "contract_ok": true,
+  "missing": []
+}

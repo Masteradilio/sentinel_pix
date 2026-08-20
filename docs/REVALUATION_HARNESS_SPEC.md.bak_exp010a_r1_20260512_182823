@@ -1,0 +1,40 @@
+# REVALUATION_HARNESS_SPEC — Antifraude PIX
+
+Gerado em: `2026-05-12T18:06:39`
+
+## Objetivo
+
+Definir o harness de reavaliação do baseline `post_fase2_c1` em novas janelas de dados.
+
+## Fluxo recomendado
+
+1. Receber novo arquivo de transações.
+2. Receber labels novos, se disponíveis.
+3. Validar schema com o contrato do EXP-010A.
+4. Gerar relatório de compatibilidade de features.
+5. Rodar baseline atual em modo controlado.
+6. Gerar decision logs estruturados no formato do EXP-009A.
+7. Rodar drift monitor do EXP-009B contra a janela de referência.
+8. Gerar fila de revisão humana no padrão EXP-009C.
+9. Atualizar painel operacional no padrão EXP-009D.
+10. Rodar EXP-009E antes de qualquer promoção de mudança.
+
+## Critérios para retreinamento futuro
+
+Retreinamento só deve ser considerado se houver:
+
+- volume suficiente de novas fraudes confirmadas;
+- aumento relevante de FN no baseline atual;
+- drift material nas features críticas;
+- evidência de novos padrões de fraude não cobertos por V1/C1;
+- validação offline mostrando ganho em FN sem aumento inseguro de FP.
+
+## Critérios para nova regra futura
+
+Uma nova regra só deve avançar se:
+
+- recuperar FN novo ou residual;
+- adicionar 0 FP ou FP operacionalmente aceitável;
+- não perder TP;
+- ser configurável/desligável;
+- passar no EXP-009E.

@@ -1,0 +1,46 @@
+{
+  "model": "LightGBM Canônico v3",
+  "timestamp": "2026-06-10 21:30:28",
+  "best_iteration": 15,
+  "scale_pos_weight": 69.75539568345324,
+  "best_threshold": 0.14500000000000002,
+  "train_metrics": {
+    "threshold": 0.145,
+    "tp": 609,
+    "fp": 842,
+    "fn": 503,
+    "tn": 76726,
+    "roc_auc": 0.971024,
+    "average_precision": 0.49528,
+    "precision": 0.419711,
+    "recall": 0.547662,
+    "f1": 0.475224,
+    "fpr": 0.010855
+  },
+  "validation_metrics": {
+    "threshold": 0.145,
+    "tp": 118,
+    "fp": 173,
+    "fn": 111,
+    "tn": 17390,
+    "roc_auc": 0.956619,
+    "average_precision": 0.456918,
+    "precision": 0.405498,
+    "recall": 0.515284,
+    "f1": 0.453846,
+    "fpr": 0.00985
+  },
+  "holdout_metrics": {
+    "threshold": 0.145,
+    "tp": 75,
+    "fp": 119,
+    "fn": 49,
+    "tn": 17129,
+    "roc_auc": 0.97217,
+    "average_precision": 0.482099,
+    "precision": 0.386598,
+    "recall": 0.604839,
+    "f1": 0.471698,
+    "fpr": 0.006899
+  }
+}

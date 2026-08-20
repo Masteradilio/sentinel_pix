@@ -1,0 +1,61 @@
+{
+  "r1": {
+    "threshold": 0.6,
+    "threshold_policy": {
+      "policy": "PRECISION_GE_50_FPR_LE_1PCT",
+      "selector": "Maior F1 com precision>=50% e FPR<=1%",
+      "threshold": 0.6,
+      "val_tp": 59,
+      "val_fp": 48,
+      "val_fn": 116,
+      "val_tn": 13218,
+      "val_precision": 0.55140187,
+      "val_recall": 0.33714286,
+      "val_f1": 0.41843972,
+      "val_fpr": 0.00361827,
+      "holdout_tp": 15,
+      "holdout_fp": 14,
+      "holdout_fn": 43,
+      "holdout_tn": 8750,
+      "holdout_precision": 0.51724138,
+      "holdout_recall": 0.25862069,
+      "holdout_f1": 0.34482759,
+      "holdout_fpr": 0.00159744,
+      "selection_reason": "Selecionado por equilíbrio: precision>=50%, FPR<=1% e maior F1 na validação."
+    },
+    "model_path": "C:\\Users\\u857755\\OneDrive - BRB - Banco de Brasilia SA\\Documentos\\Projetos\\squad_IA\\PIX\\rebuild_pix\\backend\\artefatos_candidatos\\exp011b_lgbm_vnext\\model_lgbm_vnext_shadow.joblib",
+    "preprocessor_path": "C:\\Users\\u857755\\OneDrive - BRB - Banco de Brasilia SA\\Documentos\\Projetos\\squad_IA\\PIX\\rebuild_pix\\backend\\artefatos_candidatos\\exp011b_lgbm_vnext\\preprocessor_lgbm_vnext_shadow.joblib"
+  },
+  "r2": {
+    "threshold": 0.53,
+    "threshold_policy": {
+      "policy": "FP_LE_100_BEST_F1",
+      "threshold": 0.53,
+      "val_tp": 53,
+      "val_fp": 21,
+      "val_fn": 122,
+      "val_tn": 13245,
+      "val_precision": 0.71621622,
+      "val_recall": 0.30285714,
+      "val_f1": 0.42570281,
+      "val_fpr": 0.00158299,
+      "holdout_tp": 13,
+      "holdout_fp": 7,
+      "holdout_fn": 45,
+      "holdout_tn": 8757,
+      "holdout_precision": 0.65,
+      "holdout_recall": 0.22413793,
+      "holdout_f1": 0.33333333,
+      "holdout_fpr": 0.00079872,
+      "config_id": "C03_balanced_weight",
+      "pos_multiplier": 4.0,
+      "best_iteration": 695,
+      "val_roc_auc": 0.9049344188150159,
+      "val_average_precision": 0.4012307333010947,
+      "holdout_roc_auc": 0.8977084939958137,
+      "holdout_average_precision": 0.29810059006119666
+    },
+    "model_path": "C:\\Users\\u857755\\OneDrive - BRB - Banco de Brasilia SA\\Documentos\\Projetos\\squad_IA\\PIX\\rebuild_pix\\backend\\artefatos_candidatos\\exp011b_r2_lgbm_tuned\\model_lgbm_r2_tuned_shadow.joblib",
+    "preprocessor_path": "C:\\Users\\u857755\\OneDrive - BRB - Banco de Brasilia SA\\Documentos\\Projetos\\squad_IA\\PIX\\rebuild_pix\\backend\\artefatos_candidatos\\exp011b_r2_lgbm_tuned\\preprocessor_lgbm_r2_tuned_shadow.joblib"
+  }
+}

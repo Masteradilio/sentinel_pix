@@ -1,0 +1,30 @@
+{
+  "pipeline_final": {
+    "label": "PIPELINE_FINAL",
+    "TP": 1463,
+    "FP": 5,
+    "FN": 2,
+    "TN": 530,
+    "Precision": 0.996594,
+    "Recall": 0.998635,
+    "F1": 0.997613,
+    "FPR": 0.00934579
+  },
+  "por_decisao": {
+    "APROVAR": {
+      "total": 532,
+      "fraudes": 2,
+      "taxa_fraude": 0.003759
+    },
+    "CONFIRMAR": {
+      "total": 12,
+      "fraudes": 10,
+      "taxa_fraude": 0.833333
+    },
+    "BLOQUEAR": {
+      "total": 1456,
+      "fraudes": 1453,
+      "taxa_fraude": 0.99794
+    }
+  }
+}

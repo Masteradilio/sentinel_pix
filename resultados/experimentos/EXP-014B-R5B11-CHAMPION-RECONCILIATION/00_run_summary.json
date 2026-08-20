@@ -1,0 +1,75 @@
+{
+  "experiment": "EXP-014B-R5B11-CHAMPION-RECONCILIATION",
+  "status": "PASS_R5B11_R4G_CONFIRMED_AS_GLOBAL_TARGET_CANDIDATE",
+  "r4g_predictions": "resultados\\experimentos\\EXP-014B-R4G-FAST-FROZEN\\06_predictions_frozen.csv",
+  "r4g_artifact": "resultados\\experimentos\\EXP-014B-R4G-FAST-FROZEN\\05_policy_artifact_frozen.json",
+  "r5b10_artifact": "backend\\artefatos_candidatos\\exp014b_r5b10_severity_policy\\severity_policy_candidate.json",
+  "target_fpr": 0.01,
+  "target_max_fn": 5,
+  "r4g_meets_global_target": true,
+  "r4g_intervention_metrics": {
+    "tp": 1463,
+    "fp": 1123,
+    "fn": 2,
+    "tn": 111256,
+    "precision": 0.56573859,
+    "recall": 0.99863481,
+    "f1": 0.72229079,
+    "fpr": 0.00999297
+  },
+  "r4g_block_metrics": {
+    "tp": 1458,
+    "fp": 766,
+    "fn": 7,
+    "tn": 111613,
+    "precision": 0.65557554,
+    "recall": 0.99522184,
+    "f1": 0.79045812,
+    "fpr": 0.00681622
+  },
+  "r5b2_intervention_metrics": {
+    "tp": 783,
+    "fp": 15584,
+    "fn": 682,
+    "tn": 96795,
+    "precision": 0.04784017,
+    "recall": 0.53447099,
+    "f1": 0.08781965,
+    "fpr": 0.1386736
+  },
+  "r5b2_block_metrics": {
+    "tp": 279,
+    "fp": 3153,
+    "fn": 1186,
+    "tn": 109226,
+    "precision": 0.08129371,
+    "recall": 0.19044369,
+    "f1": 0.11394731,
+    "fpr": 0.02805684
+  },
+  "r5b10_stacked_on_r4g_safe": false,
+  "r5b10_stacked_on_r4g_frauds_demoted_to_confirm": 115,
+  "r5b10_stacked_on_r4g_normals_demoted_to_confirm": 23,
+  "stacked_intervention_metrics": {
+    "tp": 1463,
+    "fp": 1123,
+    "fn": 2,
+    "tn": 111256,
+    "precision": 0.56573859,
+    "recall": 0.99863481,
+    "f1": 0.72229079,
+    "fpr": 0.00999297
+  },
+  "stacked_block_metrics": {
+    "tp": 1343,
+    "fp": 743,
+    "fn": 122,
+    "tn": 111636,
+    "precision": 0.64381592,
+    "recall": 0.91672355,
+    "f1": 0.75640665,
+    "fpr": 0.00661156
+  },
+  "zero_fraud_r4g_block_deescalation_candidates": 0,
+  "decision": "Promover R4G-FAST-FROZEN como candidato global atual. Nao empilhar R5B10 sobre R4G; a politica R5B10 foi validada somente na trilha R5B2."
+}

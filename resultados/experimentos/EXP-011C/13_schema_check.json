@@ -1,0 +1,15 @@
+{
+  "input_path": "C:\\Users\\u857755\\OneDrive - BRB - Banco de Brasilia SA\\Documentos\\Projetos\\squad_IA\\PIX\\rebuild_pix\\dados\\hmo_ml_tb_pix_dataset_v2_180d_v1_enriched.csv",
+  "input_md5": "74b7b26a3de4b95260b9d15e2c12b50a",
+  "n_input": 100000,
+  "n_baseline_rows": 100000,
+  "missing_r1_features": [],
+  "missing_r2_features": [],
+  "decision_columns": [
+    "decision_BASELINE_PROD",
+    "decision_R1_MODEL_ONLY",
+    "decision_R1_ASSIST_BASELINE",
+    "decision_R2_MODEL_ONLY",
+    "decision_R2_ASSIST_BASELINE"
+  ]
+}

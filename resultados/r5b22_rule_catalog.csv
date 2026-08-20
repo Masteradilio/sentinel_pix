@@ -1,0 +1,14 @@
+policy,rule_id,layer,condition,action,objective,status,incremental_n_rows,incremental_n_frauds,incremental_n_normals
+R5B14,R5B14_CTB_01_LGBM_RAW_HIGH,CONFIRM_TO_BLOCK,lgbm_raw >= 0.10711783,Escalonar CONFIRMAR para BLOQUEAR,Prevenção de Falso Negativo (Segurança),Baseline Oficial,,,
+R5B14,R5B14_CTB_02_SCORE_2_3_LGBM_R4_HIGH,CONFIRM_TO_BLOCK,score_bin == score_2_3 AND lgbm_r4_score >= 0.475472966916,Escalonar CONFIRMAR para BLOQUEAR,Prevenção de Falso Negativo (Segurança),Baseline Oficial,,,
+R5B14,R5B14_CTB_03_SCORE_2_3_LGBM_R4_MED,CONFIRM_TO_BLOCK,score_bin == score_2_3 AND lgbm_r4_score >= 0.318070929491,Escalonar CONFIRMAR para BLOQUEAR,Prevenção de Falso Negativo (Segurança),Baseline Oficial,,,
+R5B14,R5B14_CTB_04_DOC_PHONE_HIGH_PAYER_COUNT,CONFIRM_TO_BLOCK,ds_tipo_chave_norm == DOCUMENTO_TELEFONE AND qtd_pix_pagador_180d >= 207,Escalonar CONFIRMAR para BLOQUEAR,Prevenção de Falso Negativo (Segurança),Baseline Oficial,,,
+R5B14,R5B14_CTB_05_OUTROS_RATIO_MAX_HIGH,CONFIRM_TO_BLOCK,ds_tipo_chave_norm == OUTROS AND ratio_valor_maximo_pagador_180d >= 4.9674631165863596,Escalonar CONFIRMAR para BLOQUEAR,Prevenção de Falso Negativo (Segurança),Baseline Oficial,,,
+R5B14,R5B14_ATB_01_DOC_PHONE_MORNING_SCORE_HIGH,APPROVE_TO_BLOCK,ds_tipo_chave_norm == DOCUMENTO_TELEFONE AND periodo_dia == manha AND score_bin == score_GE_10 AND lgbm_bin == lgbm_GE_0.1,Escalonar APROVAR para BLOQUEAR,Prevenção de Falso Negativo (Segurança),Baseline Oficial,,,
+R5B14,R5B14_ATB_02_NIGHT_SCORE_1_2_RATIO_HIGH,APPROVE_TO_BLOCK,periodo_dia == noite AND score_bin == score_1_2 AND lgbm_bin == lgbm_GE_0.1 AND ratio_bin == ratio_GE_5,Escalonar APROVAR para BLOQUEAR,Prevenção de Falso Negativo (Segurança),Baseline Oficial,,,
+R5B14,R5B14_CTA_01_LOW_LGBM_RAW_COMPENSATION,CONFIRM_TO_APPROVE,lgbm_raw <= 1.966e-05,Desescalonar CONFIRMAR para APROVAR,Redução de Falso Positivo (Compensação),Baseline Oficial,,,
+R5B22,DEMOTE_LAYER_APPROVE_TO_BLOCK_TO_APROVAR,DEMOTION,r5b14_layer_applied == APPROVE_TO_BLOCK,Reverter intervenção para APROVAR,Controle de FPR global (Trade-off),Baseline Oficial,49,2,47
+R5B22,DEMOTE_LAYER_CONFIRM_TO_BLOCK_TO_CONFIRMAR,DEMOTION,r5b14_layer_applied == CONFIRM_TO_BLOCK,Reverter intervenção para CONFIRMAR,Controle de FPR global (Trade-off),Baseline Oficial,27,5,22
+R5B22,DEMOTE_CAT2_ds_tipo_chave_norm_OUTROS__lgbm_bin_lgbm_0.05_0.1,DEMOTION,ds_tipo_chave_norm == OUTROS AND lgbm_bin == lgbm_0.05_0.1,Reverter intervenção para CONFIRMAR,Controle de FPR global (Trade-off),Baseline Oficial,8,4,4
+R5B22,DEMOTE_CAT2_value_band_E_5000_10000__lgbm_bin_lgbm_0.05_0.1,DEMOTION,value_band == E_5000_10000 AND lgbm_bin == lgbm_0.05_0.1,Reverter intervenção para CONFIRMAR,Controle de FPR global (Trade-off),Baseline Oficial,3,1,2
+R5B16/R5B18,r4g_fast_frozen_decisao_recommended,BASE_CONTRACT,Output estático do pipeline original R4G Fast Frozen,Fornecer decisão âncora/default,Sinal do Professor (Estabilidade),Baseline Oficial,,,

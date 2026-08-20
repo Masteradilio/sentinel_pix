@@ -1,0 +1,33 @@
+{
+  "experiment": "EXP-014B-R5B16-CONSOLIDATED-OPERATIONAL-BASELINE",
+  "status": "PASS_R5B16_OPERATIONAL_BASELINE_CANDIDATE_CONSOLIDATED",
+  "candidate_artifact": "backend\\artefatos_candidatos\\exp014b_r5b16_operational_baseline\\operational_baseline_candidate.json",
+  "global_intervention_metrics": {
+    "tp": 1465,
+    "fp": 1123,
+    "fn": 0,
+    "tn": 111256,
+    "precision": 0.56607419,
+    "recall": 1.0,
+    "f1": 0.72292129,
+    "fpr": 0.00999297
+  },
+  "block_metrics": {
+    "tp": 1465,
+    "fp": 835,
+    "fn": 0,
+    "tn": 111544,
+    "precision": 0.63695652,
+    "recall": 1.0,
+    "f1": 0.77822045,
+    "fpr": 0.00743021
+  },
+  "target_gates": {
+    "fpr_lt_1pct": true,
+    "fn_lte_5_outside_block": true,
+    "fn_eq_0": true,
+    "approve_frauds_eq_0": true,
+    "confirm_frauds_eq_0": true,
+    "all_core_replay_checks_pass": true
+  }
+}

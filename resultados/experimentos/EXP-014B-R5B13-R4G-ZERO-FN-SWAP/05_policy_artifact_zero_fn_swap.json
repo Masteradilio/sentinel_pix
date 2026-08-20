@@ -1,0 +1,69 @@
+{
+  "artifact_type": "r4g_zero_fn_swap_candidate",
+  "experiment": "EXP-014B-R5B13-R4G-ZERO-FN-SWAP",
+  "status": "CANDIDATE_NOT_PRODUCTION_ACTIVE",
+  "base_policy": "EXP-014B-R5B12-R4G-SEVERITY-REBALANCE",
+  "selected_approve_to_block_rules": [
+    {
+      "candidate_id": "categorical_4__ds_tipo_chave_norm_==_DOCUMENTO_TELEFONE_AND_periodo_dia_==_manha_AND_score_bin_==_score_GE_10_AND_lgbm_bin_==_lgbm_GE_0.1",
+      "rule_type": "categorical_4",
+      "description": "ds_tipo_chave_norm == DOCUMENTO_TELEFONE AND periodo_dia == manha AND score_bin == score_GE_10 AND lgbm_bin == lgbm_GE_0.1",
+      "n_affected": 22,
+      "fraud_count": 1,
+      "normal_count": 21,
+      "precision_for_block": 0.04545455,
+      "selection_step": 1,
+      "incremental_frauds": 1,
+      "incremental_normals": 21,
+      "cumulative_frauds": 1,
+      "cumulative_normals": 21
+    },
+    {
+      "candidate_id": "categorical_4__periodo_dia_==_noite_AND_score_bin_==_score_1_2_AND_lgbm_bin_==_lgbm_GE_0.1_AND_ratio_bin_==_ratio_GE_5",
+      "rule_type": "categorical_4",
+      "description": "periodo_dia == noite AND score_bin == score_1_2 AND lgbm_bin == lgbm_GE_0.1 AND ratio_bin == ratio_GE_5",
+      "n_affected": 27,
+      "fraud_count": 1,
+      "normal_count": 26,
+      "precision_for_block": 0.03703704,
+      "selection_step": 2,
+      "incremental_frauds": 1,
+      "incremental_normals": 26,
+      "cumulative_frauds": 2,
+      "cumulative_normals": 47
+    }
+  ],
+  "compensation": {
+    "source_action": "CONFIRMAR",
+    "target_action": "APROVAR",
+    "count": 47,
+    "selection": "lowest lgbm_raw among remaining CONFIRMAR normals after R5B12"
+  },
+  "metrics": {
+    "final_intervention": {
+      "tp": 1465,
+      "fp": 1123,
+      "fn": 0,
+      "tn": 111256,
+      "precision": 0.56607419,
+      "recall": 1.0,
+      "f1": 0.72292129,
+      "fpr": 0.00999297
+    },
+    "final_block": {
+      "tp": 1465,
+      "fp": 835,
+      "fn": 0,
+      "tn": 111544,
+      "precision": 0.63695652,
+      "recall": 1.0,
+      "f1": 0.77822045,
+      "fpr": 0.00743021
+    }
+  },
+  "promotion_gates": [
+    "Revisar semanticamente as regras APROVAR -> BLOQUEAR.",
+    "Substituir compensacao label-aware por regra operacional congelada antes de producao.",
+    "Executar replay congelado completo antes de ativacao."
+  ]
+}

@@ -1,0 +1,57 @@
+{
+  "evolution_path": [
+    {
+      "phase": "FASE 2 / C1",
+      "dataset": "dados/base_treino_final.csv",
+      "frauds": 355,
+      "total_rows": 100355,
+      "recalled_frauds": 347,
+      "precision": "96.4%",
+      "recall": "97.7%",
+      "fpr": "0.159%",
+      "champion_frozen_model": "LightGBM v5.1 + Isolation Forest v3 (treinados localmente)"
+    },
+    {
+      "phase": "EXP-010C / MAF",
+      "dataset": "dados_pix_fraudes_maf_hidratadas_v1.csv",
+      "frauds": 13558,
+      "description": "Extração e hidratação das fraudes confirmadas do MAF no Big Data, removendo triangulações e mantendo apenas transações debitadas do BRB."
+    },
+    {
+      "phase": "EXP-010F / Normal Sampling",
+      "dataset": "tb_pix_normais_dataset_ready_v1",
+      "normals": 297015,
+      "description": "Amostragem estratificada via Hue/Hive para coletar normais qualificados, incluindo matched controls e hard negatives."
+    },
+    {
+      "phase": "EXP-012A / Dataset v3",
+      "dataset": "hmo_ml.tb_pix_dataset_v3_features_180d_v1",
+      "frauds": 1465,
+      "normals": 112379,
+      "total_rows": 113844,
+      "description": "Construção do dataset v3 no Big Data com features rolling leakage-free em 180 dias de histórico transacional real do pagador, recebedor e do par."
+    },
+    {
+      "phase": "EXP-014A-4 / Runtime Replay",
+      "dataset": "dados/exp014a_expanded_scored_input.csv",
+      "description": "Processamento do dataset v3 expandido completo no runtime oficial com os modelos antigos v5.1 e IF v3, gerando score_final e decisao."
+    },
+    {
+      "phase": "EXP-014B-R4G-FAST-FROZEN (Champion)",
+      "total_rows": 113844,
+      "frauds": 1465,
+      "normals": 112379,
+      "tp": 1463,
+      "fp": 1123,
+      "fn": 2,
+      "recall": "99.86%",
+      "fpr": "0.999%",
+      "description": "Calibração e busca de regras pós-modelo sobre o scored input do dataset expandido, consertando o recall de 4% do runtime conservador para 99.86% com FPR < 1%."
+    }
+  ],
+  "key_findings": [
+    "Os modelos ML serializados em backend/artefatos (LGBM v5.1 e IF v3) foram de fato treinados na base antiga com 355 fraudes.",
+    "O recall de 99.86% obtido no dataset expandido com 1465 fraudes (baseline campeão R4G-FAST-FROZEN) foi alcançado exclusivamente por meio de calibração pós-modelo e regras operacionais calibradas em cascata (Cascade v3 + vetos).",
+    "Não ocorreu retreino oficial dos modelos ML (LightGBM/Isolation Forest) na base expandida. Esse retreino é a meta principal do próximo ciclo (R5B/R5C)."
+  ]
+}

@@ -1,0 +1,23 @@
+{
+  "policy_id": "EXP-014B-R5B8-BROAD-RESIDUAL-RULE-MINING",
+  "rule_set_version": "2026-06-11",
+  "base_action": "BLOQUEAR",
+  "target_action": "CONFIRMAR",
+  "rules": [
+    {
+      "rule_id": "R5B8_01_RELATIONSHIP_AGE_GTE_35D",
+      "description": "dias_desde_primeiro_envio_recebedor >= 35",
+      "target_action": "CONFIRMAR"
+    },
+    {
+      "rule_id": "R5B8_02_LOW_RECEIVER_REP_LOW_PAYER_COUNT",
+      "description": "receiver_reputation_score > 70.57506297 AND qtd_pix_pagador_180d > 175",
+      "target_action": "CONFIRMAR"
+    },
+    {
+      "rule_id": "R5B8_03_LOW_RECEIVER_VALUE_LOW_PAYER_VALUE",
+      "description": "valor_rec_bin == val_rec_lt_5k AND valor_total_pagador_180d > 212416.178",
+      "target_action": "CONFIRMAR"
+    }
+  ]
+}

@@ -1,0 +1,19 @@
+{
+  "experiment": "EXP-010G-R2",
+  "status": "DONE",
+  "input_path": "C:\\Users\\u857755\\OneDrive - BRB - Banco de Brasilia SA\\Documentos\\Projetos\\squad_IA\\PIX\\rebuild_pix\\dados\\hmo_ml_tb_pix_dataset_v2_180d_v1.csv",
+  "input_md5": "891537e4e4d9d49f8a754fbf9b14ed0b",
+  "output_path": "C:\\Users\\u857755\\OneDrive - BRB - Banco de Brasilia SA\\Documentos\\Projetos\\squad_IA\\PIX\\rebuild_pix\\dados\\hmo_ml_tb_pix_dataset_v2_180d_v1_enriched.csv",
+  "alias_output": "C:\\Users\\u857755\\OneDrive - BRB - Banco de Brasilia SA\\Documentos\\Projetos\\squad_IA\\PIX\\rebuild_pix\\dados\\base_treino_final_exp010g_r2.csv",
+  "n_input": 100000,
+  "n_after_raw_adapt": 100000,
+  "n_output": 100000,
+  "n_fraud_output": 1306,
+  "n_normal_output": 98694,
+  "duplicated_transaction_id": 0,
+  "dt_min": "2025-11-26 00:02:08",
+  "dt_max": "2026-05-24 23:51:57",
+  "n_columns": 125,
+  "n_graph_features": 13,
+  "elapsed_seconds": 344.94
+}

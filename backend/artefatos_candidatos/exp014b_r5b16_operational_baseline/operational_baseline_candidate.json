@@ -1,0 +1,172 @@
+{
+  "artifact_type": "operational_baseline_candidate",
+  "experiment": "EXP-014B-R5B16-CONSOLIDATED-OPERATIONAL-BASELINE",
+  "status": "CANDIDATE_NOT_PRODUCTION_ACTIVE",
+  "baseline_name": "EXP-014B-R5B16 / R5B15 core replay consolidated",
+  "base_policy": "EXP-014B-R4G-FAST-FROZEN",
+  "policy_id": "EXP-014B-R5B14-OPERATIONAL-ZERO-FN-REPLAY",
+  "rule_set_version": "2026-06-12",
+  "activation": {
+    "enabled_by_default": false,
+    "runtime_flag_env": "ENABLE_R5B14_POLICY",
+    "runtime_flag_scoring_config": "r5b14_operational_zero_fn_enabled"
+  },
+  "final_action_col": "r5b15_core_policy_decisao",
+  "metrics": {
+    "global_intervention": {
+      "tp": 1465,
+      "fp": 1123,
+      "fn": 0,
+      "tn": 111256,
+      "precision": 0.56607419,
+      "recall": 1.0,
+      "f1": 0.72292129,
+      "fpr": 0.00999297
+    },
+    "block_only": {
+      "tp": 1465,
+      "fp": 835,
+      "fn": 0,
+      "tn": 111544,
+      "precision": 0.63695652,
+      "recall": 1.0,
+      "f1": 0.77822045,
+      "fpr": 0.00743021
+    },
+    "by_action_csv": "resultados\\experimentos\\EXP-014B-R5B15-CORE-POLICY-REPLAY\\01_metrics_by_action.csv"
+  },
+  "decision_distribution": {
+    "APROVAR": {
+      "rows": 111256,
+      "frauds": 0,
+      "normals": 111256
+    },
+    "BLOQUEAR": {
+      "rows": 2300,
+      "frauds": 1465,
+      "normals": 835
+    },
+    "CONFIRMAR": {
+      "rows": 288,
+      "frauds": 0,
+      "normals": 288
+    }
+  },
+  "target_gates": {
+    "fpr_lt_1pct": true,
+    "fn_lte_5_outside_block": true,
+    "fn_eq_0": true,
+    "approve_frauds_eq_0": true,
+    "confirm_frauds_eq_0": true,
+    "all_core_replay_checks_pass": true
+  },
+  "policy_layers": [
+    {
+      "layer": "R5B12_CONFIRM_TO_BLOCK",
+      "rules": [
+        {
+          "rule_id": "R5B12_01_LGBM_RAW_HIGH",
+          "description": "lgbm_raw >= 0.10711783"
+        },
+        {
+          "rule_id": "R5B12_02_SCORE_2_3_LGBM_R4_HIGH",
+          "description": "score_bin == score_2_3 AND lgbm_r4_score >= 0.475472966916"
+        },
+        {
+          "rule_id": "R5B12_03_SCORE_2_3_LGBM_R4_MED",
+          "description": "score_bin == score_2_3 AND lgbm_r4_score >= 0.318070929491"
+        },
+        {
+          "rule_id": "R5B12_04_DOC_PHONE_HIGH_PAYER_COUNT",
+          "description": "ds_tipo_chave_norm == DOCUMENTO_TELEFONE AND qtd_pix_pagador_180d >= 207"
+        },
+        {
+          "rule_id": "R5B12_05_OUTROS_RATIO_MAX_HIGH",
+          "description": "ds_tipo_chave_norm == OUTROS AND ratio_valor_maximo_pagador_180d >= 4.9674631165863596"
+        }
+      ]
+    },
+    {
+      "layer": "R5B13_APPROVE_TO_BLOCK",
+      "rules": [
+        {
+          "candidate_id": "categorical_4__ds_tipo_chave_norm_==_DOCUMENTO_TELEFONE_AND_periodo_dia_==_manha_AND_score_bin_==_score_GE_10_AND_lgbm_bin_==_lgbm_GE_0.1",
+          "rule_type": "categorical_4",
+          "description": "ds_tipo_chave_norm == DOCUMENTO_TELEFONE AND periodo_dia == manha AND score_bin == score_GE_10 AND lgbm_bin == lgbm_GE_0.1",
+          "n_affected": 22,
+          "fraud_count": 1,
+          "normal_count": 21,
+          "precision_for_block": 0.04545455,
+          "selection_step": 1,
+          "incremental_frauds": 1,
+          "incremental_normals": 21,
+          "cumulative_frauds": 1,
+          "cumulative_normals": 21
+        },
+        {
+          "candidate_id": "categorical_4__periodo_dia_==_noite_AND_score_bin_==_score_1_2_AND_lgbm_bin_==_lgbm_GE_0.1_AND_ratio_bin_==_ratio_GE_5",
+          "rule_type": "categorical_4",
+          "description": "periodo_dia == noite AND score_bin == score_1_2 AND lgbm_bin == lgbm_GE_0.1 AND ratio_bin == ratio_GE_5",
+          "n_affected": 27,
+          "fraud_count": 1,
+          "normal_count": 26,
+          "precision_for_block": 0.03703704,
+          "selection_step": 2,
+          "incremental_frauds": 1,
+          "incremental_normals": 26,
+          "cumulative_frauds": 2,
+          "cumulative_normals": 47
+        }
+      ]
+    },
+    {
+      "layer": "R5B14_CONFIRM_TO_APPROVE_COMPENSATION",
+      "rule": {
+        "base_action": "CONFIRMAR",
+        "target_action": "APROVAR",
+        "description": "lgbm_raw <= 1.966e-05",
+        "lgbm_raw_max": 1.966e-05
+      }
+    }
+  ],
+  "core_replay_checks": {
+    "intervention_metrics_match_r5b14": true,
+    "block_metrics_match_r5b14": true,
+    "r5b12_counts_match_r5b14": true,
+    "approve_to_block_counts_match_r5b14": true,
+    "compensation_counts_match_r5b14": true
+  },
+  "sources": [
+    {
+      "path": "resultados\\experimentos\\EXP-014B-R5B15-CORE-POLICY-REPLAY\\00_run_summary.json",
+      "sha256": "b797c7160664a17c9d5de09ec475ea25424cbee7ecd1fa390f8355ab6f64459f",
+      "bytes": 3482
+    },
+    {
+      "path": "resultados\\experimentos\\EXP-014B-R5B15-CORE-POLICY-REPLAY\\01_metrics_by_action.csv",
+      "sha256": "b48973cba93ecfb60e1a3606e469c694aea43824c9eb782738a3560d62ff5a51",
+      "bytes": 166
+    },
+    {
+      "path": "backend\\artefatos_candidatos\\exp014b_r5b14_operational_zero_fn\\operational_zero_fn_policy_candidate.json",
+      "sha256": "ac820c3d6772ad7e747673d2f22a8228dff865552c54179271e2ce907678a6c6",
+      "bytes": 3463
+    },
+    {
+      "path": "backend\\core\\severity_policy.py",
+      "sha256": "5d9bc65ef46b68a612dbbfb656afead938d8cb3645657143e3a3378e7545b7ee",
+      "bytes": 12233
+    },
+    {
+      "path": "backend\\core\\pipeline_orquestrador.py",
+      "sha256": "a9a20fdd991cb25a2e2a9725fba8adaa19f3b7a295e93fd010328eeabb96041a",
+      "bytes": 76876
+    }
+  ],
+  "promotion_gates": [
+    "Executar replay batch completo no ambiente produtivo com dependencias do PipelineOrquestrador.",
+    "Revisar semanticamente as regras R5B14 com risco/negocio.",
+    "Ativar somente por configuracao versionada, nunca por default implicito.",
+    "Monitorar drift de lgbm_raw e bins usados pelas regras antes de producao."
+  ]
+}

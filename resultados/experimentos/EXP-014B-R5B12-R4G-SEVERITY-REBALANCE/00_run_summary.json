@@ -1,0 +1,62 @@
+{
+  "experiment": "EXP-014B-R5B12-R4G-SEVERITY-REBALANCE",
+  "status": "PASS_R5B12_ALL_CONFIRM_FRAUDS_PROMOTED_GLOBAL_TARGET_PRESERVED",
+  "input_file": "resultados\\experimentos\\EXP-014B-R4G-FAST-FROZEN\\06_predictions_frozen.csv",
+  "base_action_col": "r4g_fast_frozen_decisao_recommended",
+  "final_action_col": "r5b12_severity_rebalanced_decisao",
+  "move_col": "exp014b_r5b12_confirm_to_block",
+  "recommended_normal_cap": 50,
+  "n_candidates": 857,
+  "n_selected_rules": 5,
+  "confirm_frauds_before": 5,
+  "confirm_normals_before": 357,
+  "confirm_frauds_promoted_to_block": 5,
+  "confirm_normals_promoted_to_block": 22,
+  "remaining_confirm_frauds": 0,
+  "remaining_approve_frauds": 2,
+  "base_intervention_metrics": {
+    "tp": 1463,
+    "fp": 1123,
+    "fn": 2,
+    "tn": 111256,
+    "precision": 0.56573859,
+    "recall": 0.99863481,
+    "f1": 0.72229079,
+    "fpr": 0.00999297
+  },
+  "base_block_metrics": {
+    "tp": 1458,
+    "fp": 766,
+    "fn": 7,
+    "tn": 111613,
+    "precision": 0.65557554,
+    "recall": 0.99522184,
+    "f1": 0.79045812,
+    "fpr": 0.00681622
+  },
+  "final_intervention_metrics": {
+    "tp": 1463,
+    "fp": 1123,
+    "fn": 2,
+    "tn": 111256,
+    "precision": 0.56573859,
+    "recall": 0.99863481,
+    "f1": 0.72229079,
+    "fpr": 0.00999297
+  },
+  "final_block_metrics": {
+    "tp": 1463,
+    "fp": 788,
+    "fn": 2,
+    "tn": 111591,
+    "precision": 0.64993336,
+    "recall": 0.99863481,
+    "f1": 0.78740581,
+    "fpr": 0.00701199
+  },
+  "global_gates": {
+    "fpr_lt_1pct": true,
+    "fn_lte_5": true
+  },
+  "zero_fraud_block_to_confirm_candidates_on_r4g": 0
+}

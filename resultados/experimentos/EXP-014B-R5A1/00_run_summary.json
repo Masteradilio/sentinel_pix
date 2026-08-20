@@ -1,0 +1,16 @@
+{
+  "experiment": "EXP-014B-R5A1",
+  "status": "DONE",
+  "baseline_experiment": "EXP-014B-R4G-FAST-FROZEN",
+  "created_at": "2026-06-10T18:59:50.362949+00:00",
+  "input_predictions_path": "C:\\Users\\u857755\\OneDrive - BRB - Banco de Brasilia SA\\Documentos\\Projetos\\squad_IA\\PIX\\rebuild_pix\\resultados\\experimentos\\EXP-014B-R4G-FAST-FROZEN\\06_predictions_frozen.csv",
+  "used_fallback": false,
+  "n_rows": 113844,
+  "n_columns": 205,
+  "n_minimal_replay_columns": 5,
+  "n_lgbm_train_contract_features": 65,
+  "n_policy_or_legacy_columns": 91,
+  "n_raw_or_engineered_feature_columns": 77,
+  "n_redundancy_candidates": 32,
+  "output_dir": "C:\\Users\\u857755\\OneDrive - BRB - Banco de Brasilia SA\\Documentos\\Projetos\\squad_IA\\PIX\\rebuild_pix\\resultados\\experimentos\\EXP-014B-R5A1"
+}

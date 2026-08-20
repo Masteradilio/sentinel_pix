@@ -1,96 +1,96 @@
 
 
-# Relatório Técnico — Motor de Decisão Antifraude PIX v3.0.5
+# Relatório Técnico — Motor de Decisão Antifraude PIX 1.5.0-r5b22
 
-**Projeto:** rebuild_pix | **Versão:** v3.0.5 (Cascade v3 + Fast-Approve)
-**Data:** 12 de abril de 2026 | **Autor:** Adilio + AI Engineer
+**Projeto:** rebuild_pix | **Versão:** 1.5.0-r5b22 (Baseline Oficial R5B22)
+**Data:** 12 de junho de 2026 | **Autor:** Adilio + AI Engineer
 **Classificação:** Documento técnico interno
 
 ---
 
 ## 1. Resumo Executivo
 
-O motor de decisão antifraude PIX é um sistema **ensemble multi-camada** que combina modelos de machine learning supervisionado e não-supervisionado com regras baseadas em engenharia de features comportamentais e de engenharia social. O objetivo é classificar transações PIX em tempo real em três decisões: **APROVAR**, **CONFIRMAR** (revisão manual) ou **BLOQUEAR** (rejeição automática).
+O motor de decisão antifraude PIX é a engrenagem central coordenada pelo `PipelineOrquestrador`. No seu estado atual (R5B22), ele consolida o modelo de aprendizado de máquina destilado, um conjunto de regras estritas de mitigação de falso negativo (R5B14) e as heurísticas refinadas oficiais R5B22. O sistema é regido por flags ativáveis via `scoring_config.json`, permitindo escalabilidade determinística de `APROVAR`, `CONFIRMAR` e `BLOQUEAR`.
 
-### Resultados Finais (v3.0.5)
+### Resultados Finais do Baseline Oficial (R5B22)
 
-| Métrica | Valor |
+Base de validação: 113.844 transações (1.465 fraudes confirmadas).
+
+| Métrica Global (Intervenção) | Valor |
 |---|---|
-| **Recall (Sensibilidade)** | **99,15%** (352/355) |
-| **Precision** | **68,87%** |
-| **F1-Score** | **0,8129** |
-| **False Positive Rate** | **0,159%** (159 em 100k normais) |
-| **Fraudes Perdidas (FN)** | **3** (valor: R$ 3.166,76) |
-| **Precision na faixa BLOQUEAR** | **85,89%** (347 TP / 404 total) |
+| **TP** | 1.463 |
+| **FP** | 1.076 |
+| **FN** | 2 |
+| **TN** | 111.303 |
+| **Precision** | 57,62% |
+| **Recall (Sensibilidade)** | 99,86% |
+| **F1-Score** | 0,73 |
+| **False Positive Rate** | 0,957% |
 
-O sistema detecta **99,15% das fraudes** com uma taxa de falso positivo de apenas **0,159%**, operando sobre um dataset com **100.355 transações** e taxa de fraude real de **0,35%** — um cenário de alto desbalanceamento típico de produção.
+| Métrica Específica (Faixa BLOQUEAR) | Valor |
+|---|---|
+| **TP** | 1.453 |
+| **FP** | 760 |
+| **Precision** | 65,65% |
+| **Recall** | 99,18% |
+| **FN fora de BLOQUEAR** | 12 |
 
-### Evolução v1.3 → v3.0.5
+**Distribuição Operacional:**
+- **APROVAR:** 111.305 transações | 2 fraudes | 111.303 normais
+- **CONFIRMAR:** 326 transações | 10 fraudes | 316 normais
+- **BLOQUEAR:** 2.213 transações | 1.453 fraudes| 760 normais
 
-| Métrica | v1.3 | v3.0.5 | Delta |
-|---|---|---|---|
-| Precision | 62,97% | **68,87%** | **+5,9pp** |
-| FP total | 207 | **159** | **-48 (-23,2%)** |
-| Precision BLOQUEAR | 81,84% | **85,89%** | **+4,1pp** |
-| FP em BLOQUEAR | 77 | **57** | **-20 (-26%)** |
-| Recall | 99,15% | 99,15% | inalterado |
-| FN | 3 | 3 | inalterado |
-| F1 | 0,7702 | **0,8129** | **+0,043 (+5,5%)** |
-
-A v3.0.5 eliminou **48 falsos positivos** sem perder nenhuma fraude, através de duas mudanças cirúrgicas: **Fast-Approve override** (desabilita vetos IF-based quando LGBM discorda) e **Cascade C3 com LGBM guard** (exige confirmação do modelo supervisionado).
+Esses números respeitam ativamente os "gates" de não regressão do baseline: FPR global abaixo de 1%, máximo de 5 fraudes escapando em `APROVAR` e 10 fraudes toleráveis em `CONFIRMAR`.
 
 ---
 
 ## 2. Arquitetura do Motor de Decisão
 
-O pipeline de decisão executa **9 etapas sequenciais**, onde cada camada pode elevar o score de risco mas nunca reduzi-lo (princípio monotônico de segurança), com exceção do **Fast-Approve** que pode suprimir elevações indevidas:
+O pipeline de decisão (gerenciado via `PipelineOrquestrador` e `PixDecisionEngine`) obedece a um encadeamento determinístico onde flags oficiais e politicas atuam em cascata. O estado atual é pautado pela destilação do aprendizado.
 
-```
+```text
 ┌─────────────────────────────────────────────────────────────┐
-│                    TRANSAÇÃO PIX (features)                  │
+│                    TRANSAÇÃO PIX (features_dict)             │
 └──────────────────────┬──────────────────────────────────────┘
                        ▼
-              ┌────────────────┐
-              │  1. LGBM Score │  ← Modelo supervisionado (prob 0→1)
-              └───────┬────────┘
-                      ▼
-              ┌────────────────┐
-              │ 2. Isolation   │  ← Modelo não-supervisionado (percentil)
-              │    Forest (IF) │
-              └───────┬────────┘
-                      ▼
-              ┌────────────────┐
-              │ 3. Cascade v3  │  ← C1 (burst) + C3 (IF+burst+LGBM guard)
-              └───────┬────────┘
-                      ▼
-              ┌────────────────┐
-              │  4. Ensemble   │  ← Combinação LGBM + Cascade
-              │     Score      │     → score 0-100
-              └───────┬────────┘
-                      ▼
-              ┌────────────────┐
-              │ 5. SE Score    │  ← Social Engineering (0-100)
-              └───────┬────────┘
-                      ▼
-              ┌────────────────┐
-              │ 6. BEH Score   │  ← Behavioral: velocity + age/value
-              └───────┬────────┘
-                      ▼
               ┌──────────────────┐
-              │ 7. Fast-Approve  │  ← NOVO v3.0.5: LGBM < 0.25 + SE=0
-              │    Override      │     + BEH=0 → suprime vetos IF-based
+              │ 1. Orquestrador  │  Enriquecimento de Sinais, 
+              │    (Feature Eng) │  BEH Score, SE Score, IF, LGBM
               └───────┬──────────┘
                       ▼
-              ┌────────────────┐
-              │  8. Vetos      │  ← 9 regras hierárquicas com prioridade
-              │  (9 regras)    │     podem forçar CONFIRMAR ou BLOQUEAR
-              └───────┬────────┘
+              ┌──────────────────┐
+              │ 2. Contrato      │  Avalia output e produz a base congelada:
+              │    Professor     │  r4g_fast_frozen_decisao_recommended
+              │    (R5B16/18)    │
+              └───────┬──────────┘
                       ▼
-              ┌────────────────┐
-              │  9. Decisão    │  ← score ≥ 95 → BLOQUEAR
-              │     Final      │     score ≥ 77 → CONFIRMAR
-              └────────────────┘     score < 77 → APROVAR
+              ┌──────────────────┐
+              │ 3. Política      │  Aplica as 8 regras R5B14 de baixa
+              │    R5B14         │  tolerância a falso negativo
+              └───────┬──────────┘
+                      ▼
+              ┌──────────────────┐
+              │ 4. Modelo Aluno  │  Utilizando os dados, o LGBM destilado
+              │    Destilado     │  aproxima a decisão ideal (baseada no 
+              │    (R5B22)       │  professor)
+              └───────┬──────────┘
+                      ▼
+              ┌──────────────────┐
+              │ 5. Política      │  O motor aplica as heurísticas finais
+              │    Oficial R5B22 │  R5B22 (ex: DEMOTE_LAYER...) para gerir FPR
+              └───────┬──────────┘
+                      ▼
+              ┌──────────────────┐
+              │ 6. Decisão       │  APROVAR / CONFIRMAR / BLOQUEAR
+              │    Final         │
+              └──────────────────┘
 ```
+
+A arquitetura oficial de validação em código (`backend/core/decision_engine.py`) obedece ativamente as seguintes flags operacionais globais em `scoring_config.json`:
+- `r5b14_operational_zero_fn_enabled=true`
+- `r5b16_frozen_contract_enabled=true`
+- `r5b22_official_baseline_enabled=true`
+- `official_baseline_policy=R5B22_OFFICIAL_CONSTRAINED_BASELINE`
 
 ---
 
@@ -331,28 +331,33 @@ $$
 
 ---
 
-### 3.8 Sistema de Vetos — 9 Regras Hierárquicas
+### 3.8 Sistema de Regras — Contrato R5B14 e R5B22
 
-**Papel:** Mecanismo de override que pode forçar uma decisão de CONFIRMAR ou BLOQUEAR, independentemente do score natural. Os vetos são avaliados em ordem de prioridade — o primeiro que ativar ganha.
+**Papel:** O R5B22 orquestra um mecanismo de override com heurísticas seguras para prevenir falso negativo (via R5B14) e controlar falso positivo sem perder bloqueios genuínos (via demotions R5B22).
 
-**Hierarquia de vetos (v3.0.5):**
+**Regras R5B14 (Prevenção de Falso Negativo Ativa):**
 
-| # | Condição | Ação | Afetado por FA |
-|---|---|---|---|
-| 0 | Fast-Approve: LGBM < 0,25 + SE=0 + BEH=0 | Suprime vetos IF-based | — |
-| 1 | Cascade C1 (burst ≥ 3) | BLOQUEAR | **Não** |
-| 2 | LGBM ≥ 90% + IF ≥ 90% (convergência) | BLOQUEAR | Sim |
-| 3 | IF ≥ 99,5% + score ≥ 50 + LGBM ≥ 0,25 | BLOQUEAR | Sim |
-| 4 | SE ≥ 60 + BEH ≥ 25 (convergência) | BLOQUEAR | **Não** |
-| 5 | Cascade C3 (IF + burst + LGBM guard) | CONFIRMAR | Já tem LGBM guard |
-| 6 | LGBM solo ≥ 90% | CONFIRMAR | **Não** |
-| 7 | SE ≥ 60 (crítico) | CONFIRMAR | **Não** |
-| 8 | SE ≥ 40 + BEH ≥ 15 + valor ≥ 15k + rel ≤ 12m | CONFIRMAR | **Não** |
-| 9 | BEH ≥ 40 + velocity + age_value | CONFIRMAR | **Não** |
+| Regra R5B14 | Ação/Intervenção |
+|---|---|
+| `R5B14_CTB_01_LGBM_RAW_HIGH` | Elevação severa ao ultrapassar limiar preditivo puro |
+| `R5B14_CTB_02_SCORE_2_3_LGBM_R4_HIGH` | Contenção baseada em score final R4 vs Raw High |
+| `R5B14_CTB_03_SCORE_2_3_LGBM_R4_MED` | Contenção baseada em score final R4 vs Raw Med |
+| `R5B14_CTB_04_DOC_PHONE_HIGH_PAYER_COUNT` | Gatilho via telefone/documento + fan-out pagador alto |
+| `R5B14_CTB_05_OUTROS_RATIO_MAX_HIGH` | Gatilho de proporção de valor vs máximo histórico |
+| `R5B14_ATB_01_DOC_PHONE_MORNING_SCORE_HIGH` | Gatilho matutino para telefone/documento score alto |
+| `R5B14_ATB_02_NIGHT_SCORE_1_2_RATIO_HIGH` | Gatilho noturno vs ratio outlier |
+| `R5B14_CTA_01_LOW_LGBM_RAW_COMPENSATION` | Desescalonamento para score puro ínfimo |
 
-**Vetos aplicados na simulação:** 447 (vs 488 na v1.3, redução de -41 vetos IF-based)
+**Regras Oficiais R5B22 (Redução de Falsos Positivos Ativa):**
 
-**Princípio de design:** Os vetos baseados em SE/BEH **nunca** são suprimidos pelo Fast-Approve — eles capturam sinais comportamentais independentes dos modelos. Apenas os vetos que dependem exclusivamente do IF são condicionados à concordância do LGBM.
+| Regra R5B22 | Ação de Demotion (Suavização) |
+|---|---|
+| `DEMOTE_LAYER_APPROVE_TO_BLOCK_TO_APROVAR` | Suaviza severidade restrita não respaldada |
+| `DEMOTE_LAYER_CONFIRM_TO_BLOCK_TO_CONFIRMAR` | Reverte o escalonamento severo sem indícios |
+| `DEMOTE_CAT2_ds_tipo_chave_norm_OUTROS__lgbm_bin_lgbm_0.05_0.1` | Desescalona para CONFIRMAR na zona cinza estatística |
+| `DEMOTE_CAT2_value_band_E_5000_10000__lgbm_bin_lgbm_0.05_0.1` | Desescalona valor E / zona cinza estatística para CONFIRMAR |
+
+Essas heurísticas combinadas promovem a calibragem fina que a decisão algorítmica destilada herda.
 
 ---
 

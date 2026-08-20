@@ -1,0 +1,57 @@
+{
+  "lgbm_solo_040": {
+    "label": "LGBM solo @0.40",
+    "TP": 0,
+    "FP": 0,
+    "FN": 1465,
+    "TN": 535,
+    "Precision": 0.0,
+    "Recall": 0.0,
+    "F1": 0.0,
+    "FPR": 0.0
+  },
+  "lgbm_plus_if": {
+    "label": "LGBM + IF",
+    "TP": 0,
+    "FP": 0,
+    "FN": 1465,
+    "TN": 535,
+    "Precision": 0.0,
+    "Recall": 0.0,
+    "F1": 0.0,
+    "FPR": 0.0
+  },
+  "se_solo_60": {
+    "label": "SE solo ≥60",
+    "TP": 0,
+    "FP": 0,
+    "FN": 1465,
+    "TN": 535,
+    "Precision": 0.0,
+    "Recall": 0.0,
+    "F1": 0.0,
+    "FPR": 0.0
+  },
+  "beh_solo_40": {
+    "label": "BEH solo ≥40",
+    "TP": 0,
+    "FP": 0,
+    "FN": 1465,
+    "TN": 535,
+    "Precision": 0.0,
+    "Recall": 0.0,
+    "F1": 0.0,
+    "FPR": 0.0
+  },
+  "pipeline_full": {
+    "label": "PIPELINE FULL",
+    "TP": 1463,
+    "FP": 5,
+    "FN": 2,
+    "TN": 530,
+    "Precision": 0.996594,
+    "Recall": 0.998635,
+    "F1": 0.997613,
+    "FPR": 0.00934579
+  }
+}

@@ -1,0 +1,74 @@
+# DATA_INTAKE_CONTRACT — Antifraude PIX
+
+Gerado em: `2026-05-12T18:06:39`
+
+## Objetivo
+
+Definir o contrato mínimo para entrada de novos dados de transações e novos labels de fraude no projeto antifraude PIX.
+
+## Baseline alvo
+
+- `model_version`: `post_fase2_c1`
+- `status`: `ACTIVE_BASELINE`
+
+## Colunas obrigatórias de transações
+
+- `transaction_id`
+- `customer_id`
+- `is_fraud`
+- `vl_pix`
+- `qt_tempo_relacionamento_mes`
+- `first_receiver_flag`
+- `pix_key_random_flag`
+
+## Colunas necessárias para validação da C1
+
+- `vl_pix`
+- `qt_tempo_relacionamento_mes`
+- `first_receiver_flag`
+- `pix_key_random_flag`
+
+## Colunas recomendadas
+
+- `dt_transacao`
+- `idade_cliente`
+- `tipo_pessoa`
+- `canal`
+- `chave_pix_tipo`
+- `uf_origem`
+- `uf_destino`
+- `device_id`
+- `ip`
+- `merchant_category`
+
+## Contrato de labels
+
+Colunas obrigatórias:
+
+- `transaction_id`
+- `is_fraud`
+
+Colunas recomendadas:
+
+- `fraud_type`
+- `label_source`
+- `label_created_at`
+- `label_confidence`
+- `chargeback_flag`
+- `confirmed_by_human`
+
+## Regras mínimas
+
+- `transaction_id` deve ser único no arquivo de transações.
+- `transaction_id` deve permitir join com labels quando labels existirem.
+- `is_fraud` deve usar valores `0` ou `1`.
+- Colunas obrigatórias não devem vir nulas.
+- Mudanças grandes de distribuição em `vl_pix`, relacionamento ou flags devem ser tratadas como drift.
+- Novos dados não devem sobrescrever o baseline oficial; devem ser avaliados em diretório próprio.
+
+## Arquivos técnicos gerados
+
+- `01_transaction_schema_contract.csv`
+- `02_transaction_schema_contract.json`
+- `03_label_schema_contract.json`
+- `05_feature_compatibility_report.csv`

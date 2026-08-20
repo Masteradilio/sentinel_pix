@@ -1,9 +1,0 @@
-{
-  "scoring_config": {
-    "path": "C:\\Users\\u857755\\OneDrive - BRB - Banco de Brasilia SA\\Documentos\\Projetos\\squad_IA\\PIX\\rebuild_pix\\backend\\artefatos\\scoring_config.json",
-    "valid_json": true,
-    "type": "dict"
-  },
-  "candidate_model_exists": true,
-  "candidate_features_exists": true
-}

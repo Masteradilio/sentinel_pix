@@ -1,0 +1,50 @@
+{
+  "artifact_type": "global_policy_candidate",
+  "experiment": "EXP-014B-R5B11-CHAMPION-RECONCILIATION",
+  "status": "CANDIDATE_NOT_PRODUCTION_ACTIVE",
+  "source_policy": "resultados\\experimentos\\EXP-014B-R4G-FAST-FROZEN\\05_policy_artifact_frozen.json",
+  "source_predictions": "resultados\\experimentos\\EXP-014B-R4G-FAST-FROZEN\\06_predictions_frozen.csv",
+  "recommended_action_col": "r4g_fast_frozen_decisao_recommended",
+  "intervention_definition": "CONFIRMAR_OR_BLOQUEAR",
+  "block_definition": "BLOQUEAR",
+  "metrics": {
+    "global_intervention": {
+      "tp": 1463,
+      "fp": 1123,
+      "fn": 2,
+      "tn": 111256,
+      "precision": 0.56573859,
+      "recall": 0.99863481,
+      "f1": 0.72229079,
+      "fpr": 0.00999297
+    },
+    "block_only": {
+      "tp": 1458,
+      "fp": 766,
+      "fn": 7,
+      "tn": 111613,
+      "precision": 0.65557554,
+      "recall": 0.99522184,
+      "f1": 0.79045812,
+      "fpr": 0.00681622
+    }
+  },
+  "target_gates": {
+    "fpr_lt_1pct": true,
+    "fn_lte_5_outside_block": true
+  },
+  "incompatibilities": [
+    {
+      "artifact": "backend\\artefatos_candidatos\\exp014b_r5b10_severity_policy\\severity_policy_candidate.json",
+      "reason": "Quando empilhado sobre R4G, demove fraudes de BLOQUEAR para CONFIRMAR.",
+      "frauds_demoted_to_confirm": 115,
+      "normals_demoted_to_confirm": 23
+    }
+  ],
+  "promotion_gates": [
+    "Conectar a politica R4G congelada por configuracao versionada.",
+    "Executar replay E2E do PipelineOrquestrador contra o CSV R4G congelado.",
+    "Bloquear empilhamento automatico da severidade R5B10 sobre R4G.",
+    "Criar nova trilha de severidade especifica para o residual BLOQUEAR do R4G."
+  ]
+}

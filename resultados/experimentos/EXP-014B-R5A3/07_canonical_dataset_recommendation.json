@@ -1,0 +1,36 @@
+{
+  "canonical_dataset_recommended": {
+    "source_hql": "dados/scripts_origem/tb_pix_dataset_v3_features_180d_v1.hql",
+    "full_csv": "dados/hmo_ml_tb_pix_dataset_v3_features_180d_v1.csv",
+    "train_split": "dados/hmo_ml_tb_pix_dataset_v3_features_180d_v1_TRAIN.csv",
+    "validation_split": "dados/hmo_ml_tb_pix_dataset_v3_features_180d_v1_VALIDATION.csv",
+    "holdout_split": "dados/hmo_ml_tb_pix_dataset_v3_features_180d_v1_HOLDOUT.csv",
+    "n_frauds": 1465,
+    "total_rows": 113844,
+    "normals": 112379,
+    "temporal_range": "2025-11-28 -> 2026-05-26",
+    "rationale": "Este dataset incorpora a totalidade dos novos casos de fraude do MAF (aumento de 355 para 1465 casos), juntamente com a amostragem qualificada de normais no mesmo período transacional. Utiliza a linhagem correta rolling-window de 180 dias calculada nativamente no Big Data do banco, eliminando leakage."
+  },
+  "required_actions": [
+    {
+      "action": "Ajustar caminhos nos scripts de treino",
+      "description": "Atualizar a constante INPUT_DATA nos scripts de treino para ler diretamente os novos splits canônicos.",
+      "status": "PENDENTE"
+    },
+    {
+      "action": "Treinar modelo LightGBM Canônico",
+      "description": "Treinar LGBM em hmo_ml_tb_pix_dataset_v3_features_180d_v1_TRAIN.csv e validar em VALIDATION/HOLDOUT, salvando artefatos em backend/artefatos.",
+      "status": "PENDENTE"
+    },
+    {
+      "action": "Treinar Isolation Forest Canônico",
+      "description": "Treinar IF em hmo_ml_tb_pix_dataset_v3_features_180d_v1_TRAIN.csv e validar em VALIDATION/HOLDOUT, salvando artefatos em backend/artefatos.",
+      "status": "PENDENTE"
+    },
+    {
+      "action": "Atualizar arquivos lgbm_features.json e if_features.json",
+      "description": "Congelar a taxonomia definitiva de features de treino do novo LGBM e IF em backend/artefatos.",
+      "status": "PENDENTE"
+    }
+  ]
+}

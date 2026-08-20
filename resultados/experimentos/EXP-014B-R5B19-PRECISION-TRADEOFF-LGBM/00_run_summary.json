@@ -1,0 +1,109 @@
+{
+  "experiment": "EXP-014B-R5B19-PRECISION-TRADEOFF-LGBM",
+  "status": "FAIL_R5B19_PRECISION_TRADEOFF_LGBM",
+  "fn_budget": 10,
+  "baseline_r5b16": {
+    "global": {
+      "tp": 1465,
+      "fp": 1123,
+      "fn": 0,
+      "tn": 111256,
+      "precision": 0.56607419,
+      "recall": 1.0,
+      "f1": 0.72292129,
+      "fpr": 0.00999297
+    },
+    "block": {
+      "tp": 1465,
+      "fp": 835,
+      "fn": 0,
+      "tn": 111544,
+      "precision": 0.63695652,
+      "recall": 1.0,
+      "f1": 0.77822045,
+      "fpr": 0.00743021
+    }
+  },
+  "tradeoff_summary": {
+    "target_action_for_demotions": "PER_RULE",
+    "demoted_rows": 76,
+    "demoted_frauds": 7,
+    "demoted_normals": 69,
+    "remaining_approve_frauds": 2,
+    "remaining_confirm_frauds": 5,
+    "fn_outside_block": 7,
+    "global_intervention_metrics": {
+      "tp": 1463,
+      "fp": 1076,
+      "fn": 2,
+      "tn": 111303,
+      "precision": 0.57621111,
+      "recall": 0.99863481,
+      "f1": 0.73076923,
+      "fpr": 0.00957474
+    },
+    "block_metrics": {
+      "tp": 1458,
+      "fp": 766,
+      "fn": 7,
+      "tn": 111613,
+      "precision": 0.65557554,
+      "recall": 0.99522184,
+      "f1": 0.79045812,
+      "fpr": 0.00681622
+    }
+  },
+  "selected_rules": [
+    {
+      "rule_id": "DEMOTE_LAYER_APPROVE_TO_BLOCK_TO_APROVAR",
+      "description": "r5b18_e2e_contract_decisao == BLOQUEAR AND r5b14_layer_applied == APPROVE_TO_BLOCK",
+      "target_action": "APROVAR",
+      "n_rows": 49,
+      "n_frauds": 2,
+      "n_normals": 47,
+      "precision_for_normal": 0.95918367,
+      "incremental_n_rows": 49,
+      "incremental_n_frauds": 2,
+      "incremental_n_normals": 47
+    },
+    {
+      "rule_id": "DEMOTE_LAYER_CONFIRM_TO_BLOCK_TO_CONFIRMAR",
+      "description": "r5b18_e2e_contract_decisao == BLOQUEAR AND r5b14_layer_applied == CONFIRM_TO_BLOCK",
+      "target_action": "CONFIRMAR",
+      "n_rows": 27,
+      "n_frauds": 5,
+      "n_normals": 22,
+      "precision_for_normal": 0.81481481,
+      "incremental_n_rows": 27,
+      "incremental_n_frauds": 5,
+      "incremental_n_normals": 22
+    }
+  ],
+  "lgbm_isolated": {
+    "best_score_col": "lgbm_r4_score",
+    "best_threshold": 0.0009900862588032718,
+    "metrics": {
+      "tp": 1455,
+      "fp": 42375,
+      "fn": 10,
+      "tn": 70004,
+      "precision": 0.03319644,
+      "recall": 0.99317406,
+      "f1": 0.0642455,
+      "fpr": 0.37707223
+    },
+    "ratio_to_r5b16_global": {
+      "precision_ratio": 0.05864327,
+      "recall_ratio": 0.99317406,
+      "f1_ratio": 0.08886929,
+      "fpr_ratio": 37.73374983
+    },
+    "passes_80pct_precision_recall_f1": false
+  },
+  "target_gates": {
+    "tradeoff_fn_outside_block_lte_10": true,
+    "tradeoff_block_precision_improved": true,
+    "tradeoff_block_fp_reduced": true,
+    "lgbm_isolated_reaches_80pct_precision_recall_f1": false
+  }
+}

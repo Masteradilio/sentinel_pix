@@ -1,0 +1,13 @@
+{
+  "contract_ok": false,
+  "missing": [
+    "base_or_final_prediction_column",
+    "feature_or_bin:if_bin",
+    "feature_or_bin:score_bin"
+  ],
+  "final_pred_cols_present": [],
+  "base_pred_cols_present": [],
+  "has_score_final": false,
+  "has_if_percentile": false,
+  "has_decisao": false
+}

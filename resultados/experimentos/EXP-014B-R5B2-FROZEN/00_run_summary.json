@@ -1,0 +1,55 @@
+{
+  "experiment": "EXP-014B-R5B2-FROZEN",
+  "source_experiment": "EXP-014B-R5B2-CALIBRATION",
+  "status": "PASS_R5B2_FROZEN_REPLAYED",
+  "all_pass": true,
+  "n_rows": 113844,
+  "n_frauds": 1465,
+  "n_rules": 60,
+  "all_rules_match_artifact_incremental": true,
+  "prediction_mismatches_vs_calibration": 0,
+  "block_fp_demoted_to_confirm": 11067,
+  "block_tp_demoted_to_confirm": 0,
+  "baseline_intervention_metrics": {
+    "tp": 783,
+    "fp": 15584,
+    "fn": 682,
+    "tn": 96795,
+    "precision": 0.04784017,
+    "recall": 0.53447099,
+    "f1": 0.08781965,
+    "fpr": 0.1386736
+  },
+  "baseline_block_metrics": {
+    "tp": 279,
+    "fp": 14220,
+    "fn": 1186,
+    "tn": 98159,
+    "precision": 0.01924271,
+    "recall": 0.19044369,
+    "f1": 0.03495365,
+    "fpr": 0.1265361
+  },
+  "final_intervention_metrics": {
+    "tp": 783,
+    "fp": 15584,
+    "fn": 682,
+    "tn": 96795,
+    "precision": 0.04784017,
+    "recall": 0.53447099,
+    "f1": 0.08781965,
+    "fpr": 0.1386736
+  },
+  "final_block_metrics": {
+    "tp": 279,
+    "fp": 3153,
+    "fn": 1186,
+    "tn": 109226,
+    "precision": 0.08129371,
+    "recall": 0.19044369,
+    "f1": 0.11394731,
+    "fpr": 0.02805684
+  },
+  "remaining_approve_frauds": 682,
+  "remaining_block_normals": 3153
+}

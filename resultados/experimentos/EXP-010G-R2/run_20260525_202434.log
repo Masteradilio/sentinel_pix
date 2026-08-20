@@ -1,0 +1,95 @@
+20:24:36 [INFO] Carregando dataset v2...
+20:24:38 [INFO] Adaptando schema EXP-010G -> RAW preprocessing...
+20:24:40 [INFO] Base adaptada: 100000 linhas | 1306 fraudes | 98694 normais
+20:24:40 [INFO] Deduplicando por cd_pix...
+20:24:41 [INFO] Feature engineering completa...
+20:24:41 [INFO] Criando features sequenciais por cliente...
+20:24:41 [INFO]   Calculando tx_count_prev_30m (janela 30min)...
+20:25:35 [INFO] Deduplicação final por transaction_id...
+20:25:36 [INFO] Fix leakage temporal rolling 90d por CPF...
+20:25:36 [INFO] Iniciando fix de leakage temporal (rolling 90d por CPF)...
+20:25:55 [INFO]   5000/76160 CPFs (6%) — 19s, ~269s restantes
+20:26:15 [INFO]   10000/76160 CPFs (13%) — 38s, ~254s restantes
+20:26:34 [INFO]   15000/76160 CPFs (19%) — 57s, ~234s restantes
+20:26:53 [INFO]   20000/76160 CPFs (26%) — 77s, ~216s restantes
+20:27:12 [INFO]   25000/76160 CPFs (32%) — 96s, ~197s restantes
+20:27:30 [INFO]   30000/76160 CPFs (39%) — 114s, ~175s restantes
+20:27:48 [INFO]   35000/76160 CPFs (45%) — 132s, ~155s restantes
+20:28:05 [INFO]   40000/76160 CPFs (52%) — 149s, ~135s restantes
+20:28:23 [INFO]   45000/76160 CPFs (59%) — 167s, ~116s restantes
+20:28:41 [INFO]   50000/76160 CPFs (65%) — 185s, ~97s restantes
+20:28:58 [INFO]   55000/76160 CPFs (72%) — 202s, ~78s restantes
+20:29:16 [INFO]   60000/76160 CPFs (78%) — 220s, ~59s restantes
+20:29:33 [INFO]   65000/76160 CPFs (85%) — 237s, ~41s restantes
+20:29:51 [INFO]   70000/76160 CPFs (91%) — 255s, ~22s restantes
+20:30:09 [INFO]   75000/76160 CPFs (98%) — 273s, ~4s restantes
+20:30:13 [INFO]   76160/76160 CPFs (100%) — 277s, ~0s restantes
+20:30:13 [INFO]   \u2705 Rolling features calculadas em 276.7s
+20:30:13 [INFO] Recalculando features derivadas pós-leakage fix...
+20:30:13 [INFO] Graph features temporais incrementais...
+20:30:13 [INFO] Calculando graph features TEMPORAIS (grafo incremental)...
+20:30:13 [INFO]   Graph: 5000/100000 tx (5%) — 0s, ~3s restantes
+20:30:13 [INFO]   Graph: 10000/100000 tx (10%) — 0s, ~2s restantes
+20:30:13 [INFO]   Graph: 15000/100000 tx (15%) — 0s, ~1s restantes
+20:30:13 [INFO]   Graph: 20000/100000 tx (20%) — 0s, ~1s restantes
+20:30:13 [INFO]   Graph: 25000/100000 tx (25%) — 0s, ~1s restantes
+20:30:13 [INFO]   Graph: 30000/100000 tx (30%) — 0s, ~1s restantes
+20:30:13 [INFO]   Graph: 35000/100000 tx (35%) — 0s, ~1s restantes
+20:30:14 [INFO]   Graph: 40000/100000 tx (40%) — 1s, ~1s restantes
+20:30:14 [INFO]   Graph: 45000/100000 tx (45%) — 1s, ~1s restantes
+20:30:14 [INFO]   Graph: 50000/100000 tx (50%) — 1s, ~1s restantes
+20:30:14 [INFO]   Graph: 55000/100000 tx (55%) — 1s, ~1s restantes
+20:30:14 [INFO]   Graph: 60000/100000 tx (60%) — 1s, ~1s restantes
+20:30:14 [INFO]   Graph: 65000/100000 tx (65%) — 1s, ~1s restantes
+20:30:14 [INFO]   Graph: 70000/100000 tx (70%) — 1s, ~0s restantes
+20:30:14 [INFO]   Graph: 75000/100000 tx (75%) — 1s, ~0s restantes
+20:30:14 [INFO]   Graph: 80000/100000 tx (80%) — 1s, ~0s restantes
+20:30:14 [INFO]   Graph: 85000/100000 tx (85%) — 1s, ~0s restantes
+20:30:15 [INFO]   Graph: 90000/100000 tx (90%) — 2s, ~0s restantes
+20:30:15 [INFO]   Graph: 95000/100000 tx (95%) — 2s, ~0s restantes
+20:30:15 [INFO]   Graph: 100000/100000 tx (100%) — 2s, ~0s restantes
+20:30:15 [INFO]   \u2705 Graph features temporais: 100000 tx × 13 features (2.0s)
+20:30:15 [INFO]   Cobertura: 23840/100000 tx (23.8%) com histórico de sender
+20:30:15 [INFO]   Cobertura: 25421/100000 tx (25.4%) com histórico de receiver
+20:30:15 [INFO]   New edges: 95629/100000 (95.6%)
+20:30:15 [INFO] Selecionando colunas finais...
+C:\Users\u857755\OneDrive - BRB - Banco de Brasilia SA\Documentos\Projetos\squad_IA\PIX\rebuild_pix\.venv\Lib\site-packages\pandas\core\nanops.py:1020: RuntimeWarning: invalid value encountered in subtract
+  sqr = _ensure_numeric((avg - values) ** 2)
+================================================================================
+EXP-010G-R2 — Dataset v2 Feature Enrichment
+================================================================================
+Input:  C:\Users\u857755\OneDrive - BRB - Banco de Brasilia SA\Documentos\Projetos\squad_IA\PIX\rebuild_pix\dados\hmo_ml_tb_pix_dataset_v2_180d_v1.csv
+Output: C:\Users\u857755\OneDrive - BRB - Banco de Brasilia SA\Documentos\Projetos\squad_IA\PIX\rebuild_pix\dados\hmo_ml_tb_pix_dataset_v2_180d_v1_enriched.csv
+MD5:    891537e4e4d9d49f8a754fbf9b14ed0b
+
+================================================================================
+EXP-010G-R2 CONCLUÍDO
+================================================================================
+{
+  "experiment": "EXP-010G-R2",
+  "status": "DONE",
+  "input_path": "C:\\Users\\u857755\\OneDrive - BRB - Banco de Brasilia SA\\Documentos\\Projetos\\squad_IA\\PIX\\rebuild_pix\\dados\\hmo_ml_tb_pix_dataset_v2_180d_v1.csv",
+  "input_md5": "891537e4e4d9d49f8a754fbf9b14ed0b",
+  "output_path": "C:\\Users\\u857755\\OneDrive - BRB - Banco de Brasilia SA\\Documentos\\Projetos\\squad_IA\\PIX\\rebuild_pix\\dados\\hmo_ml_tb_pix_dataset_v2_180d_v1_enriched.csv",
+  "alias_output": "C:\\Users\\u857755\\OneDrive - BRB - Banco de Brasilia SA\\Documentos\\Projetos\\squad_IA\\PIX\\rebuild_pix\\dados\\base_treino_final_exp010g_r2.csv",
+  "n_input": 100000,
+  "n_after_raw_adapt": 100000,
+  "n_output": 100000,
+  "n_fraud_output": 1306,
+  "n_normal_output": 98694,
+  "duplicated_transaction_id": 0,
+  "dt_min": "2025-11-26 00:02:08",
+  "dt_max": "2026-05-24 23:51:57",
+  "n_columns": 125,
+  "n_graph_features": 13,
+  "elapsed_seconds": 344.94
+}
+
+Artefatos:
+  C:\Users\u857755\OneDrive - BRB - Banco de Brasilia SA\Documentos\Projetos\squad_IA\PIX\rebuild_pix\dados\hmo_ml_tb_pix_dataset_v2_180d_v1_enriched.csv
+  C:\Users\u857755\OneDrive - BRB - Banco de Brasilia SA\Documentos\Projetos\squad_IA\PIX\rebuild_pix\dados\base_treino_final_exp010g_r2.csv
+  C:\Users\u857755\OneDrive - BRB - Banco de Brasilia SA\Documentos\Projetos\squad_IA\PIX\rebuild_pix\resultados\experimentos\EXP-010G-R2\00_run_summary.json
+  C:\Users\u857755\OneDrive - BRB - Banco de Brasilia SA\Documentos\Projetos\squad_IA\PIX\rebuild_pix\resultados\experimentos\EXP-010G-R2\01_schema_coverage_before.csv
+  C:\Users\u857755\OneDrive - BRB - Banco de Brasilia SA\Documentos\Projetos\squad_IA\PIX\rebuild_pix\resultados\experimentos\EXP-010G-R2\02_schema_coverage_after.csv
+  C:\Users\u857755\OneDrive - BRB - Banco de Brasilia SA\Documentos\Projetos\squad_IA\PIX\rebuild_pix\resultados\experimentos\EXP-010G-R2\03_feature_diagnostics.csv
+  C:\Users\u857755\OneDrive - BRB - Banco de Brasilia SA\Documentos\Projetos\squad_IA\PIX\rebuild_pix\resultados\experimentos\EXP-010G-R2\04_class_split_summary.csv

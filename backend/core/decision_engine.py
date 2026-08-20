@@ -104,6 +104,9 @@ class EngineConfig:
     # vs v3.0.2 (C=80, B=95, V=0.85): flagged F1=0.757, blocked F1=0.874
     threshold_confirmar: float = 77.0
     threshold_bloquear: float = 95.0
+    r5b14_operational_zero_fn_enabled: bool = True
+    r5b16_frozen_contract_enabled: bool = True
+    r5b22_official_baseline_enabled: bool = True
 
     # --- Thresholds de veto (score raw 0-1) ---
     veto_threshold: float = 0.90
@@ -416,6 +419,7 @@ class PixDecisionEngine:
         # Modelos
         self.lgbm_model = None
         self.lgbm_features: list[str] = []
+        self.lgbm_label_encoders: dict = {}
         self.if_model = None
         self.if_scaler = None
         self.if_features: list[str] = []
@@ -634,6 +638,15 @@ class PixDecisionEngine:
             logger.info(f"LGBM carregado: {type(self.lgbm_model).__name__}")
         else:
             logger.warning(f"LGBM não encontrado em {lgbm_path}")
+
+        # 1b. LGBM Label Encoders
+        encoders_path = art / "lgbm_label_encoders.joblib"
+        if encoders_path.exists():
+            self.lgbm_label_encoders = joblib.load(encoders_path)
+            logger.info(f"LGBM label encoders carregados: {list(self.lgbm_label_encoders.keys())}")
+        else:
+            self.lgbm_label_encoders = {}
+            logger.warning(f"LGBM label encoders não encontrados em {encoders_path}")
 
         # 2. LGBM Features
         # ============================================================
@@ -935,10 +948,26 @@ class PixDecisionEngine:
         row = {}
         for feat in self.lgbm_features:
             val = features.get(feat, 0)
-            try:
-                row[feat] = float(val) if val is not None and str(val) != "nan" else 0.0
-            except (ValueError, TypeError):
-                row[feat] = 0.0
+            if hasattr(self, "lgbm_label_encoders") and self.lgbm_label_encoders and feat in self.lgbm_label_encoders:
+                # É uma feature categórica!
+                le = self.lgbm_label_encoders[feat]
+                val_str = str(val).strip() if val is not None else "missing"
+                if val_str in {"", "nan", "None", "nan.0", "NaN"}:
+                    val_str = "missing"
+                
+                # Se não for uma categoria conhecida pelo LabelEncoder, usar "missing"
+                if val_str not in le.classes_:
+                    val_str = "missing"
+                
+                try:
+                    row[feat] = int(le.transform([val_str])[0])
+                except Exception:
+                    row[feat] = 0
+            else:
+                try:
+                    row[feat] = float(val) if val is not None and str(val) != "nan" else np.nan
+                except (ValueError, TypeError):
+                    row[feat] = np.nan
 
         X = pd.DataFrame([row])[self.lgbm_features]
         proba = self.lgbm_model.predict_proba(X)[:, 1]

@@ -6,14 +6,13 @@
 
 ```
 Nome:            Behavioral Analytics Engine (BEH)
-Versão:          v3.0
+Versão:          v3.1 (Baseline Operacional R5B22)
 Tipo:            Sistema Especialista Baseado em Regras (RBES)
 Fatores ativos:  7 (3 velocity + 3 dormancy + 1 profile)
-Dataset:         100.355 transações PIX (355 fraudes confirmadas)
-Calibração:      2026-04-11
+Dataset Atual:   113.844 transações PIX (1.465 fraudes confirmadas)
+Calibração:      2026-06-12 (R5B22)
 Linguagem:       Python 3.12+
 Módulo:          core/behavioral_analytics.py
-Validador:       avaliar_behavioral_retroativo.py v2.0
 ```
 
 ---
@@ -22,12 +21,15 @@ Validador:       avaliar_behavioral_retroativo.py v2.0
 
 ### 1.1 Por que este módulo existe
 
-O módulo Behavioral Analytics é uma **camada complementar de detecção em tempo real** que analisa desvios no comportamento transacional do cliente. Opera em conjunto com o LGBM (modelo ML) e o SE (engenharia social), servindo como:
+O módulo Behavioral Analytics é uma **camada complementar de detecção em tempo real** que analisa desvios no comportamento transacional do cliente. No baseline R5B22, ele atua formalmente de duas maneiras:
 
-1. **Detector de contas dormantes comprometidas** — padrão que nem o LGBM nem o SE capturam nativamente. O BEH identificou 19 fraudes invisíveis a ambos
-2. **Reforço de sinais de velocity** — burst patterns com precision 80-97%, fornecendo evidência adicional de alta confiança
-3. **Camada de defesa em profundidade** — fatores validados empiricamente que operam independente dos demais módulos, garantindo resiliência se um componente tiver regressão
-4. **Infraestrutura para dados futuros** — o Profile Manager em memória está pronto para device fingerprinting, biometria comportamental e análise multi-sessão quando esses dados estiverem disponíveis
+1. **Módulo Especialista Runtime (`behavioral_analytics.py`)**: Atua independentemente e extrai as anomalias da transação para gerar alertas compreensíveis (explicabilidade).
+2. **Sinal `beh_score` para o Aluno R5B22**: O score quantitativo final gerado (`beh_score`) é diretamente consumido pelo modelo LightGBM destilado oficial, fornecendo sinalização comportamental para o baseline.
+
+O BEH serve como:
+1. **Detector de contas dormantes comprometidas** — padrão que o ML isolado (quando cego a certas variáveis) ou o SE não capturam com o mesmo viés direcional.
+2. **Reforço de sinais de velocity** — fornecendo evidência adicional de alta confiança para rajadas atípicas de transações.
+3. **Pilar de Explicabilidade e Defesa em Profundidade** — seus fatores geram motivos legíveis para analistas e para a API de resposta (ex: "Anomalia comportamental...").
 
 ### 1.2 Diferença conceitual entre BEH e SE
 
@@ -156,7 +158,9 @@ O `_InlineProfileManager` mantém em memória um cache por CPF com:
 
 ## 3. Catálogo de Fatores
 
-### 3.1 Resumo de performance (v3.0 — medido em 100.355 tx)
+> **AVISO HISTÓRICO:** As métricas de performance reportadas abaixo e nas próximas seções referem-se à calibração original do ciclo v3.0 em um dataset antigo (100.355 tx, 355 fraudes). Para as métricas do novo baseline operacional de 113.844 transações e 1.465 fraudes, o modelo é suportado pelas políticas R5B22, mas os fatores BEH operam estruturalmente da mesma maneira e mantêm as mesmas proporções de correlação.
+
+### 3.1 Resumo de performance (Histórico v3.0 — medido em 100.355 tx)
 
 | # | Fator | Tier | Source | Origin | TP | FP | Precision | Recall | F1 | Lift | Score |
 |---|---|---|---|---|---|---|---|---|---|---|---|
@@ -397,30 +401,26 @@ A união SE + BEH cobre **+19 fraudes** vs SE sozinho (73.8% → 79.2%). As 74 r
 
 ---
 
-## 5. Integração no Pipeline
+## 5. Integração no Pipeline e na API (Explicabilidade)
 
-### 5.1 Fluxo operacional (Pipeline v1.3 / Engine v2.2)
+### 5.1 Fluxo operacional (Pipeline v1.5.0-r5b22)
 
 ```
 Transação → Feature Engineering → features_dict
                                        │
                         ┌──────────────┼──────────────┐
                         ▼              ▼              ▼
-                   SE v3.3        BEH v3.0       LGBM v4.1
-                   (<1ms)         (<1ms)          (~2ms)
+                   SE v3.4        BEH v3.1       LGBM v6.x (Professor/Distilado)
                         │              │              │
                         └──────────────┼──────────────┘
                                        ▼
-                              Decision Engine v2.2
+                              Decision Engine v3.x
                                        │
                   ┌────────────────────┼────────────────────┐
                   ▼                    ▼                    ▼
-           Fase 7: SE              Fase 7b: BEH        Vetos v2.2
-           Agravantes              Agravantes           SE ≥ 60 → CONFIRMAR
-           granulares              por categoria         BEH velocity ≥ 40 → CONFIRMAR
-           por padrão              velocity=4            SE≥60 + BEH≥25 → BLOQUEAR
-           (max 3)                 dormancy=3
-                                   profile=1
+           Regras Operacionais     Sinais BEH          Vetos / Explicabilidade
+           R5B14 e Contrato        `beh_score`         A API compõe fatores
+           Congelado R5B16         usado como feature  para cx/mensagem_cliente
                   │                    │                    │
                   └────────────────────┼────────────────────┘
                                        ▼
@@ -428,31 +428,17 @@ Transação → Feature Engineering → features_dict
                                  (APROVAR/CONFIRMAR/BLOQUEAR)
 ```
 
-### 5.2 Integração como agravante (Decision Engine v2.2)
+### 5.2 Explicabilidade na API
 
-O BEH contribui para o score final via agravantes na Fase 7b, com peso proporcional à categoria dos fatores:
-
-| Cenário | Peso agravante | Exemplo |
-|---|---|---|
-| **velocity + score ≥ 40** | 4-5 pts | FREQUENCIA_BURST ativou (score=25) + MULTIPLOS_RECEBEDORES_BURST (score=45 total) |
-| **dormancy + score ≥ 25** | 3 pts | CONTA_DORMANTE_VALOR_ALTO + CONTA_DORMANTE_IDOSO (score=45) |
-| **score 20-24** | 2 pts | CONTA_DORMANTE_VALOR_ALTO sozinho (score=20) |
-| **score 15-19** | 1 pt | PRIMEIRA_TX_VALOR_ALTO sozinho (score=15) |
-| **profile only (score 5)** | 0 pts | PERFIL_VULNERAVEL_SE abaixo do threshold (não gera agravante) |
-
-### 5.3 Regras de veto do BEH (Engine v2.2)
-
-| Regra | Condição | Ação |
-|---|---|---|
-| **Convergência SE + BEH** | SE ≥ 60 AND BEH ≥ 25 | → mínimo BLOQUEAR |
-| **BEH velocity alto** | BEH ≥ 40 AND tem fator velocity | → mínimo CONFIRMAR |
-
-### 5.4 Output para analista/CX
-
-Quando o BEH detecta fatores, o output é humano-legível:
+Quando a API (`backend/api.py`) sinaliza a transação como `CONFIRMAR` ou `BLOQUEAR`, ela monta a resposta de negócio consultando os outputs independentes gerados pelo `behavioral_score`. A API extrai os componentes e transforma em descrições de tela que informam "Anomalia comportamental: ...".
 
 ```json
 {
+  "cx": {
+    "mensagem_cliente": "Identificamos um acesso a partir de um novo dispositivo ou local...",
+    "motivo_principal": "Anomalia comportamental: CONTA_DORMANTE_VALOR_ALTO",
+    "fator_predominante": "Anomalia Comportamental / Dispositivo"
+  },
   "behavioral": {
     "behavioral_score": 45,
     "risk_level": "ALTO",
@@ -463,14 +449,6 @@ Quando o BEH detecta fatores, o output é humano-legível:
         "peso": 4,
         "source": "dormancy",
         "precision": 0.65,
-        "origin": "B2"
-      },
-      {
-        "codigo": "CONTA_DORMANTE_IDOSO",
-        "descricao": "Idoso (72 anos) com conta inativa (1 tx/trim) fazendo PIX de R$3.500,00 — alto risco de engenharia social",
-        "peso": 5,
-        "source": "dormancy",
-        "precision": 0.856,
         "origin": "B2"
       }
     ]

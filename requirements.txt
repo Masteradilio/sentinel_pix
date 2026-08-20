@@ -21,3 +21,7 @@ pydantic>=2.0,<3.0
 # --- Utilitários ---
 tabulate==0.10.0
 networkx==3.6.1
+
+# --- Testes ---
+pytest==8.4.1
+httpx>=0.28.0

@@ -1,0 +1,101 @@
+{
+  "artifact_type": "operational_zero_fn_policy_candidate",
+  "experiment": "EXP-014B-R5B14-OPERATIONAL-ZERO-FN-REPLAY",
+  "status": "CANDIDATE_NOT_PRODUCTION_ACTIVE",
+  "base_policy": "EXP-014B-R4G-FAST-FROZEN",
+  "layers": [
+    {
+      "layer": "R5B12_CONFIRM_TO_BLOCK",
+      "rules": [
+        {
+          "rule_id": "R5B12_01_LGBM_RAW_HIGH",
+          "description": "lgbm_raw >= 0.10711783"
+        },
+        {
+          "rule_id": "R5B12_02_SCORE_2_3_LGBM_R4_HIGH",
+          "description": "score_bin == score_2_3 AND lgbm_r4_score >= 0.475472966916"
+        },
+        {
+          "rule_id": "R5B12_03_SCORE_2_3_LGBM_R4_MED",
+          "description": "score_bin == score_2_3 AND lgbm_r4_score >= 0.318070929491"
+        },
+        {
+          "rule_id": "R5B12_04_DOC_PHONE_HIGH_PAYER_COUNT",
+          "description": "ds_tipo_chave_norm == DOCUMENTO_TELEFONE AND qtd_pix_pagador_180d >= 207"
+        },
+        {
+          "rule_id": "R5B12_05_OUTROS_RATIO_MAX_HIGH",
+          "description": "ds_tipo_chave_norm == OUTROS AND ratio_valor_maximo_pagador_180d >= 4.9674631165863596"
+        }
+      ]
+    },
+    {
+      "layer": "R5B13_APPROVE_TO_BLOCK",
+      "rules": [
+        {
+          "candidate_id": "categorical_4__ds_tipo_chave_norm_==_DOCUMENTO_TELEFONE_AND_periodo_dia_==_manha_AND_score_bin_==_score_GE_10_AND_lgbm_bin_==_lgbm_GE_0.1",
+          "rule_type": "categorical_4",
+          "description": "ds_tipo_chave_norm == DOCUMENTO_TELEFONE AND periodo_dia == manha AND score_bin == score_GE_10 AND lgbm_bin == lgbm_GE_0.1",
+          "n_affected": 22,
+          "fraud_count": 1,
+          "normal_count": 21,
+          "precision_for_block": 0.04545455,
+          "selection_step": 1,
+          "incremental_frauds": 1,
+          "incremental_normals": 21,
+          "cumulative_frauds": 1,
+          "cumulative_normals": 21
+        },
+        {
+          "candidate_id": "categorical_4__periodo_dia_==_noite_AND_score_bin_==_score_1_2_AND_lgbm_bin_==_lgbm_GE_0.1_AND_ratio_bin_==_ratio_GE_5",
+          "rule_type": "categorical_4",
+          "description": "periodo_dia == noite AND score_bin == score_1_2 AND lgbm_bin == lgbm_GE_0.1 AND ratio_bin == ratio_GE_5",
+          "n_affected": 27,
+          "fraud_count": 1,
+          "normal_count": 26,
+          "precision_for_block": 0.03703704,
+          "selection_step": 2,
+          "incremental_frauds": 1,
+          "incremental_normals": 26,
+          "cumulative_frauds": 2,
+          "cumulative_normals": 47
+        }
+      ]
+    },
+    {
+      "layer": "R5B14_CONFIRM_TO_APPROVE_COMPENSATION",
+      "rule": {
+        "base_action": "CONFIRMAR",
+        "target_action": "APROVAR",
+        "description": "lgbm_raw <= 1.966e-05",
+        "lgbm_raw_max": 1.966e-05
+      }
+    }
+  ],
+  "metrics": {
+    "final_intervention": {
+      "tp": 1465,
+      "fp": 1123,
+      "fn": 0,
+      "tn": 111256,
+      "precision": 0.56607419,
+      "recall": 1.0,
+      "f1": 0.72292129,
+      "fpr": 0.00999297
+    },
+    "final_block": {
+      "tp": 1465,
+      "fp": 835,
+      "fn": 0,
+      "tn": 111544,
+      "precision": 0.63695652,
+      "recall": 1.0,
+      "f1": 0.77822045,
+      "fpr": 0.00743021
+    }
+  },
+  "promotion_gates": [
+    "Executar replay E2E no PipelineOrquestrador.",
+    "Revisar semanticamente as regras APROVAR -> BLOQUEAR e a compensacao low-lgbm."
+  ]
+}

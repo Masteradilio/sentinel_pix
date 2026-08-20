@@ -1,0 +1,12 @@
+{
+  "input_predictions": "C:\\Users\\adili\\projetos_offline\\rebuild_pix\\resultados\\experimentos\\EXP-014B-R5B2-CALIBRATION\\01_raw_predictions_holdout.csv",
+  "source_policy_artifact": "C:\\Users\\adili\\projetos_offline\\rebuild_pix\\resultados\\experimentos\\EXP-014B-R5B2-CALIBRATION\\02_policy_artifact_recommended.json",
+  "final_action_col": "r5b2_frozen_decisao",
+  "required_columns": [
+    "transaction_id",
+    "event_datetime",
+    "is_fraud",
+    "decisao",
+    "temporal_split"
+  ]
+}

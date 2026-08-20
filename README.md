@@ -1,144 +1,184 @@
-# Rebuild PIX — Motor Híbrido de Detecção de Fraudes PIX
+# Rebuild PIX - Motor antifraude PIX
 
-Sistema **ensemble multi-camada** para detecção de fraudes em transações PIX em tempo real, com foco em **Recall ≥ 99%**, **alta explicabilidade** e **taxa de falso positivo < 0,2%**.
+Motor hibrido para decisao antifraude em transacoes PIX, com classificacao operacional em tres acoes:
 
-Desenvolvido para o BRB (Banco de Brasília), calibrado com **100.355 transações reais** (355 fraudes confirmadas pela GEPFRA).
+- `APROVAR`: liberar a transacao automaticamente.
+- `CONFIRMAR`: reter para step-up, biometria, 2FA ou validacao adicional.
+- `BLOQUEAR`: impedir a transacao por alto risco.
 
-## Resultados (v3.0.5)
+O estado atual do projeto e o baseline oficial **R5B22**, consolidado sobre as novas bases MAF, contrato congelado R5B16/R5B18 e politica final de restricao APROVAR/CONFIRMAR/BLOQUEAR.
 
-| Métrica | Valor |
+## Estado atual
+
+| Item | Valor |
 |---|---|
-| **Recall** | **99,15%** (352/355 fraudes detectadas) |
-| **Precision** | **68,87%** |
-| **F1-Score** | **0,8129** |
-| **FPR** | **0,159%** (159 FP em 100k normais) |
-| **Fraudes perdidas** | 3 (valor total: R$ 3.166,76) |
-| **Precision BLOQUEAR** | **85,89%** |
-| **Recuperação financeira** | **99,86%** (~R$ 2,2M interceptados) |
-| **Carga de revisão manual** | 0,107% das transações (~11 por 10k) |
+| Baseline oficial | `R5B22_OFFICIAL_CONSTRAINED_BASELINE` |
+| Versao de scoring | `1.5.0-r5b22` |
+| Base de validacao | 113.844 transacoes |
+| Fraudes confirmadas | 1.465 |
+| Normais | 112.379 |
+| FPR global | 0,957474% |
+| Fraudes em APROVAR | 2 |
+| Fraudes em CONFIRMAR | 10 |
+| Fraudes em BLOQUEAR | 1.453 |
 
-## Arquitetura do Motor
-Transação PIX → Feature Engineering │ ┌───────────────┼───────────────┐ ▼ ▼ ▼ LightGBM Isolation SE v3.3 v5.1 Forest v3 BEH v3.0 (superv.) (não-superv.) (regras) │ │ │ └───────────────┼───────────────┘ ▼ Decision Engine v3.0.5 ├── Cascade v3 (C1 + C3) ├── Fast-Approve Override ├── 9 Vetos hierárquicos └── Score 0-100 → APROVAR / CONFIRMAR / BLOQUEAR
+O objetivo operacional atual e reduzir falsos bloqueios sem abrir excesso de risco:
 
+- manter FPR global abaixo de 1%;
+- manter no maximo 5 fraudes em APROVAR;
+- manter no maximo 10 fraudes em CONFIRMAR;
+- maximizar a precisao de BLOQUEAR.
 
+## Metricas oficiais R5B22
 
+Metricas globais considerando intervencao como `CONFIRMAR` ou `BLOQUEAR`:
 
-### Componentes
+| Metrica | Valor |
+|---|---:|
+| TP | 1.463 |
+| FP | 1.076 |
+| FN | 2 |
+| TN | 111.303 |
+| Precision | 57,621111% |
+| Recall | 99,863481% |
+| F1 | 0,73076923 |
+| FPR | 0,957474% |
 
-| Componente | Tipo | Papel | Performance-chave |
-|---|---|---|---|
-| **LightGBM v5.1** | ML supervisionado | Backbone — prob. de fraude (0→1) | AUC 0.9996, 52 features |
-| **Isolation Forest v3** | ML não-supervisionado | Detector de anomalias complementar | AUC 0.9625, recupera 2/3 FN do LGBM |
-| **Cascade v3** | Regras determinísticas | Alta precisão: burst ≥3 e IF+LGBM guard | C1: 100% precision, C3: 95% precision |
-| **SE v3.3** | Sistema especialista | 9 padrões de golpes (eng. social) | 262/355 fraudes, Precision 43,5% |
-| **BEH v3.0** | Análise comportamental | 7 fatores (velocity + dormancy + profile) | 228/355 fraudes, 19 exclusivas do BEH |
-| **Fast-Approve** | Override de segurança | Suprime vetos IF quando LGBM discorda | -48 FP, 0 FN perdidos |
+Metricas especificas de `BLOQUEAR`:
 
-## Estrutura do Projeto
-rebuild_pix/ ├── backend/ │ ├── api.py # API REST FastAPI (inferência tempo real) │ ├── artefatos/ # Modelos serializados + configs de produção │ │ ├── model_lightgbm.joblib │ │ ├── model_isolation_forest.joblib │ │ ├── scaler_isolation_forest.joblib │ │ ├── if_ref_raw_train.npy │ │ ├── preprocessing.joblib │ │ ├── scoring_config.json │ │ ├── thresholds_config.json │ │ ├── isolation_forest_config.json │ │ ├── lgbm_features.json │ │ ├── if_features.json │ │ └── diagnostico_features.csv │ ├── core/ # Lógica de negócio (produção) │ │ ├── preprocessing.py # Feature engineering + graph features │ │ ├── decision_engine.py # Motor de decisão ensemble │ │ ├── pipeline_orquestrador.py # Orquestrador do fluxo │ │ ├── social_engineering.py # Detector SE (9 padrões de golpes) │ │ └── behavioral_analytics.py # Análise comportamental (7 fatores) │ ├── modelos/ # Scripts de treino + resultados │ │ ├── train_lgbm_v2.py # LGBM v5.1 (produção) │ │ ├── train_lgbm_v3.py # LGBM v6.1 (graph features — futuro) │ │ ├── train_isolation_forest_v2.py # IF v3 (produção) │ │ ├── resultado_treino_lgbm/ # Métricas e relatórios LGBM v5.1 │ │ ├── resultado_treino_lgbm_v3/ # Métricas e relatórios LGBM v6.1 │ │ └── resultado_treino_if/ # Métricas e relatórios IF v3 │ └── scripts/ │ └── simular_pipeline_e2e_lf.py # Simulação end-to-end leakage-free ├── dados/ │ ├── dados_pix_normais_optimized.csv # Transações normais (100k) │ ├── dados_pix_fraudes_optimized.csv # Transações fraudulentas (355) │ ├── base_treino_final.csv # Dataset processado (model-ready) │ └── scripts_origem/ # Scripts originais de extração Big Data ├── docs/ # Documentação de arquitetura e módulos ├── tests/ # Testes automatizados ├── .gitignore ├── CHANGELOG.md ├── README.md └── requirements.txt
+| Metrica | Valor |
+|---|---:|
+| TP | 1.453 |
+| FP | 760 |
+| FN fora de BLOQUEAR | 12 |
+| TN | 111.619 |
+| Precision | 65,657479% |
+| Recall | 99,180887% |
+| F1 | 0,79010332 |
+| FPR | 0,676283% |
 
+Distribuicao por decisao:
 
+| Decisao | Transacoes | Fraudes | Normais |
+|---|---:|---:|---:|
+| APROVAR | 111.305 | 2 | 111.303 |
+| CONFIRMAR | 326 | 10 | 316 |
+| BLOQUEAR | 2.213 | 1.453 | 760 |
 
+## Arquitetura operacional
 
-## Como Executar
+O pipeline atual combina modelo, contrato congelado e politicas operacionais:
 
-### Pré-requisitos
+1. `PipelineOrquestrador` recebe a transacao, prepara features e executa o motor.
+2. `PixDecisionEngine` calcula score e decisao runtime.
+3. O contrato R5B16 usa `r4g_fast_frozen_decisao_recommended` como decisao-base congelada.
+4. A politica R5B14 aplica restricoes de baixo falso negativo.
+5. A politica R5B22 aplica democoes controladas para reduzir normais em `BLOQUEAR`, respeitando os tetos de fraude em `APROVAR` e `CONFIRMAR`.
+
+Configuracoes oficiais em `backend/artefatos/scoring_config.json`:
+
+```json
+{
+  "versao": "1.5.0-r5b22",
+  "r5b14_operational_zero_fn_enabled": true,
+  "r5b16_frozen_contract_enabled": true,
+  "r5b22_official_baseline_enabled": true,
+  "official_baseline_policy": "R5B22_OFFICIAL_CONSTRAINED_BASELINE"
+}
+```
+
+## Artefatos oficiais
+
+```text
+backend/artefatos/r5b22_official_baseline_policy.json
+backend/artefatos/r5b22_official_baseline_summary.json
+backend/artefatos/model_lgbm_distilled_r5b22_intervention.joblib
+backend/artefatos/model_lgbm_distilled_r5b22_block.joblib
+backend/artefatos/model_lgbm_distilled_r5b22_metadata.json
+```
+
+O LGBM aluno e uma distilacao do contrato R5B16/R5B18. Ele usa sinais do professor, incluindo `r4g_fast_frozen_decisao_recommended`, `r5b14_rule_applied` e `r5b14_layer_applied`; portanto, nao deve ser descrito como LGBM puro treinado apenas com features brutas.
+
+## Estrutura principal
+
+```text
+backend/
+  artefatos/                 Modelos, politicas e configs oficiais
+  core/
+    decision_engine.py       Motor de decisao
+    pipeline_orquestrador.py Orquestrador E2E runtime
+    r5b14_operational_policy.py
+    social_engineering.py
+    behavioral_analytics.py
+  scripts/
+    simular_pipeline_e2e_v2.py
+dados/
+  hmo_ml_tb_pix_dataset_v3_features_180d_v1.csv
+docs/
+  JOURNAL_4.md
+  PIX_FRAUD_MODEL_FINAL_IMPROVEMENT_PLAN.md
+  apresentacao_mvp_v2.md
+resultados/
+  experimentos/
+tests/
+```
+
+## Como executar
+
+Criar ambiente:
 
 ```bash
 python -m venv venv
-venv\Scripts\activate        # Windows
+venv\Scripts\activate
 pip install -r requirements.txt
-1. Preprocessamento (gerar dataset de treino)
-bash
+```
 
+Validacao curta:
 
-python backend/core/preprocessing.py
-# Output: dados/base_treino_final.csv (100.355 tx, 116 features)
-2. Treino dos modelos
-bash
+```bash
+python -m py_compile backend/core/decision_engine.py backend/core/pipeline_orquestrador.py backend/scripts/simular_pipeline_e2e_v2.py
+```
 
+Simulacao E2E global com o baseline oficial:
 
-# LightGBM v5.1 (produção)
-python backend/modelos/train_lgbm_v2.py
+```bash
+python backend/scripts/simular_pipeline_e2e_v2.py --full --workers 4
+```
 
-# Isolation Forest v3 (produção)
-python backend/modelos/train_isolation_forest_v2.py
+Simulacao amostral:
 
-# LightGBM v6.1 com graph features (experimental — requer ≥6 meses de dados)
-python backend/modelos/train_lgbm_v3.py
-3. Simulação end-to-end
-bash
+```bash
+python backend/scripts/simular_pipeline_e2e_v2.py --sample 2000
+```
 
+API local:
 
-python backend/scripts/simular_pipeline_e2e_lf.py
-4. API REST
-bash
-
-
+```bash
 uvicorn backend.api:app --host 0.0.0.0 --port 8000 --reload
+```
 
+Endpoints principais:
 
+| Endpoint | Metodo | Uso |
+|---|---|---|
+| `/api/v1/analyze` | POST | Inferencia de uma transacao |
+| `/api/v1/batch` | POST | Inferencia em lote |
+| `/api/v1/health` | GET | Health check |
+| `/docs` | GET | Swagger UI |
 
-Endpoint	Método	Descrição
-/api/v1/analyze	POST	Inferência em tempo real (única transação)
-/api/v1/batch	POST	Inferência em lote
-/api/v1/health	GET	Health check dos componentes
-/docs	GET	Swagger UI
-Exemplo de resposta da API
-json
+## Documentacao relevante
 
+| Documento | Conteudo |
+|---|---|
+| `docs/JOURNAL_4.md` | Historico dos experimentos R4/R5 e consolidacao R5B22 |
+| `docs/PIX_FRAUD_MODEL_FINAL_IMPROVEMENT_PLAN.md` | Plano de melhoria e experimentos do baseline final |
+| `docs/apresentacao_mvp_v2.md` | Apresentacao executiva atualizada com metricas e regras ativas |
 
-{
-  "decisao": "BLOQUEAR",
-  "score_final": 97.2,
-  "confianca": "ALTA",
-  "explicabilidade": {
-    "motivo_principal": "Múltiplas transferências rápidas para recebedor desconhecido",
-    "componentes": {
-      "lgbm_score": 0.9985,
-      "if_percentile": 0.9991,
-      "se_score": 65,
-      "se_patterns": ["BURST_VALOR_ALTO", "ESVAZIAMENTO_CONTA"],
-      "beh_score": 45,
-      "beh_factors": ["FREQUENCIA_BURST", "CONTA_DORMANTE_VALOR_ALTO"]
-    }
-  }
-}
-Dataset
+## Roadmap tecnico
 
+- Executar homologacao E2E full sempre que a politica oficial mudar.
+- Monitorar drift das novas bases MAF e degradacao dos tetos de fraude por decisao.
+- Evoluir o LGBM aluno para reduzir dependencia dos sinais do professor sem perder os gates operacionais.
+- Integrar step-up real para a faixa `CONFIRMAR`.
+- Persistir historico e perfis em feature store/cache operacional para inferencia em tempo real.
 
-
-Dimensão	Valor
-Total de transações	100.355
-Fraudes confirmadas	355 (0,35%)
-Período	20/dez/2025 → 19/mar/2026
-Fonte fraudes	GEPFRA (BRB)
-Fonte normais	Extrato PIX BLK (BRB)
-Split temporal	90% Dev + 10% Holdout
-Leakage	Corrigido — rolling window causal de 90 dias
-Documentação Técnica
-
-
-
-Documento	Conteúdo
-docs/motor_decisao_modelo.md	Arquitetura completa do Engine v3.0.5
-docs/relatorio_tecnico_treino_modelos_v2.md	Treino, validação e métricas LGBM + IF
-docs/modulo_engenharia_social.md	SE v3.3 — 9 padrões, 31 indicadores
-docs/modulo_comportamental.md	BEH v3.0 — 7 fatores, calibração empírica
-Stack Técnico
-
-
-
-Componente	Tecnologia
-ML	LightGBM, scikit-learn (Isolation Forest)
-API	FastAPI, Uvicorn
-Dados	pandas, NumPy
-Serialização	joblib
-Python	3.12+
-Roadmap
- Graph Feature Engineering — 13 features de grafo temporal já implementadas no preprocessing; aguardando ≥6 meses de dados para cobertura adequada
- Device fingerprinting — 6 features (device, app, auth, session, IP, latência) 100% missing no dataset atual; infraestrutura pronta no BEH
- Persistência de profiles — Migrar Profile Manager de memória para Redis/DynamoDB
- Feedback loop — Decisões da GEPFRA retroalimentando retreino semanal
- Monitoramento de drift — Tracking de distribuição de scores em produção
-Motor de Decisão Antifraude PIX v3.0.5 — BRB/GEPFRA — Abril 2026

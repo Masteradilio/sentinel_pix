@@ -1,7 +1,10 @@
 __pycache__/
 *.py[cod]
 *$py.class
+dados/**/*.csv
 dados/*.csv
+resultados/experimentos/**/*.csv
+resultados/simulacao_*/**/*.csv
 *.joblib
 *.pkl
 .env
@@ -11,5 +14,7 @@ env/
 .idea/
 .DS_Store
 .venv/
-.venv/
+_archive/
 _archive
+*.zip
+.pytest_cache/

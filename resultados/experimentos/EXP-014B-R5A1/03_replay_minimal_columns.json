@@ -1,0 +1,11 @@
+{
+  "minimal_replay_columns": [
+    "transaction_id",
+    "is_fraud",
+    "r4g_fast_frozen_decisao_recommended",
+    "exp014b_r4g_fast_frozen_intervention_pred",
+    "exp014b_r4g_fast_frozen_block_pred"
+  ],
+  "purpose": "Columns needed to evaluate the frozen R4G action and intervention/block predictions already materialized in the predictions file.",
+  "not_a_training_feature_set": true
+}

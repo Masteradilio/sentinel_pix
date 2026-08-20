@@ -1,0 +1,309 @@
+{
+  "generated_at": "2026-05-15T15:38:05",
+  "experiment": "EXP-010E-R2B",
+  "status": "DONE",
+  "elapsed_min": 14.42,
+  "window_start_date": "2025-11-13",
+  "window_end_date": "2026-05-11",
+  "window_days": 180,
+  "date_pad_days": 0,
+  "max_days_to_process": 30,
+  "time_budget_min": 300,
+  "overwrite_tables": false,
+  "resume_skip_processed_dates": true,
+  "target_keys_table": "hmo_ml.tb_pix_maf_mbk_target_keys_180d_v2",
+  "mbk_compact_table": "hmo_ml.tb_pix_mbk_compact_180d_v1",
+  "hydration_table": "hmo_ml.tb_pix_maf_mbk_hydration_180d_v2",
+  "n_target_keys_180d": 1594,
+  "n_days_planned": 0,
+  "n_days_processed": 0,
+  "summary_counts": {
+    "target_keys_total_180d": 1594,
+    "hydration_rows_total_180d": 1594,
+    "matched_mbk_total_180d": 1391,
+    "coverage_total_180d": 0.872647,
+    "processed_target_dates": [],
+    "processed_lookup_dates": [],
+    "n_processed_target_dates": 0,
+    "n_processed_lookup_dates": 0,
+    "target_keys_exact_processed_target_dates": 0,
+    "matched_mbk_exact_processed_target_dates": 0,
+    "coverage_exact_target_dates_processed": 0.0,
+    "target_keys": 1594,
+    "hydration_rows": 1594,
+    "matched_mbk": 1391,
+    "coverage_pct": 0.872647,
+    "field_coverage_total_180d": [
+      {
+        "scope": "total_180d",
+        "field": "device_name",
+        "n_non_empty": 1377,
+        "n_rows": 1594,
+        "coverage_pct": 0.863864
+      },
+      {
+        "scope": "total_180d",
+        "field": "app_version",
+        "n_non_empty": 1377,
+        "n_rows": 1594,
+        "coverage_pct": 0.863864
+      },
+      {
+        "scope": "total_180d",
+        "field": "ip_address",
+        "n_non_empty": 1382,
+        "n_rows": 1594,
+        "coverage_pct": 0.867001
+      },
+      {
+        "scope": "total_180d",
+        "field": "latencia_rede_ms",
+        "n_non_empty": 1382,
+        "n_rows": 1594,
+        "coverage_pct": 0.867001
+      },
+      {
+        "scope": "total_180d",
+        "field": "tempo_interacao_ms",
+        "n_non_empty": 0,
+        "n_rows": 1594,
+        "coverage_pct": 0.0
+      },
+      {
+        "scope": "total_180d",
+        "field": "tempo_processamento_host_ms",
+        "n_non_empty": 1382,
+        "n_rows": 1594,
+        "coverage_pct": 0.867001
+      },
+      {
+        "scope": "total_180d",
+        "field": "metodo_autenticacao",
+        "n_non_empty": 384,
+        "n_rows": 1594,
+        "coverage_pct": 0.240903
+      },
+      {
+        "scope": "total_180d",
+        "field": "session_id",
+        "n_non_empty": 1377,
+        "n_rows": 1594,
+        "coverage_pct": 0.863864
+      },
+      {
+        "scope": "total_180d",
+        "field": "autcodret",
+        "n_non_empty": 1391,
+        "n_rows": 1594,
+        "coverage_pct": 0.872647
+      },
+      {
+        "scope": "total_180d",
+        "field": "topaz_risk_score",
+        "n_non_empty": 1279,
+        "n_rows": 1594,
+        "coverage_pct": 0.802384
+      },
+      {
+        "scope": "total_180d",
+        "field": "topaz_transacao_rejeitada",
+        "n_non_empty": 5,
+        "n_rows": 1594,
+        "coverage_pct": 0.003137
+      },
+      {
+        "scope": "total_180d",
+        "field": "is_agendamento_recorrente",
+        "n_non_empty": 0,
+        "n_rows": 1594,
+        "coverage_pct": 0.0
+      }
+    ],
+    "field_coverage_exact_processed_target_dates": [
+      {
+        "scope": "exact_processed_target_dates",
+        "field": "device_name",
+        "n_non_empty": 0,
+        "n_rows": 0,
+        "coverage_pct": 0.0
+      },
+      {
+        "scope": "exact_processed_target_dates",
+        "field": "app_version",
+        "n_non_empty": 0,
+        "n_rows": 0,
+        "coverage_pct": 0.0
+      },
+      {
+        "scope": "exact_processed_target_dates",
+        "field": "ip_address",
+        "n_non_empty": 0,
+        "n_rows": 0,
+        "coverage_pct": 0.0
+      },
+      {
+        "scope": "exact_processed_target_dates",
+        "field": "latencia_rede_ms",
+        "n_non_empty": 0,
+        "n_rows": 0,
+        "coverage_pct": 0.0
+      },
+      {
+        "scope": "exact_processed_target_dates",
+        "field": "tempo_interacao_ms",
+        "n_non_empty": 0,
+        "n_rows": 0,
+        "coverage_pct": 0.0
+      },
+      {
+        "scope": "exact_processed_target_dates",
+        "field": "tempo_processamento_host_ms",
+        "n_non_empty": 0,
+        "n_rows": 0,
+        "coverage_pct": 0.0
+      },
+      {
+        "scope": "exact_processed_target_dates",
+        "field": "metodo_autenticacao",
+        "n_non_empty": 0,
+        "n_rows": 0,
+        "coverage_pct": 0.0
+      },
+      {
+        "scope": "exact_processed_target_dates",
+        "field": "session_id",
+        "n_non_empty": 0,
+        "n_rows": 0,
+        "coverage_pct": 0.0
+      },
+      {
+        "scope": "exact_processed_target_dates",
+        "field": "autcodret",
+        "n_non_empty": 0,
+        "n_rows": 0,
+        "coverage_pct": 0.0
+      },
+      {
+        "scope": "exact_processed_target_dates",
+        "field": "topaz_risk_score",
+        "n_non_empty": 0,
+        "n_rows": 0,
+        "coverage_pct": 0.0
+      },
+      {
+        "scope": "exact_processed_target_dates",
+        "field": "topaz_transacao_rejeitada",
+        "n_non_empty": 0,
+        "n_rows": 0,
+        "coverage_pct": 0.0
+      },
+      {
+        "scope": "exact_processed_target_dates",
+        "field": "is_agendamento_recorrente",
+        "n_non_empty": 0,
+        "n_rows": 0,
+        "coverage_pct": 0.0
+      }
+    ],
+    "field_coverage_matched_only": [
+      {
+        "scope": "matched_only",
+        "field": "device_name",
+        "n_non_empty": 1377,
+        "n_rows": 1391,
+        "coverage_pct": 0.989935
+      },
+      {
+        "scope": "matched_only",
+        "field": "app_version",
+        "n_non_empty": 1377,
+        "n_rows": 1391,
+        "coverage_pct": 0.989935
+      },
+      {
+        "scope": "matched_only",
+        "field": "ip_address",
+        "n_non_empty": 1382,
+        "n_rows": 1391,
+        "coverage_pct": 0.99353
+      },
+      {
+        "scope": "matched_only",
+        "field": "latencia_rede_ms",
+        "n_non_empty": 1382,
+        "n_rows": 1391,
+        "coverage_pct": 0.99353
+      },
+      {
+        "scope": "matched_only",
+        "field": "tempo_interacao_ms",
+        "n_non_empty": 0,
+        "n_rows": 1391,
+        "coverage_pct": 0.0
+      },
+      {
+        "scope": "matched_only",
+        "field": "tempo_processamento_host_ms",
+        "n_non_empty": 1382,
+        "n_rows": 1391,
+        "coverage_pct": 0.99353
+      },
+      {
+        "scope": "matched_only",
+        "field": "metodo_autenticacao",
+        "n_non_empty": 384,
+        "n_rows": 1391,
+        "coverage_pct": 0.27606
+      },
+      {
+        "scope": "matched_only",
+        "field": "session_id",
+        "n_non_empty": 1377,
+        "n_rows": 1391,
+        "coverage_pct": 0.989935
+      },
+      {
+        "scope": "matched_only",
+        "field": "autcodret",
+        "n_non_empty": 1391,
+        "n_rows": 1391,
+        "coverage_pct": 1.0
+      },
+      {
+        "scope": "matched_only",
+        "field": "topaz_risk_score",
+        "n_non_empty": 1279,
+        "n_rows": 1391,
+        "coverage_pct": 0.919482
+      },
+      {
+        "scope": "matched_only",
+        "field": "topaz_transacao_rejeitada",
+        "n_non_empty": 5,
+        "n_rows": 1391,
+        "coverage_pct": 0.003595
+      },
+      {
+        "scope": "matched_only",
+        "field": "is_agendamento_recorrente",
+        "n_non_empty": 0,
+        "n_rows": 1391,
+        "coverage_pct": 0.0
+      }
+    ]
+  },
+  "artifacts": [
+    "00a_day_plan.json",
+    "01_day_plan.csv",
+    "02_day_results.csv",
+    "03_mbk_coverage_by_day.csv",
+    "03b_mbk_match_lag_distribution.csv",
+    "04_mbk_field_coverage.csv",
+    "04a_mbk_field_coverage_total_180d.csv",
+    "04b_mbk_field_coverage_exact_processed_target_dates.csv",
+    "04c_mbk_field_coverage_matched_only.csv",
+    "05_mbk_matched_sample.csv",
+    "06_mbk_unmatched_sample.csv",
+    "07_recommendation.md"
+  ]
+}

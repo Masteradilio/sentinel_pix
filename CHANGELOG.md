@@ -1,98 +1,202 @@
-
----
-
-## CHANGELOG.md
-
-```markdown
 # CHANGELOG
 
-Todas as mudanças notáveis neste projeto serão documentadas neste arquivo.
+Todas as mudancas notaveis deste projeto sao documentadas neste arquivo.
 
-O formato segue [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/).
+O formato segue a ideia de [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/), adaptada para os experimentos internos do projeto.
 
----
+## [1.5.0-r5b22] - 2026-06-12
+
+### Ajustes Fase 7 (Proposta Técnica HBase)
+- Atualizado o documento `docs/proposta_tecnica_hbase.md` para suportar o baseline `1.5.0-r5b22`.
+- Expansão do catálogo de tabelas sugeridas para incluir o contrato congelado (`fraud_detection:r5b22_contract_features`) e o histórico unificado de relacionamento (`fraud_detection:receiver_history` e arestas HBase).
+- Definição explícita das 78 features separadas por origem (transação, enrich, preprocessor, HBase e sinais de metadados frozen) compatibilizando TTL e SLA estrito.
+
+### Ajustes Fase 6 (Graph Engineering Investigativo)
+- Atualizado arquivo `docs/modulo_graph_feature_engineering.md` para refletir o status investigativo e *opt-in* assíncrono (evitando impacto no SLA transacional do Baseline).
+- Implementado módulo de produção `backend/core/graph_engineering.py` (`GraphInvestigationEngine`) que exporta, para CSV, os scores analíticos dos topológicos suspeitos (fan-in/fan-out, contas ponte, is_new_receiver, suspected_mule_score).
+- Adicionados testes de sanidade robustos (`tests/test_graph_engineering.py`) confirmando resiliência à ausência de chaves, integridade com transações do tipo "APROVAR", e escrita isolada com locks e thread safety.
+
+### Ajustes Fase 5 (Catálogo de Regras R5B22)
+- Criado o documento `docs/catalogo_regras_r5b22.md` com a relação exaustiva das regras vigentes.
+- Criado extrator dinâmico `scripts/export_r5b22_rule_catalog.py` que compila regras estruturais do código e métricas das heurísticas JSON ativas, originando sumários em Markdown, CSV e JSON.
+- Consolidação transparente das regras de baixa tolerância (R5B14) e do controle de falso positivo (R5B22), garantindo a auditoria demandada pelas frentes de negócio.
+
+### Ajustes Fase 4 (Atualização Documental de Componentes e Motor)
+- Atualizada documentação `docs/modulo_comportamental.md` para separar a avaliação especialista (runtime) da integração do `beh_score` pelo aluno preditivo, atualizando a calibração para 113.844 transações e classificando os antigos thresholds v3.0 como aviso histórico.
+- Atualizada documentação `docs/modulo_engenharia_social.md`, ressaltando o status de explicabilidade do SE no R5B22 e sua comunicação por `se_score` e `se_worst_pattern` para o Baseline Oficial, rebaixando as antigas taxas e Lifts para controle histórico.
+- Atualizado o manual mestre `docs/motor_decisao_modelo.md`, formalizando a versão 1.5.0-r5b22, orquestrada via destilação do contrato (R5B16/R5B18) atrelada às políticas seguras R5B14 e finalizando com a suavização via DEMOTIONS das regras R5B22. Métricas, diagramas e listagem oficial de overrides adaptadas para o modelo final.
+
+### Ajustes Fase 3 (Contrato Documental de Features)
+- Atualizado arquivo `docs/lista_de_features.md` para abranger as exatas 78 features catalogadas e extraídas no metadado do aluno R5B22, abandonando o escopo antigo (MVP/52 features). 
+- Categorização explícita entre features transacionais de tempo real, dados do Feature Store (HBase), derivações em tempo real e sinais de telemetria/telemetria frozen do baseline do professor.
+
+### Ajustes Fase 2 (Scripts de Treino R5B22)
+- Criado `backend/modelos/train_lgbm_distilled_r5b22.py` para reproduzir semanalmente o aluno destilado (intervenção e bloqueio) a partir das targets do professor (contrato congelado R5B16/R5B18 e políticas).
+- Implementado gate de segurança para mapear categorias ausentes e garantir uso exclusivo das 78 features catalogadas em `model_lgbm_distilled_r5b22_metadata.json`.
+- Script legado `train_lgbm_canonical.py` atualizado com aviso de depreciação indicando uso do novo modelo.
+- Documentação de `train_isolation_forest_canonical.py` atualizada ressaltando seu caráter consultivo sob as novas regras do baseline.
+
+### Ajustes Fase 1 (API e Explicabilidade)
+- Endpoint `/api/v1/analyze` atualizado para receber as flags opcionais `explain` e `debug` visando reduzir o payload em produção.
+- `AnalyzeResponse` atualizado para incluir condicionalmente campos do baseline R5B22: `r5b22_policy_applied`, `r5b22_rule_applied` e `decisao_original_r5b22`.
+- Informações de metadados da aplicação, versionamento (`1.5.0-r5b22`) e descrição atualizados na definição principal do FastAPI.
+
+### Adicionado
+
+- Baseline oficial `R5B22_OFFICIAL_CONSTRAINED_BASELINE`.
+- Politica oficial em `backend/artefatos/r5b22_official_baseline_policy.json`.
+- Sumario oficial em `backend/artefatos/r5b22_official_baseline_summary.json`.
+- LGBM aluno distilado do contrato R5B16/R5B18:
+  - `backend/artefatos/model_lgbm_distilled_r5b22_intervention.joblib`
+  - `backend/artefatos/model_lgbm_distilled_r5b22_block.joblib`
+  - `backend/artefatos/model_lgbm_distilled_r5b22_metadata.json`
+- Documento executivo atualizado em `docs/apresentacao_mvp_v2.md`.
+- Suporte runtime a R5B22 no `PipelineOrquestrador`, aplicado apos R5B16/R5B14.
+- Campos de auditoria R5B22 no E2E:
+  - `decisao_original_r5b22`
+  - `r5b22_policy_applied`
+  - `r5b22_rule_applied`
+
+### Alterado
+
+- `backend/artefatos/scoring_config.json` atualizado para `1.5.0-r5b22`.
+- Flags oficiais ativadas:
+  - `r5b14_operational_zero_fn_enabled=true`
+  - `r5b16_frozen_contract_enabled=true`
+  - `r5b22_official_baseline_enabled=true`
+  - `official_baseline_policy=R5B22_OFFICIAL_CONSTRAINED_BASELINE`
+- `backend/core/decision_engine.py` passou a reconhecer as flags oficiais no `EngineConfig`.
+- `backend/core/pipeline_orquestrador.py` passou a carregar e aplicar a politica oficial R5B22.
+- `backend/scripts/simular_pipeline_e2e_v2.py` passou a usar a base MAF v3 como dataset padrao e anexar colunas do contrato R4G frozen para reproduzir R5B16/R5B22.
+- `README.md` atualizado para refletir o estado operacional atual do projeto.
+
+### Metricas oficiais
+
+Distribuicao operacional R5B22:
+
+| Decisao | Transacoes | Fraudes | Normais |
+|---|---:|---:|---:|
+| APROVAR | 111.305 | 2 | 111.303 |
+| CONFIRMAR | 326 | 10 | 316 |
+| BLOQUEAR | 2.213 | 1.453 | 760 |
+
+Metricas globais:
+
+| Metrica | Valor |
+|---|---:|
+| TP | 1.463 |
+| FP | 1.076 |
+| FN | 2 |
+| TN | 111.303 |
+| Precision | 57,621111% |
+| Recall | 99,863481% |
+| F1 | 0,73076923 |
+| FPR | 0,957474% |
+
+Metricas de `BLOQUEAR`:
+
+| Metrica | Valor |
+|---|---:|
+| TP | 1.453 |
+| FP | 760 |
+| FN fora de BLOQUEAR | 12 |
+| TN | 111.619 |
+| Precision | 65,657479% |
+| Recall | 99,180887% |
+| F1 | 0,79010332 |
+| FPR | 0,676283% |
+
+### Validacao
+
+- `python -m py_compile backend/core/decision_engine.py backend/core/pipeline_orquestrador.py backend/scripts/simular_pipeline_e2e_v2.py`
+- Carga do `PipelineOrquestrador` confirmou R5B14, R5B16, R5B22 e policy JSON ativos.
+- Carga amostral do E2E confirmou anexacao das colunas frozen R4G usadas por R5B16/R5B22.
+
+## [1.4.x-r5b16-r5b18] - 2026-06-12
+
+### Adicionado
+
+- Homologacao E2E do contrato congelado R5B16/R5B18.
+- Reproducao operacional do baseline congelado usando `r4g_fast_frozen_decisao_recommended`.
+- Politica R5B14 para restricoes de baixo falso negativo.
+- Gates de validacao para FPR global menor que 1% e controle de falso negativo fora de `BLOQUEAR`.
+
+### Resultado
+
+- Baseline anterior concentrava todas as fraudes conhecidas fora de `APROVAR`, mas mantinha mais normais em `BLOQUEAR`.
+- R5B22 substituiu esse baseline ao reduzir normais bloqueadas e melhorar a precisao de `BLOQUEAR`, aceitando teto controlado de fraude em `APROVAR` e `CONFIRMAR`.
 
 ## [3.1.0] - 2026-04-20
+
 ### Adicionado
-- **EXP-003 (Novo Padrão SE IDOSO_JOVEM_VALOR_MODERADO_RESIDUAL)**: Implementado novo padrão no módulo `SocialEngineeringDetector` focado em detectar fraudes residuais em perfis vulneráveis (jovens ≤25 ou idosos ≥60) com contas recentes (<24m) realizando transferências atípicas moderadas (R$ 1.500 - R$ 15.000) confirmadas por alta anomalia (`if_percentile` ≥ 0.90).
-- **EXP-002 (Guard Rail LGBM)**: Inclusão de trava de segurança no `PixDecisionEngine` para vetos IF-based. O sistema agora suprime vetos originados do Isolation Forest quando o score do `LGBM` é considerado de baixa predição de fraude. 
+
+- EXP-003: novo padrao residual no `SocialEngineeringDetector` para perfis vulneraveis com transferencia atipica moderada e alta anomalia.
+- EXP-002: guard rail LGBM para suprimir vetos do Isolation Forest quando o LGBM indica baixa probabilidade de fraude.
 
 ### Alterado
-- **EXP-001 (Threshold Confirmar)**: Threshold global ajustado no `scoring_config.json` de `77.0` para `62.0` após validação que demonstrou a viabilidade de recuperar fraudes na zona cinza (com incremento em Recall de ~4pp e ganho substancial de F1 Score).
-- **Pipeline Orquestrador (v1.4)**: `pipeline_orquestrador.py` modificado para pré-computar e inserir o `if_percentile` no dicionário de features de forma independente do boost do motor antes da avaliação do `SocialEngineeringDetector`.
 
----
+- Threshold global de `CONFIRMAR` ajustado em `scoring_config.json`.
+- `pipeline_orquestrador.py` passou a precomputar `if_percentile` para uso pelo detector de engenharia social.
 
 ## [3.0.5] - 2026-04-12
+
 ### Adicionado
-- **Graph Feature Engineering (GFE)**: 13 features de grafo temporal incremental no `preprocessing.py` v4.1 — cada transação só vê o grafo de transações anteriores (sem leakage). Features incluem sender/receiver degree, pair history, HHI de concentração e z-score de valor.
-- **LightGBM v6.1** (`train_lgbm_v3.py`): Script de treino preparado para usar as 13 graph features quando houver ≥6 meses de dados com cobertura adequada.
-- **Fast-Approve Override**: Mecanismo de desescalada no Decision Engine — quando LGBM < 0,25 + SE = 0 + BEH = 0, suprime vetos IF-based. Eliminou ~20 FP sem perder nenhum TP.
-- **Cascade v3 com LGBM guard**: Regra C3 agora exige LGBM ≥ 0,35 além de IF ≥ 99,5% + burst. Precision C3 subiu de 61% → 95% (-56 FP).
-- **Simulação E2E leakage-free** (`simular_pipeline_e2e_lf.py`): Script de validação end-to-end com todas as correções de leakage aplicadas.
+
+- Graph Feature Engineering com features temporais incrementais sem leakage.
+- LightGBM v6.1 experimental com graph features.
+- Fast-Approve Override.
+- Cascade v3 com LGBM guard.
+- Simulacao E2E leakage-free.
 
 ### Alterado
-- **Decision Engine v3.0.5**: Precision subiu de 62,97% → 68,87% (+5,9pp). FP total de 207 → 159 (-48). Recall mantido em 99,15%. F1 de 0,770 → 0,813.
-- **Preprocessing v4.1**: Pipeline completo com 6 fases (load → features → leakage fix → graph features → seleção → PixPreprocessor). Output: `base_treino_final.csv` com 116 colunas.
-- **Reorganização do projeto**: Limpeza de 69 artefatos de desenvolvimento (scripts exploratórios, simulações, relatórios intermediários) movidos para `_archive/`. Estrutura de produção enxuta.
 
-### Documentação
-- **Motor de Decisão** (`motor_decisao_modelo.md`): Relatório completo da arquitetura v3.0.5 com análise de FN/FP, contribuição marginal dos componentes e métricas operacionais.
-- **Treino de Modelos** (`relatorio_tecnico_treino_modelos_v2.md`): Documentação do LGBM v5.1 + IF v3 com validação cruzada temporal, análise de overfitting e benchmark com a indústria.
-- **Módulo SE** (`modulo_engenharia_social.md`): Documentação completa do SE v3.3 — 9 padrões, 31 indicadores, metodologia de 6 frentes de calibração.
-- **Módulo BEH** (`modulo_comportamental.md`): Documentação completa do BEH v3.0 — 7 fatores, evolução v2.1→v3.0, 19 fraudes exclusivas capturadas.
-
----
+- Decision Engine v3.0.5 melhorou precision e reduziu falsos positivos no baseline antigo.
+- Preprocessing v4.1 passou a gerar dataset processado com fases de leakage fix, graph features e selecao.
+- Estrutura do projeto foi reorganizada com limpeza de artefatos intermediarios.
 
 ## [3.0.0] - 2026-04-11
+
 ### Adicionado
-- **Behavioral Analytics v3.0** (`behavioral_analytics.py`): Redesign completo — de 15 fatores (78k FP) para 7 fatores validados (1.797 FP). Três novos fatores dormancy descobertos na Frente B2: `CONTA_DORMANTE_VALOR_ALTO` (Precision 65%, Recall 39,7%), `CONTA_DORMANTE_IDOSO` (Precision 85,6%), `PRIMEIRA_TX_VALOR_ALTO` (Precision 72,4%). **19 fraudes exclusivas** não detectadas por nenhum outro módulo.
-- **Social Engineering v3.3** (`social_engineering.py`): 9 padrões calibrados via 6 frentes de análise. Destaques: `BURST_INTENSO_RAPIDO` (100% precision, 0 FP), `BURST_VALOR_ALTO` (78,8% precision, gate R$500). Cobertura de 262/355 fraudes (73,8%).
+
+- Behavioral Analytics v3.0.
+- Social Engineering v3.3.
 
 ### Alterado
-- **Correção de leakage temporal**: 14 features trimestrais recalculadas com rolling window estritamente causal (90 dias, apenas transações anteriores por CPF). AUC LGBM: 0,9998 → 0,9996 (degradação mínima — modelo aprendeu padrões reais).
-- **LightGBM v5.1** (`train_lgbm_v2.py`): Retreino com features leakage-free. 52 features (45 core + 7 extras). Holdout: F1 0,9112, Recall 96,25%, Precision 86,52%.
-- **Isolation Forest v3** (`train_isolation_forest_v2.py`): Features reduzidas de 22 → 13 (remoção de 10 com importance negativa). Treino segmentado (apenas normais regulares). AUC: 0,8919 → 0,9625 (+7,1pp). Gap de separação fraude-normal dobrou.
+
+- Correcao de leakage temporal nas features trimestrais.
+- Retreino do LightGBM v5.1 com features leakage-free.
+- Retreino do Isolation Forest v3 com features reduzidas.
 
 ### Removido
-- **11 fatores BEH com performance negativa**: DEVICE_NOVO (Lift 0,57x, 78k FP), DEVICE_NOVO_PREMIUM, 7 fatores com 0 ativações (features 100% missing), RENDA_INCOMPATIVEL, VALOR_CONCENTRADO_TRIMESTRE.
-- **9 indicadores SE anti-indicadores**: `valor_alto_vs_historico` (Lift 0,25x), `escalada_valores` (Lift 0,21x), `horario_noturno` (0 fraudes), entre outros.
-- **`rule_engine.py`**: Módulo obsoleto substituído pelo Cascade v3 integrado ao Decision Engine.
 
----
+- Fatores BEH e indicadores SE com performance negativa.
+- `rule_engine.py`, substituido pelo Cascade integrado ao Decision Engine.
 
 ## [2.1.1] - 2026-03-22
-### Alterado
-- **Otimização de Precisão**: Regra C6 do Cascade ajustada (exige 4 sinais). Precision do bloqueio elevada para 58,7% (50 FP). FN mantido em zero.
-- **Calibragem de âncoras** (`scoring_config.json`): Transações em CONFIRMAR reduzidas de ~700 para 4. Precision da camada CONFIRMAR de 9% → 56,8%.
 
----
+### Alterado
+
+- Ajuste de precisao da regra C6 do Cascade.
+- Calibragem de ancoras em `scoring_config.json`.
 
 ## [2.1.0] - 2026-03-22
+
 ### Adicionado
-- **API com Explicabilidade**: Bloco `explicabilidade` no payload de resposta com mensagem CX-Friendly para exibição ao cliente.
-- **Decision Engine v2.1**: Integração LGBM + Cascade Rules + Isolation Forest (boost condicional).
-- **Módulos SE v1.0 e BEH v1.0**: Implementação inicial de Social Engineering (12 padrões) e Behavioral Analytics (15 fatores).
+
+- API com explicabilidade.
+- Decision Engine v2.1.
+- Modulos iniciais de Social Engineering e Behavioral Analytics.
 
 ### Alterado
-- **Falsos Negativos Zero** (no dataset de teste): Âncoras mapeando `lgbm_threshold` 0,08 para faixa de bloqueio 85+.
-- **FPR reduzido para 0,28%**: IF Boost thresholds: `if_high=0.99`, `if_very_high=0.9994`.
-- **Cascade refatorada**: C3 desativada, C6 ajustada (gatilho 0,015).
 
----
+- Ajustes iniciais para reduzir falso negativo e FPR no dataset antigo.
 
 ## [0.0.1] - 2026-03-06
+
 ### Adicionado
-- Documento inicial de requisitos e arquitetura (`docs/PRD.md`).
-- Lista de features para MVP (`docs/lista_de_features.md`).
+
+- Documento inicial de requisitos e arquitetura.
+- Lista de features para MVP.
 - README, CHANGELOG e `requirements.txt`.
-- Scripts de backend e ingestão de dados em `/dados/scripts_origem`.
-- Ambiente virtual e estrutura de diretórios.
+- Scripts de backend e ingestao de dados.
 
----
-
-[3.0.5]: https://github.com/adilio/rebuild_pix/compare/v3.0.0...v3.0.5
-[3.0.0]: https://github.com/adilio/rebuild_pix/compare/v2.1.1...v3.0.0
-[2.1.1]: https://github.com/adilio/rebuild_pix/compare/v2.1.0...v2.1.1
-[2.1.0]: https://github.com/adilio/rebuild_pix/compare/v0.0.1...v2.1.0
-[0.0.1]: https://github.com/adilio/rebuild_pix/releases/tag/v0.0.1

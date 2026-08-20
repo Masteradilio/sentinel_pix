@@ -1,0 +1,409 @@
+{
+  "experiment": "EXP-014B-R5B22-OFFICIAL-CONSTRAINED-BASELINE",
+  "status": "PASS_R5B22_OFFICIAL_CONSTRAINED_BASELINE",
+  "baseline_r5b16": {
+    "global": {
+      "tp": 1465,
+      "fp": 1123,
+      "fn": 0,
+      "tn": 111256,
+      "precision": 0.56607419,
+      "recall": 1.0,
+      "f1": 0.72292129,
+      "fpr": 0.00999297
+    },
+    "block": {
+      "tp": 1465,
+      "fp": 835,
+      "fn": 0,
+      "tn": 111544,
+      "precision": 0.63695652,
+      "recall": 1.0,
+      "f1": 0.77822045,
+      "fpr": 0.00743021
+    }
+  },
+  "tradeoff_summary": {
+    "demoted_rows": 87,
+    "demoted_frauds": 12,
+    "demoted_normals": 75,
+    "remaining_approve_frauds": 2,
+    "remaining_confirm_frauds": 10,
+    "fn_outside_block": 12,
+    "global_intervention_metrics": {
+      "tp": 1463,
+      "fp": 1076,
+      "fn": 2,
+      "tn": 111303,
+      "precision": 0.57621111,
+      "recall": 0.99863481,
+      "f1": 0.73076923,
+      "fpr": 0.00957474
+    },
+    "block_metrics": {
+      "tp": 1453,
+      "fp": 760,
+      "fn": 12,
+      "tn": 111619,
+      "precision": 0.65657479,
+      "recall": 0.99180887,
+      "f1": 0.79010332,
+      "fpr": 0.00676283
+    }
+  },
+  "policy": {
+    "experiment": "EXP-014B-R5B22-OFFICIAL-CONSTRAINED-BASELINE",
+    "policy_id": "R5B22_OFFICIAL_CONSTRAINED_BASELINE",
+    "base_policy": "EXP-014B-R5B18-E2E-FROZEN-CONTRACT-HOMOLOGATION",
+    "action_col": "r5b22_official_decisao",
+    "approve_fraud_budget": 5,
+    "confirm_fraud_budget": 10,
+    "selected_rules": [
+      {
+        "rule_id": "DEMOTE_LAYER_APPROVE_TO_BLOCK_TO_APROVAR",
+        "description": "r5b14_layer_applied == APPROVE_TO_BLOCK",
+        "target_action": "APROVAR",
+        "n_rows": 49,
+        "n_frauds": 2,
+        "n_normals": 47,
+        "normal_rate": 0.95918367,
+        "incremental_n_rows": 49,
+        "incremental_n_frauds": 2,
+        "incremental_n_normals": 47,
+        "incremental_normal_rate": 0.95918367
+      },
+      {
+        "rule_id": "DEMOTE_LAYER_CONFIRM_TO_BLOCK_TO_CONFIRMAR",
+        "description": "r5b14_layer_applied == CONFIRM_TO_BLOCK",
+        "target_action": "CONFIRMAR",
+        "n_rows": 27,
+        "n_frauds": 5,
+        "n_normals": 22,
+        "normal_rate": 0.81481481,
+        "incremental_n_rows": 27,
+        "incremental_n_frauds": 5,
+        "incremental_n_normals": 22,
+        "incremental_normal_rate": 0.81481481
+      },
+      {
+        "rule_id": "DEMOTE_CAT2_ds_tipo_chave_norm_OUTROS__lgbm_bin_lgbm_0.05_0.1",
+        "description": "ds_tipo_chave_norm == OUTROS AND lgbm_bin == lgbm_0.05_0.1",
+        "target_action": "CONFIRMAR",
+        "n_rows": 11,
+        "n_frauds": 4,
+        "n_normals": 7,
+        "normal_rate": 0.63636364,
+        "incremental_n_rows": 8,
+        "incremental_n_frauds": 4,
+        "incremental_n_normals": 4,
+        "incremental_normal_rate": 0.5
+      },
+      {
+        "rule_id": "DEMOTE_CAT2_value_band_E_5000_10000__lgbm_bin_lgbm_0.05_0.1",
+        "description": "value_band == E_5000_10000 AND lgbm_bin == lgbm_0.05_0.1",
+        "target_action": "CONFIRMAR",
+        "n_rows": 8,
+        "n_frauds": 2,
+        "n_normals": 6,
+        "normal_rate": 0.75,
+        "incremental_n_rows": 3,
+        "incremental_n_frauds": 1,
+        "incremental_n_normals": 2,
+        "incremental_normal_rate": 0.66666667
+      }
+    ]
+  },
+  "distillation": {
+    "n_features": 78,
+    "feature_columns": [
+      "vl_pix",
+      "ds_tipo_chave_norm",
+      "hour",
+      "periodo_dia",
+      "value_band",
+      "mbk_available_flag",
+      "autcodret",
+      "latencia_rede_ms",
+      "tempo_processamento_host_ms",
+      "topaz_risk_score",
+      "mbk_completeness_score",
+      "qtd_pix_pagador_7d",
+      "qtd_pix_pagador_30d",
+      "qtd_pix_pagador_90d",
+      "qtd_pix_pagador_180d",
+      "valor_total_pagador_7d",
+      "valor_total_pagador_30d",
+      "valor_total_pagador_90d",
+      "valor_total_pagador_180d",
+      "max_qtd_pix_dia_pagador_7d",
+      "max_qtd_pix_dia_pagador_30d",
+      "valor_maximo_pix_pagador_180d",
+      "soma_recebedores_distintos_dia_180d",
+      "qtd_pix_mesmo_recebedor_30d",
+      "qtd_pix_mesmo_recebedor_90d",
+      "qtd_pix_mesmo_recebedor_180d",
+      "valor_total_para_recebedor_30d",
+      "valor_total_para_recebedor_90d",
+      "valor_total_para_recebedor_180d",
+      "primeiro_envio_para_recebedor_180d",
+      "dias_desde_primeiro_envio_recebedor",
+      "qtd_pix_recebidos_30d",
+      "qtd_pix_recebidos_90d",
+      "qtd_pix_recebidos_180d",
+      "valor_total_recebido_30d",
+      "valor_total_recebido_90d",
+      "valor_total_recebido_180d",
+      "soma_pagadores_distintos_dia_recebedor_180d",
+      "max_qtd_pix_recebidos_dia_180d",
+      "burst_daily_7d_flag",
+      "first_receiver_flag_real",
+      "ratio_valor_media_pagador_90d",
+      "ratio_valor_maximo_pagador_180d",
+      "qtd_pix_mesmo_recebedor_7d",
+      "valor_medio_para_recebedor_180d",
+      "dias_desde_ultima_transacao_recebedor",
+      "ratio_valor_pix_vs_max_recebedor_180d",
+      "is_recebedor_recorrente_180d",
+      "r4g_fast_frozen_decisao_recommended",
+      "r5b14_rule_applied",
+      "r5b14_layer_applied",
+      "ds_tipo_chave_norm_frozen",
+      "value_band_frozen",
+      "periodo_dia_frozen",
+      "score_bin",
+      "lgbm_bin",
+      "if_bin",
+      "ratio_bin",
+      "qtd_rec_bin",
+      "valor_rec_bin",
+      "mbk_available_flag_frozen",
+      "first_receiver_flag_real_frozen",
+      "module_quiet",
+      "se_worst_pattern",
+      "lgbm_raw",
+      "lgbm_r4_score",
+      "score_final",
+      "lgbm_mapped",
+      "if_percentile",
+      "se_score",
+      "beh_score",
+      "ratio_valor_maximo_pagador_180d_frozen",
+      "ratio_valor_media_pagador_90d_frozen",
+      "vl_pix_frozen",
+      "qtd_pix_pagador_180d_frozen",
+      "valor_total_pagador_180d_frozen",
+      "qtd_pix_mesmo_recebedor_180d_frozen",
+      "valor_total_para_recebedor_180d_frozen"
+    ],
+    "categorical_features": [
+      "ds_tipo_chave_norm",
+      "periodo_dia",
+      "value_band",
+      "r4g_fast_frozen_decisao_recommended",
+      "r5b14_rule_applied",
+      "r5b14_layer_applied",
+      "ds_tipo_chave_norm_frozen",
+      "value_band_frozen",
+      "periodo_dia_frozen",
+      "score_bin",
+      "lgbm_bin",
+      "if_bin",
+      "ratio_bin",
+      "qtd_rec_bin",
+      "valor_rec_bin",
+      "module_quiet",
+      "se_worst_pattern"
+    ],
+    "intervention_model": {
+      "target_col": "contract_intervention",
+      "threshold": 0.10908055367264094,
+      "validation_fraud_metrics": {
+        "tp": 229,
+        "fp": 157,
+        "fn": 0,
+        "tn": 17406,
+        "precision": 0.59326425,
+        "recall": 1.0,
+        "f1": 0.74471545,
+        "fpr": 0.00893925
+      },
+      "scopes": {
+        "validation": {
+          "contract_mimic_metrics": {
+            "tp": 385,
+            "fp": 1,
+            "fn": 1,
+            "tn": 17405,
+            "precision": 0.99740933,
+            "recall": 0.99740933,
+            "f1": 0.99740933,
+            "fpr": 5.745e-05
+          },
+          "fraud_metrics": {
+            "tp": 229,
+            "fp": 157,
+            "fn": 0,
+            "tn": 17406,
+            "precision": 0.59326425,
+            "recall": 1.0,
+            "f1": 0.74471545,
+            "fpr": 0.00893925
+          }
+        },
+        "holdout": {
+          "contract_mimic_metrics": {
+            "tp": 219,
+            "fp": 2,
+            "fn": 4,
+            "tn": 17147,
+            "precision": 0.99095023,
+            "recall": 0.98206278,
+            "f1": 0.98648649,
+            "fpr": 0.00011662
+          },
+          "fraud_metrics": {
+            "tp": 122,
+            "fp": 99,
+            "fn": 2,
+            "tn": 17149,
+            "precision": 0.5520362,
+            "recall": 0.98387097,
+            "f1": 0.70724638,
+            "fpr": 0.0057398
+          }
+        },
+        "full": {
+          "contract_mimic_metrics": {
+            "tp": 2583,
+            "fp": 4,
+            "fn": 5,
+            "tn": 111252,
+            "precision": 0.99845381,
+            "recall": 0.99806801,
+            "f1": 0.99826087,
+            "fpr": 3.595e-05
+          },
+          "fraud_metrics": {
+            "tp": 1463,
+            "fp": 1124,
+            "fn": 2,
+            "tn": 111255,
+            "precision": 0.56551991,
+            "recall": 0.99863481,
+            "f1": 0.72211254,
+            "fpr": 0.01000187
+          }
+        }
+      }
+    },
+    "block_model": {
+      "target_col": "contract_block",
+      "threshold": 0.0807211383972785,
+      "validation_fraud_metrics": {
+        "tp": 229,
+        "fp": 131,
+        "fn": 0,
+        "tn": 17432,
+        "precision": 0.63611111,
+        "recall": 1.0,
+        "f1": 0.77758913,
+        "fpr": 0.00745886
+      },
+      "scopes": {
+        "validation": {
+          "contract_mimic_metrics": {
+            "tp": 360,
+            "fp": 0,
+            "fn": 0,
+            "tn": 17432,
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0,
+            "fpr": 0.0
+          },
+          "fraud_metrics": {
+            "tp": 229,
+            "fp": 131,
+            "fn": 0,
+            "tn": 17432,
+            "precision": 0.63611111,
+            "recall": 1.0,
+            "f1": 0.77758913,
+            "fpr": 0.00745886
+          }
+        },
+        "holdout": {
+          "contract_mimic_metrics": {
+            "tp": 200,
+            "fp": 0,
+            "fn": 0,
+            "tn": 17172,
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0,
+            "fpr": 0.0
+          },
+          "fraud_metrics": {
+            "tp": 124,
+            "fp": 76,
+            "fn": 0,
+            "tn": 17172,
+            "precision": 0.62,
+            "recall": 1.0,
+            "f1": 0.7654321,
+            "fpr": 0.00440631
+          }
+        },
+        "full": {
+          "contract_mimic_metrics": {
+            "tp": 2300,
+            "fp": 0,
+            "fn": 0,
+            "tn": 111544,
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0,
+            "fpr": 0.0
+          },
+          "fraud_metrics": {
+            "tp": 1465,
+            "fp": 835,
+            "fn": 0,
+            "tn": 111544,
+            "precision": 0.63695652,
+            "recall": 1.0,
+            "f1": 0.77822045,
+            "fpr": 0.00743021
+          }
+        }
+      }
+    },
+    "ratios_to_r5b16": {
+      "global": {
+        "precision_ratio": 0.99902084,
+        "recall_ratio": 0.99863481,
+        "f1_ratio": 0.99888128
+      },
+      "block": {
+        "precision_ratio": 1.0,
+        "recall_ratio": 1.0,
+        "f1_ratio": 1.0
+      }
+    }
+  },
+  "target_gates": {
+    "approve_frauds_lte_5": true,
+    "confirm_frauds_lte_10": true,
+    "block_precision_improved": true,
+    "block_fp_reduced": true,
+    "distill_global_precision_recall_f1_gte_80pct": true,
+    "distill_block_precision_recall_f1_gte_80pct": true
+  },
+  "official_artifacts": [
+    "backend/artefatos/r5b22_official_baseline_policy.json",
+    "backend/artefatos/r5b22_official_baseline_summary.json",
+    "backend/artefatos/model_lgbm_distilled_r5b22_intervention.joblib",
+    "backend/artefatos/model_lgbm_distilled_r5b22_block.joblib",
+    "backend/artefatos/model_lgbm_distilled_r5b22_metadata.json"
+  ]
+}

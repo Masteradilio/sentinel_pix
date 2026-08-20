@@ -1,19 +1,20 @@
 
-# Documentação do Módulo de Engenharia Social — SE v3.3
+# Documentação do Módulo de Engenharia Social — SE v3.4
 
 ## Ficha Técnica do Módulo
 
 ```
 Nome:            Social Engineering Detector (SE)
-Versão:          v3.3
+Versão:          v3.4 (Baseline Operacional R5B22)
 Tipo:            Sistema Especialista Baseado em Regras (RBES)
 Padrões ativos:  9
-Indicadores:     31 (Lift ≥ 1.5x validado)
-Dataset:         100.355 transações PIX (355 fraudes confirmadas)
-Calibração:      2026-04-11
-Linguagem:       Python 3.12+
+Indicadores:     31
+Dataset Atual:   113.844 transações PIX (1.465 fraudes confirmadas)
+Calibração:      2026-06-12 (R5B22)
 Módulo:          core/social_engineering.py
 ```
+
+> **AVISO HISTÓRICO:** As métricas de performance detalhadas por padrão e indicador nas seções abaixo referem-se à calibração do ciclo v3.3 (100.355 tx, 355 fraudes). Elas permanecem neste documento por valor histórico e técnico. No baseline oficial atual (R5B22 com 1.465 fraudes), os padrões de SE continuam ativos como especialistas, fornecendo o sinal quantitativo (`se_score`) e as explicações estruturadas (patterns, active_indicators, se_worst_pattern), mas o peso de decisão rigorosa migrou para o contrato de destilação.
 
 ---
 
@@ -21,11 +22,11 @@ Módulo:          core/social_engineering.py
 
 ### 1.1 Por que este módulo existe
 
-O módulo SE é uma **camada complementar de detecção** que opera em conjunto com o modelo de machine learning (LGBM). Sua função é codificar **modus operandi conhecidos de golpes por engenharia social** em regras auditáveis, servindo como:
+O módulo SE é uma **camada complementar de detecção especialista**. Sua função original era codificar modus operandi conhecidos de golpes e atuar como um forte agravante (Cascade v3). No **baseline operacional R5B22**, o módulo assume os seguintes papéis centrais:
 
-1. **Agravante no score final** — quando o SE detecta padrões de golpe, eleva o score de risco da transação em +3 a +4 pontos
-2. **Camada de explicabilidade** — gera alertas humano-legíveis ("Possível coação física", "Padrão de falso funcionário") que nenhum SHAP value substitui
-3. **Rede de segurança regulatória** — atende ao requisito do BACEN de que sistemas de detecção devem ser **auditáveis e explicáveis**
+1. **Sinal para o Modelo (Feature Extraction)** — extrai o `se_score` (pontuação quantitativa acumulada) e a representação categórica `se_worst_pattern` para alimentar diretamente o aluno LightGBM R5B22 (ambas listadas no Feature Contract).
+2. **Motor de Explicabilidade** — seus fatores geram alertas estruturados e de fácil legibilidade ("Possível coação física", "Padrão de falso funcionário") para enriquecer a API em eventos de bloqueio e confirmação.
+3. **Rede de Segurança Regulatória** — atende aos requisitos do BACEN de sistemas explicáveis e fornece evidências estruturadas para relatórios e estornos.
 
 ### 1.2 Validação conceitual pela indústria
 
@@ -97,9 +98,10 @@ Transação PIX
            │
            ▼
       SEAnalysisResult
-      ├── se_score: 0-100
-      ├── patterns: [PatternMatch, ...]
-      ├── active_indicators: {str: bool}
+      ├── se_score: 0-100 (Utilizado no R5B22)
+      ├── se_worst_pattern: str (Utilizado no R5B22)
+      ├── patterns: [PatternMatch, ...] (Explicabilidade)
+      ├── active_indicators: {str: bool} (Explicabilidade)
       └── risk_level: BAIXO|MEDIO|ALTO|CRITICO
 ```
 
@@ -479,24 +481,23 @@ Se o Jaccard permanecer 1.0 após recalibração futura, considerar merge.
 
 ## 8. Integração no Pipeline
 
-### 8.1 Fluxo operacional
+### 8.1 Fluxo operacional (Baseline R5B22)
 
 ```
-Transação → Feature Engineering → LGBM (score 0-1)
+Transação → Feature Engineering → features_dict
                                     │
-                                    ├─ SE roda em paralelo (<1ms)
+                                    ├─ SE roda em paralelo extraindo anomalias (<1ms)
                                     │
                                     ▼
-                              Orquestrador
+                              Orquestrador / R5B22
                                     │
-                                    ├─ Se LGBM score ≥ threshold → suspeita
-                                    │   └─ SE score ≥ 40 → agravante +3 pts
-                                    │   └─ SE score ≥ 60 → agravante +4 pts
-                                    │
-                                    ├─ Se LGBM score < threshold
-                                    │   └─ SE score ≥ 80 → override para revisão
+                                    ├─ Sinais `se_score` e `se_worst_pattern` são
+                                    │  enviados diretamente ao classificador Distilado
+                                    │  do baseline oficial (LGBM v6.x)
                                     │
                                     └─ Decisão Final (APROVAR/CONFIRMAR/BLOQUEAR)
+                                       └─ O Orquestrador extrai os `patterns` para compor
+                                          a mensagem de recusa (CX) ou logs de auditoria
 ```
 
 ### 8.2 Output para CX (Customer Experience)

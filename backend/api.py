@@ -415,7 +415,7 @@ class BatchInput(BaseModel):
 
 class AnalyzeResponse(BaseModel):
     """
-    Response padronizado da análise — alinhado com pipeline v1.2.
+    Response padronizado da análise — alinhado com pipeline v1.5.0-r5b22.
 
     Campos condicionais (só presentes quando relevantes):
       - cascade: só quando triggered
@@ -426,6 +426,9 @@ class AnalyzeResponse(BaseModel):
       - veto_aplicado: só quando há veto
       - atenuantes: só quando presentes
       - cx: mensagem ao cliente (só CONFIRMAR/BLOQUEAR)
+      - r5b22_policy_applied: indica a política R5B22 aplicada
+      - r5b22_rule_applied: indica a regra específica R5B22 aplicada
+      - decisao_original_r5b22: decisão antes da intervenção R5B22
     """
 
     # Sempre presentes
@@ -448,6 +451,11 @@ class AnalyzeResponse(BaseModel):
     behavioral: Optional[Dict[str, Any]] = None
     veto_aplicado: Optional[str] = None
     atenuantes: Optional[List[str]] = None
+    
+    # R5B22
+    r5b22_policy_applied: Optional[str] = None
+    r5b22_rule_applied: Optional[str] = None
+    decisao_original_r5b22: Optional[str] = None
 
     # CX — adicionado pela API (não vem do pipeline)
     cx: Optional[Dict[str, Any]] = None
@@ -526,16 +534,14 @@ app = FastAPI(
     title="API Antifraude PIX",
     description=(
         "API REST para detecção de fraude em transações PIX em tempo real.\n\n"
-        "**Pipeline v1.4 + Engine v3.0.5:**\n"
-        "LightGBM v5.1 + Cascade v3 + Isolation Forest v3 + "
-        "Fast-Approve + Agravantes (7 fases) + Social Engineering v3.4 (8 padrões) + Behavioral Analytics v3.1 (6 fatores) + "
-        "SHAP Explicabilidade\n\n"
+        "**Pipeline v1.5.0-r5b22:**\n"
+        "Baseline Oficial R5B22 com regras R5B14 e contrato congelado R5B16/R5B18.\n\n"
         "**Faixas de decisão:**\n"
-        "- 🟢 **APROVAR** `[0, 77)` — Liberar automaticamente\n"
-        "- 🟡 **CONFIRMAR** `[77, 95)` — Autenticação adicional\n"
-        "- 🔴 **BLOQUEAR** `[95, 100]` — Bloqueio automático\n"
+        "- 🟢 **APROVAR** — Liberar automaticamente\n"
+        "- 🟡 **CONFIRMAR** — Autenticação adicional\n"
+        "- 🔴 **BLOQUEAR** — Bloqueio automático\n"
     ),
-    version="1.2.0",
+    version="1.5.0-r5b22",
     lifespan=lifespan,
     docs_url="/docs",
     redoc_url="/redoc",
@@ -635,6 +641,7 @@ async def root():
 @app.post(
     "/api/v1/analyze",
     response_model=AnalyzeResponse,
+    response_model_exclude_none=True,
     tags=["Análise"],
     summary="Analisa uma transação PIX",
     description=(
@@ -643,7 +650,11 @@ async def root():
         "engenharia social e análise comportamental."
     ),
 )
-async def analyze_transaction(transaction: TransactionInput):
+async def analyze_transaction(
+    transaction: TransactionInput,
+    explain: bool = False,
+    debug: bool = False
+):
     """
     Analisa uma transação PIX em tempo real.
 
@@ -654,7 +665,7 @@ async def analyze_transaction(transaction: TransactionInput):
     **Retorna:**
     - `decisao`: APROVAR, CONFIRMAR ou BLOQUEAR
     - `score_final`: 0-100
-    - `explicabilidade`: SHAP top features (CONFIRMAR/BLOQUEAR)
+    - `explicabilidade`: Opcional SHAP top features
     - `cx`: Mensagem amigável ao cliente (CONFIRMAR/BLOQUEAR)
     - `agravantes`: Lista de fatores de risco detectados
     - `social_engineering`: Padrões de golpe detectados
@@ -682,8 +693,19 @@ async def analyze_transaction(transaction: TransactionInput):
                 "fator_predominante": _identificar_fator_predominante(result),
             }
 
+        # Filtrar explicabilidade e debug
+        if not explain and not debug:
+            result.pop("explicabilidade", None)
+        
+        if not debug:
+            result.pop("metadata", None)
+            result.pop("componentes", None)
+            result.pop("agravantes", None)
+            result.pop("social_engineering", None)
+            result.pop("behavioral", None)
+
         elapsed = (time.perf_counter() - t0) * 1000
-        metrics.record_request(result["decisao"], elapsed)
+        metrics.record_request(result.get("decisao", "ERRO"), elapsed)
         return result
 
     except Exception as e:
@@ -799,9 +821,21 @@ async def health_check():
             },
         )
 
-    status = pipeline.get_status()
-    status["metrics"] = metrics.to_dict()
-    return status
+    pipeline_status = pipeline.get_status()
+    status_str = "healthy" if pipeline_status.get("available", False) else "degraded"
+    
+    cache_info = {
+        "customers_cached": len(pipeline._customer_history) if hasattr(pipeline, "_customer_history") else 0
+    }
+
+    return {
+        "status": status_str,
+        "pipeline_version": pipeline_status.get("pipeline_version", "N/A"),
+        "components": pipeline_status.get("modules", {}),
+        "cache": cache_info,
+        "thresholds": pipeline_status.get("thresholds", {}),
+        "metrics": metrics.to_dict(),
+    }
 
 
 # ─── Status Detalhado ───────────────────────────────────

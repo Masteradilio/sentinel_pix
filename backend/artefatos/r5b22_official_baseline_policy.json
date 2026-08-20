@@ -1,0 +1,62 @@
+{
+  "experiment": "EXP-014B-R5B22-OFFICIAL-CONSTRAINED-BASELINE",
+  "policy_id": "R5B22_OFFICIAL_CONSTRAINED_BASELINE",
+  "base_policy": "EXP-014B-R5B18-E2E-FROZEN-CONTRACT-HOMOLOGATION",
+  "action_col": "r5b22_official_decisao",
+  "approve_fraud_budget": 5,
+  "confirm_fraud_budget": 10,
+  "selected_rules": [
+    {
+      "rule_id": "DEMOTE_LAYER_APPROVE_TO_BLOCK_TO_APROVAR",
+      "description": "r5b14_layer_applied == APPROVE_TO_BLOCK",
+      "target_action": "APROVAR",
+      "n_rows": 49,
+      "n_frauds": 2,
+      "n_normals": 47,
+      "normal_rate": 0.95918367,
+      "incremental_n_rows": 49,
+      "incremental_n_frauds": 2,
+      "incremental_n_normals": 47,
+      "incremental_normal_rate": 0.95918367
+    },
+    {
+      "rule_id": "DEMOTE_LAYER_CONFIRM_TO_BLOCK_TO_CONFIRMAR",
+      "description": "r5b14_layer_applied == CONFIRM_TO_BLOCK",
+      "target_action": "CONFIRMAR",
+      "n_rows": 27,
+      "n_frauds": 5,
+      "n_normals": 22,
+      "normal_rate": 0.81481481,
+      "incremental_n_rows": 27,
+      "incremental_n_frauds": 5,
+      "incremental_n_normals": 22,
+      "incremental_normal_rate": 0.81481481
+    },
+    {
+      "rule_id": "DEMOTE_CAT2_ds_tipo_chave_norm_OUTROS__lgbm_bin_lgbm_0.05_0.1",
+      "description": "ds_tipo_chave_norm == OUTROS AND lgbm_bin == lgbm_0.05_0.1",
+      "target_action": "CONFIRMAR",
+      "n_rows": 11,
+      "n_frauds": 4,
+      "n_normals": 7,
+      "normal_rate": 0.63636364,
+      "incremental_n_rows": 8,
+      "incremental_n_frauds": 4,
+      "incremental_n_normals": 4,
+      "incremental_normal_rate": 0.5
+    },
+    {
+      "rule_id": "DEMOTE_CAT2_value_band_E_5000_10000__lgbm_bin_lgbm_0.05_0.1",
+      "description": "value_band == E_5000_10000 AND lgbm_bin == lgbm_0.05_0.1",
+      "target_action": "CONFIRMAR",
+      "n_rows": 8,
+      "n_frauds": 2,
+      "n_normals": 6,
+      "normal_rate": 0.75,
+      "incremental_n_rows": 3,
+      "incremental_n_frauds": 1,
+      "incremental_n_normals": 2,
+      "incremental_normal_rate": 0.66666667
+    }
+  ]
+}

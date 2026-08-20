@@ -1,0 +1,168 @@
+{
+  "n_unique_payers": 7276,
+  "top_payers": [
+    {
+      "cd_cpf_pagador": "10222769807",
+      "n_rows": 103
+    },
+    {
+      "cd_cpf_pagador": "32677481863",
+      "n_rows": 61
+    },
+    {
+      "cd_cpf_pagador": "49767364153",
+      "n_rows": 52
+    },
+    {
+      "cd_cpf_pagador": "5278749148",
+      "n_rows": 42
+    },
+    {
+      "cd_cpf_pagador": "38940590104",
+      "n_rows": 41
+    },
+    {
+      "cd_cpf_pagador": "67874991672",
+      "n_rows": 36
+    },
+    {
+      "cd_cpf_pagador": "3597790186",
+      "n_rows": 36
+    },
+    {
+      "cd_cpf_pagador": "58654747153",
+      "n_rows": 36
+    },
+    {
+      "cd_cpf_pagador": "3525631847",
+      "n_rows": 35
+    },
+    {
+      "cd_cpf_pagador": "16971396120",
+      "n_rows": 34
+    },
+    {
+      "cd_cpf_pagador": "26732130153",
+      "n_rows": 32
+    },
+    {
+      "cd_cpf_pagador": "6689171809",
+      "n_rows": 32
+    },
+    {
+      "cd_cpf_pagador": "23973579172",
+      "n_rows": 31
+    },
+    {
+      "cd_cpf_pagador": "49232193604",
+      "n_rows": 30
+    },
+    {
+      "cd_cpf_pagador": "4200888572",
+      "n_rows": 29
+    },
+    {
+      "cd_cpf_pagador": "87425998149",
+      "n_rows": 26
+    },
+    {
+      "cd_cpf_pagador": "43287468715",
+      "n_rows": 26
+    },
+    {
+      "cd_cpf_pagador": "5734871621",
+      "n_rows": 26
+    },
+    {
+      "cd_cpf_pagador": "89135881100",
+      "n_rows": 22
+    },
+    {
+      "cd_cpf_pagador": "51367432634",
+      "n_rows": 21
+    }
+  ],
+  "n_unique_receivers": 8190,
+  "top_receivers": [
+    {
+      "cd_cpf_cnpj_recebedor": "70763812650",
+      "n_rows": 103
+    },
+    {
+      "cd_cpf_cnpj_recebedor": "29431262843",
+      "n_rows": 46
+    },
+    {
+      "cd_cpf_cnpj_recebedor": "43692606800",
+      "n_rows": 46
+    },
+    {
+      "cd_cpf_cnpj_recebedor": "5936344380",
+      "n_rows": 43
+    },
+    {
+      "cd_cpf_cnpj_recebedor": "38889782897",
+      "n_rows": 42
+    },
+    {
+      "cd_cpf_cnpj_recebedor": "54079900910",
+      "n_rows": 42
+    },
+    {
+      "cd_cpf_cnpj_recebedor": "54853308865",
+      "n_rows": 41
+    },
+    {
+      "cd_cpf_cnpj_recebedor": "97140909000187",
+      "n_rows": 40
+    },
+    {
+      "cd_cpf_cnpj_recebedor": "3597790186",
+      "n_rows": 36
+    },
+    {
+      "cd_cpf_cnpj_recebedor": "21208708708",
+      "n_rows": 36
+    },
+    {
+      "cd_cpf_cnpj_recebedor": "9449864551",
+      "n_rows": 34
+    },
+    {
+      "cd_cpf_cnpj_recebedor": "54253389000106",
+      "n_rows": 34
+    },
+    {
+      "cd_cpf_cnpj_recebedor": "2371411167",
+      "n_rows": 32
+    },
+    {
+      "cd_cpf_cnpj_recebedor": "26732130153",
+      "n_rows": 32
+    },
+    {
+      "cd_cpf_cnpj_recebedor": "43807124861",
+      "n_rows": 32
+    },
+    {
+      "cd_cpf_cnpj_recebedor": "21351407830",
+      "n_rows": 31
+    },
+    {
+      "cd_cpf_cnpj_recebedor": "41526071819",
+      "n_rows": 28
+    },
+    {
+      "cd_cpf_cnpj_recebedor": "86267375560",
+      "n_rows": 23
+    },
+    {
+      "cd_cpf_cnpj_recebedor": "2269530500",
+      "n_rows": 23
+    },
+    {
+      "cd_cpf_cnpj_recebedor": "46305341000176",
+      "n_rows": 22
+    }
+  ]
+}

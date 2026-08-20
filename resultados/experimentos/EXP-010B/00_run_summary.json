@@ -1,0 +1,49 @@
+{
+  "generated_at": "2026-05-12T20:30:53",
+  "experiment": "EXP-010B",
+  "source_table": "landing_brb_oracle_maf.tb_infracao_pix",
+  "output_dir": "/home/cdsw/Adilio/rebuild_pix/Artefatos/EXP-010B",
+  "days_back": null,
+  "csv_limit": 1000,
+  "counts": {
+    "source_rows": 135262,
+    "dedup_transactions": 134599,
+    "confirmed_brb_payer_candidates": 35913,
+    "review_required_or_conflict": 19008,
+    "review_conflict": 882,
+    "pix_match_count": 28531,
+    "mobile_match_count": null,
+    "client_match_count": null
+  },
+  "label_rule_summary": {
+    "confirmed_fraud_candidate": "cd_resultado_analise_infracao=1 ou texto conclusivo positivo em tx_analise_detalhe",
+    "not_fraud_or_rejected": "cd_resultado_analise_infracao=2 ou texto conclusivo negativo em tx_analise_detalhe",
+    "review_conflict": "sinais positivos e negativos simultaneos",
+    "review_required": "sem conclusao clara"
+  },
+  "recommended_positive_scope_for_current_model": {
+    "bank_direction": "BRB_DEBITADO_PAGADOR",
+    "label_status": "CONFIRMED_FRAUD_CANDIDATE",
+    "transaction_id_valid_flag": true,
+    "notes": [
+      "BRB_CREDITADO_RECEBEDOR deve ficar segregado ate decisao de escopo.",
+      "Triangulacao deve ser segregada ou tipada explicitamente.",
+      "Textos pos-evento nao devem entrar como features."
+    ]
+  },
+  "artifacts": [
+    "01_schema_profile.csv",
+    "02_label_status_distribution.csv",
+    "03_bank_direction_distribution.csv",
+    "04_fraud_type_distribution.csv",
+    "05_confirmed_fraud_brb_payer_sample.csv",
+    "06_review_required_sample.csv",
+    "07_rejected_sample.csv",
+    "08_join_coverage_pix.csv",
+    "09_join_coverage_mobile.csv",
+    "10_join_coverage_cliente.csv",
+    "11_e2e_duplicate_audit.csv",
+    "12_recommendation.md",
+    "13_next_script_spec.md"
+  ]
+}

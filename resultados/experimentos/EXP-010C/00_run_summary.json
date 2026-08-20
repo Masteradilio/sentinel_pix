@@ -1,0 +1,39 @@
+{
+  "generated_at": "2026-05-12T21:16:47",
+  "experiment": "EXP-010C",
+  "source_table": "landing_brb_oracle_maf.tb_infracao_pix",
+  "label_table": "hmo_ml.tb_pix_fraude_labels_maf_curated_v1",
+  "hydrated_table": "hmo_ml.tb_pix_fraudes_maf_hidratadas_v1",
+  "enable_mobile": false,
+  "lookup_days_back": 1460,
+  "counts": {
+    "source_rows": 135262,
+    "labels_curated": 134599,
+    "positive_for_current_model": 15564,
+    "triangulation_segregated": 20242,
+    "receiver_scope_segregated": 38077,
+    "review_or_conflict": 22519,
+    "fraud_keys_for_hydration": 15564,
+    "pix_hydrated_base": 13558,
+    "mobile_dedup": null,
+    "base_enriched": 13558,
+    "hydrated_final": 13558
+  },
+  "artifacts_dir": "/home/cdsw/Adilio/rebuild_pix/Artefatos/EXP-010C",
+  "artifacts": [
+    "01_label_scope_distribution.csv",
+    "02_positive_labels_sample.csv",
+    "03_review_or_conflict_labels_sample.csv",
+    "04_triangulation_labels_sample.csv",
+    "05_hydrated_frauds_sample.csv",
+    "06_hydrated_coverage.csv",
+    "dados_pix_fraudes_maf_hidratadas_v1.csv"
+  ],
+  "notes": [
+    "Textos da MAF foram usados apenas para curadoria de labels, nao como features.",
+    "BRB_CREDITADO_RECEBEDOR ficou segregado.",
+    "Triangulacao ficou segregada.",
+    "Tabela hidratada usa apenas POSITIVE_FOR_CURRENT_MODEL.",
+    "Mobile fica desabilitado por padrao para reduzir custo; campos mobile podem ficar nulos."
+  ]
+}

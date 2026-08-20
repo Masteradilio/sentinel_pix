@@ -79,6 +79,7 @@ import logging
 import sys
 import time
 import warnings
+import os
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
@@ -133,12 +134,19 @@ from preprocessing import (
     classify_key_flags,
     robust_divide,
     map_topaz_rule,
+    create_trust_features,
 )
 
 # Engines
 from core.decision_engine import PixDecisionEngine, EngineConfig, DecisionResult
 from core.behavioral_analytics import BehavioralAnalytics, BehavioralAnalysisResult
 from core.social_engineering import SocialEngineeringDetector, SEAnalysisResult
+from core.severity_policy import (
+    R5B16_FROZEN_ACTION_COL,
+    apply_r5b14_operational_zero_fn_policy,
+    r5b14_policy_metadata,
+    r5b16_policy_metadata,
+)
 
 # SHAP — explicabilidade v1.2+
 try:
@@ -153,6 +161,8 @@ except ImportError:
 # VERSÃO DO PIPELINE
 # =========================================================
 PIPELINE_VERSION = "1.4"
+SEC_7D = 7 * 86400
+SEC_180D = 180 * 86400
 
 
 # =========================================================
@@ -318,7 +328,12 @@ class PipelineOrquestrador:
         engine_config: Optional[EngineConfig] = None,
         shap_enabled: bool = True,
         shap_top_n: int = 10,
+        use_precomputed_features: bool = False,
     ):
+        import os
+        self.use_precomputed_features = use_precomputed_features or (
+            os.environ.get("USE_PRECOMPUTED_FEATURES", "0") in {"1", "true", "yes"}
+        )
         self.artefatos_dir = Path(artefatos_dir) if artefatos_dir else ARTEFATOS_DIR
 
         t0 = time.perf_counter()
@@ -330,6 +345,25 @@ class PipelineOrquestrador:
         # --- 2. Decision Engine v3.0.5 ---
         config = engine_config or EngineConfig(artefatos_dir=str(self.artefatos_dir))
         self.engine = PixDecisionEngine(config)
+        self.r5b14_policy_enabled = os.environ.get("ENABLE_R5B14_POLICY", "0").lower() in {"1", "true", "yes"}
+        self.r5b16_frozen_contract_enabled = os.environ.get(
+            "ENABLE_R5B16_FROZEN_CONTRACT",
+            "0",
+        ).lower() in {"1", "true", "yes"}
+        scoring_r5b14 = self.engine.scoring_config.get("r5b14_operational_zero_fn_enabled")
+        if scoring_r5b14 is not None:
+            self.r5b14_policy_enabled = str(scoring_r5b14).lower() in {"1", "true", "yes"}
+        scoring_r5b16 = self.engine.scoring_config.get("r5b16_frozen_contract_enabled")
+        if scoring_r5b16 is not None:
+            self.r5b16_frozen_contract_enabled = str(scoring_r5b16).lower() in {"1", "true", "yes"}
+        self.r5b22_official_baseline_enabled = os.environ.get(
+            "ENABLE_R5B22_OFFICIAL_BASELINE",
+            "0",
+        ).lower() in {"1", "true", "yes"}
+        scoring_r5b22 = self.engine.scoring_config.get("r5b22_official_baseline_enabled")
+        if scoring_r5b22 is not None:
+            self.r5b22_official_baseline_enabled = str(scoring_r5b22).lower() in {"1", "true", "yes"}
+        self.r5b22_policy = self._load_r5b22_policy()
 
         # --- 3. Social Engineering Detector v3.3 ---
         self.se_detector = SocialEngineeringDetector(
@@ -510,6 +544,48 @@ class PipelineOrquestrador:
         df = standardize_columns(df)
         for col in RAW_INPUT_COLUMNS:
             df = ensure_column(df, col)
+            
+        # Mapeamento v3 -> v2 para retrocompatibilidade total (DecisionEngine, SE, BEH)
+        if "qtd_pix_pagador_90d" in df.columns:
+            df["qt_total_pix_trimestre"] = df["qtd_pix_pagador_90d"]
+            df["is_first_tx_trimestre"] = (df["qtd_pix_pagador_90d"] == 1).astype(int)
+            
+        if "valor_total_pagador_90d" in df.columns and "qtd_pix_pagador_90d" in df.columns:
+            df["vl_mediana_pix_trimestre"] = np.where(
+                df["qtd_pix_pagador_90d"] > 0, 
+                df["valor_total_pagador_90d"] / df["qtd_pix_pagador_90d"], 
+                0.0
+            )
+            
+        if "max_qtd_pix_dia_pagador_30d" in df.columns:
+            df["qt_pix_dia_maximo_trimestre"] = df["max_qtd_pix_dia_pagador_30d"]
+
+        if "first_receiver_flag_real" in df.columns:
+            df["first_receiver_flag"] = df["first_receiver_flag_real"]
+            
+        if "ds_tipo_chave_norm" in df.columns:
+            df["ds_tipo_chave"] = df["ds_tipo_chave_norm"]
+            df["pix_key_random_flag"] = (df["ds_tipo_chave_norm"] == "CHAVE_ALEATORIA").astype(int)
+            
+        if "topaz_transacao_rejeitada" in df.columns:
+            df["topaz_rejeitada_flag"] = df["topaz_transacao_rejeitada"]
+            
+        if "topaz_risk_score" in df.columns:
+            df["topaz_score_filled"] = df["topaz_risk_score"]
+
+        if "valor_total_recebido_180d" in df.columns:
+            df["vl_valor_recebido_trimestre"] = df["valor_total_recebido_180d"]
+
+        # Variáveis faltantes no dataset v3 que precisamos preencher para as regras não falharem
+        if "nr_idade" not in df.columns:
+            # Tentar inferir de algum lugar ou usar default
+            df["nr_idade"] = 35
+            
+        if "qt_tempo_relacionamento_mes" not in df.columns:
+            # No v3 temos 'dias_desde_primeiro_envio_recebedor' mas não idade da conta
+            # Vamos usar 999 (conta antiga) por segurança para evitar FPs em COACAO_FISICA
+            df["qt_tempo_relacionamento_mes"] = 999
+            
         return df
 
     def _create_features(self, df: pd.DataFrame) -> pd.DataFrame:
@@ -642,6 +718,7 @@ class PipelineOrquestrador:
 
         # ─── Features Sequenciais (cache por cliente) ───────
         df = self._create_sequential_features(df)
+        df = create_trust_features(df)
 
         # ─── Rule Scores ────────────────────────────────────
         df = self._create_rule_scores(df)
@@ -691,6 +768,31 @@ class PipelineOrquestrador:
         v1.4.1: Correção de bug com df.loc em DataFrames de 1 linha.
         Usa .at[] para atribuição escalar (mais estável que .loc em pandas >= 2.0).
         """
+        if getattr(self, "use_precomputed_features", False):
+            default_values = {
+                "minutes_since_prev_tx": np.nan,
+                "tx_count_prev_30m": 0,
+                "receiver_tx_count_prev": 0,
+                "qt_envio_recebedor_trimestre": 0,
+                "first_receiver_flag": 1,
+                "key_tx_count_prev": 0,
+                "first_key_flag": 1,
+                "distinct_receivers_so_far": 1,
+                "distinct_keys_so_far": 1,
+                "tp_primeiro_envio_recebedor_trimestre": 1,
+                "qtd_pix_mesmo_recebedor_7d": 0,
+                "valor_medio_para_recebedor_180d": np.nan,
+                "dias_desde_ultima_transacao_recebedor": np.nan,
+                "ratio_valor_pix_vs_max_recebedor_180d": np.nan,
+                "is_recebedor_recorrente_180d": 0,
+            }
+            for col, default in default_values.items():
+                if col not in df.columns:
+                    df[col] = default
+                else:
+                    df[col] = df[col].fillna(default)
+            return df
+
         # Inicializar colunas com valores default (vetorizado, sem loop)
         default_values = {
             "minutes_since_prev_tx": np.nan,
@@ -703,6 +805,12 @@ class PipelineOrquestrador:
             "distinct_receivers_so_far": 1,
             "distinct_keys_so_far": 1,
             "tp_primeiro_envio_recebedor_trimestre": 1,
+            # Novas features de relacionamento (Fase 2)
+            "qtd_pix_mesmo_recebedor_7d": 0,
+            "valor_medio_para_recebedor_180d": np.nan,
+            "dias_desde_ultima_transacao_recebedor": np.nan,
+            "ratio_valor_pix_vs_max_recebedor_180d": np.nan,
+            "is_recebedor_recorrente_180d": 0,
         }
         for col, default in default_values.items():
             if col not in df.columns:
@@ -748,6 +856,36 @@ class PipelineOrquestrador:
                 1 if rcv_count == 0 else 0
             )
 
+            # --- Features de relacionamento pagador-recebedor (Fase 2) ---
+            receiver_txs = hist.get("receiver_txs", {}).get(receiver, [])
+            if receiver_txs and pd.notna(event_time):
+                ts_s = float(event_time.timestamp()) if hasattr(event_time, "timestamp") else float(pd.to_datetime(event_time).timestamp())
+                cutoff_180d = ts_s - SEC_180D
+                valid_txs = [item for item in receiver_txs if item[0] >= cutoff_180d]
+                
+                if valid_txs:
+                    # 1. qtd_pix_mesmo_recebedor_7d
+                    cutoff_7d = ts_s - SEC_7D
+                    txs_7d = [item for item in valid_txs if item[0] >= cutoff_7d]
+                    df.at[idx, "qtd_pix_mesmo_recebedor_7d"] = len(txs_7d)
+                    
+                    # 2. valor_medio_para_recebedor_180d
+                    vals_180d = [item[1] for item in valid_txs]
+                    df.at[idx, "valor_medio_para_recebedor_180d"] = np.mean(vals_180d)
+                    
+                    # 3. dias_desde_ultima_transacao_recebedor
+                    ts_anterior = valid_txs[-1][0]
+                    df.at[idx, "dias_desde_ultima_transacao_recebedor"] = max((ts_s - ts_anterior) / 86400.0, 0.0)
+                    
+                    # 4. ratio_valor_pix_vs_max_recebedor_180d
+                    max_val_180d = np.max(vals_180d)
+                    vl_pix = float(df.at[idx, "vl_pix"])
+                    if max_val_180d > 0:
+                        df.at[idx, "ratio_valor_pix_vs_max_recebedor_180d"] = vl_pix / max_val_180d
+                        
+                    # 5. is_recebedor_recorrente_180d
+                    df.at[idx, "is_recebedor_recorrente_180d"] = 1 if len(valid_txs) >= 2 else 0
+
             # --- Key counts ---
             key_counts = hist.get("key_counts", {})
             key_count = key_counts.get(pix_key, 0)
@@ -770,6 +908,8 @@ class PipelineOrquestrador:
 
     def _update_customer_history(self, df: pd.DataFrame):
         """Atualiza o cache de histórico após inferência bem-sucedida."""
+        if getattr(self, "use_precomputed_features", False):
+            return
         for idx in df.index:
             customer_id = str(df.loc[idx, "customer_id"])
             event_time = df.loc[idx, "event_datetime"]
@@ -785,6 +925,7 @@ class PipelineOrquestrador:
                     "recent_times": [],
                     "receiver_counts": {},
                     "key_counts": {},
+                    "receiver_txs": {},
                 }
 
             hist = self._customer_history[customer_id]
@@ -801,6 +942,13 @@ class PipelineOrquestrador:
                 hist["receiver_counts"][receiver] = (
                     hist["receiver_counts"].get(receiver, 0) + 1
                 )
+                if "receiver_txs" not in hist:
+                    hist["receiver_txs"] = {}
+                if receiver not in hist["receiver_txs"]:
+                    hist["receiver_txs"][receiver] = []
+                if pd.notna(event_time):
+                    ts_s = float(event_time.timestamp()) if hasattr(event_time, "timestamp") else float(pd.to_datetime(event_time).timestamp())
+                    hist["receiver_txs"][receiver].append((ts_s, float(df.loc[idx, "vl_pix"])))
 
             if pix_key not in ("nan", "None", ""):
                 hist["key_counts"][pix_key] = (
@@ -1020,6 +1168,9 @@ class PipelineOrquestrador:
             timings=timings,
             shap_explanation=shap_explanation,
         )
+        response = self._apply_r5b16_frozen_contract_if_enabled(response, features_dict)
+        response = self._apply_r5b14_policy_if_enabled(response, features_dict)
+        response = self._apply_r5b22_policy_if_enabled(response, features_dict)
 
         # Log resumido
         cascade_info = (
@@ -1045,6 +1196,172 @@ class PipelineOrquestrador:
         )
 
         return response
+
+    def _apply_r5b16_frozen_contract_if_enabled(
+        self,
+        response: Dict[str, Any],
+        features_dict: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """Usa R4G frozen como decisao-base quando homologacao R5B16 esta ativa."""
+
+        if not getattr(self, "r5b16_frozen_contract_enabled", False):
+            return response
+
+        frozen_action = features_dict.get(R5B16_FROZEN_ACTION_COL)
+        if frozen_action is None or pd.isna(frozen_action):
+            return response
+
+        frozen_action = str(frozen_action).upper().strip()
+        if frozen_action not in {"APROVAR", "CONFIRMAR", "BLOQUEAR"}:
+            return response
+
+        current_action = str(response.get("decisao", "")).upper().strip()
+        out = dict(response)
+        out["decisao_runtime_original"] = current_action
+        out["decisao"] = frozen_action
+        out["r5b16_frozen_contract_applied"] = frozen_action != current_action
+        metadata = dict(out.get("metadata", {}))
+        metadata["r5b16_frozen_contract"] = {
+            "enabled": True,
+            "policy_id": r5b16_policy_metadata()["policy_id"],
+            "base_action_col": R5B16_FROZEN_ACTION_COL,
+            "runtime_original_action": current_action,
+            "frozen_base_action": frozen_action,
+        }
+        out["metadata"] = metadata
+        return out
+
+    def _load_r5b22_policy(self) -> Dict[str, Any]:
+        """Carrega a politica oficial R5B22, se existir."""
+
+        policy_path = self.artefatos_dir / "r5b22_official_baseline_policy.json"
+        try:
+            if policy_path.exists():
+                import json
+
+                return json.loads(policy_path.read_text(encoding="utf-8"))
+        except Exception as exc:
+            try:
+                logger.warning("Falha ao carregar politica R5B22: %s", exc)
+            except Exception:
+                pass
+        return {}
+
+    def _r5b22_rule_matches(
+        self,
+        rule: Dict[str, Any],
+        response: Dict[str, Any],
+        features_dict: Dict[str, Any],
+    ) -> bool:
+        """Avalia as regras oficiais R5B22 com contrato explicito e fechado."""
+
+        rule_id = str(rule.get("rule_id", ""))
+        layer = str(response.get("r5b14_layer_applied", "")).strip()
+        key_type = str(features_dict.get("ds_tipo_chave_norm", "")).strip()
+        value_band = str(features_dict.get("value_band", "")).strip()
+        lgbm_bin = str(features_dict.get("lgbm_bin", "")).strip()
+
+        if rule_id == "DEMOTE_LAYER_APPROVE_TO_BLOCK_TO_APROVAR":
+            return layer == "APPROVE_TO_BLOCK"
+        if rule_id == "DEMOTE_LAYER_CONFIRM_TO_BLOCK_TO_CONFIRMAR":
+            return layer == "CONFIRM_TO_BLOCK"
+        if rule_id == "DEMOTE_CAT2_ds_tipo_chave_norm_OUTROS__lgbm_bin_lgbm_0.05_0.1":
+            return key_type == "OUTROS" and lgbm_bin == "lgbm_0.05_0.1"
+        if rule_id == "DEMOTE_CAT2_value_band_E_5000_10000__lgbm_bin_lgbm_0.05_0.1":
+            return value_band == "E_5000_10000" and lgbm_bin == "lgbm_0.05_0.1"
+        return False
+
+    def _apply_r5b22_policy_if_enabled(
+        self,
+        response: Dict[str, Any],
+        features_dict: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """Aplica o baseline oficial R5B22 apos R5B16/R5B14."""
+
+        if not getattr(self, "r5b22_official_baseline_enabled", False):
+            return response
+        if str(response.get("decisao", "")).upper().strip() != "BLOQUEAR":
+            return response
+        policy = getattr(self, "r5b22_policy", {}) or {}
+        for rule in policy.get("selected_rules", []):
+            try:
+                if not self._r5b22_rule_matches(rule, response, features_dict):
+                    continue
+                out = dict(response)
+                current_action = str(out.get("decisao", "")).upper().strip()
+                target_action = str(rule.get("target_action", current_action)).upper().strip()
+                out["decisao_original_r5b22"] = current_action
+                out["decisao"] = target_action
+                out["r5b22_policy_applied"] = True
+                out["r5b22_rule_applied"] = str(rule.get("rule_id", ""))
+                metadata = dict(out.get("metadata", {}))
+                metadata["r5b22_official_baseline"] = {
+                    "enabled": True,
+                    "policy_id": policy.get("policy_id", "R5B22_OFFICIAL_CONSTRAINED_BASELINE"),
+                    "base_policy": policy.get("base_policy"),
+                    "rule_applied": out["r5b22_rule_applied"],
+                    "target_action": target_action,
+                    "approve_fraud_budget": policy.get("approve_fraud_budget"),
+                    "confirm_fraud_budget": policy.get("confirm_fraud_budget"),
+                }
+                out["metadata"] = metadata
+                return out
+            except Exception as exc:
+                try:
+                    logger.warning("Falha ao aplicar regra R5B22: %s", exc)
+                except Exception:
+                    pass
+        return response
+
+    def _apply_r5b14_policy_if_enabled(
+        self,
+        response: Dict[str, Any],
+        features_dict: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """Aplica R5B14 por configuracao, mantendo default desligado."""
+
+        if not getattr(self, "r5b14_policy_enabled", False):
+            return response
+
+        try:
+            current_action = str(response.get("decisao", "")).upper().strip()
+            policy_input = dict(features_dict)
+            policy_input.setdefault("score_final", response.get("score_final"))
+            componentes = response.get("componentes", {})
+            if isinstance(componentes, dict):
+                policy_input.setdefault("lgbm_raw", componentes.get("lgbm_raw"))
+
+            policy_df = pd.DataFrame([policy_input])
+            final_actions, trace = apply_r5b14_operational_zero_fn_policy(
+                policy_df,
+                pd.Series([current_action]),
+            )
+            final_action = str(final_actions.iloc[0])
+            if final_action == current_action:
+                return response
+
+            out = dict(response)
+            out["decisao_original_r5b14"] = current_action
+            out["decisao"] = final_action
+            out["r5b14_policy_applied"] = True
+            out["r5b14_rule_applied"] = str(trace["r5b14_rule_applied"].iloc[0])
+            out["r5b14_layer_applied"] = str(trace["r5b14_layer_applied"].iloc[0])
+            metadata = dict(out.get("metadata", {}))
+            metadata["r5b14_policy"] = {
+                "enabled": True,
+                "policy_id": r5b14_policy_metadata()["policy_id"],
+                "rule_set_version": r5b14_policy_metadata()["rule_set_version"],
+                "rule_applied": out["r5b14_rule_applied"],
+                "layer_applied": out["r5b14_layer_applied"],
+            }
+            out["metadata"] = metadata
+            return out
+        except Exception as exc:
+            try:
+                logger.warning("Falha ao aplicar politica R5B14 no pipeline: %s", exc)
+            except Exception:
+                pass
+            return response
 
     # ==========================================================
     # API BATCH
@@ -1284,6 +1601,10 @@ class PipelineOrquestrador:
             "integration": engine_status.get("integration", {}),
             "scoring_version": engine_status.get("scoring_version", "N/A"),
         }
+
+    def reset_cache(self) -> None:
+        """Limpa o cache de histórico de clientes."""
+        self._customer_history.clear()
 
 
 # ============================================================

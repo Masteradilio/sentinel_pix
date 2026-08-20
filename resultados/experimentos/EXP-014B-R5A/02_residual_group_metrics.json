@@ -1,0 +1,38 @@
+{
+  "counts": {
+    "approve_fraud_count": 2,
+    "approve_normal_count": 111256,
+    "block_fraud_count": 1458,
+    "block_normal_count": 766,
+    "confirm_fraud_count": 5,
+    "confirm_normal_count": 357
+  },
+  "by_action": {
+    "APROVAR": {
+      "n_rows": 111258,
+      "n_frauds": 2,
+      "n_normals": 111256,
+      "fraud_rate": 1.798e-05
+    },
+    "BLOQUEAR": {
+      "n_rows": 2224,
+      "n_frauds": 1458,
+      "n_normals": 766,
+      "fraud_rate": 0.65557554
+    },
+    "CONFIRMAR": {
+      "n_rows": 362,
+      "n_frauds": 5,
+      "n_normals": 357,
+      "fraud_rate": 0.01381215
+    }
+  },
+  "intervention_pred_counts": {
+    "pred_0": 111258,
+    "pred_1": 2586
+  },
+  "block_pred_counts": {
+    "pred_0": 111620,
+    "pred_1": 2224
+  }
+}

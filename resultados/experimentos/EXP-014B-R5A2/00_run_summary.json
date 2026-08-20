@@ -1,0 +1,15 @@
+{
+  "experiment": "EXP-014B-R5A2",
+  "status": "DONE",
+  "created_at": "2026-06-10T19:28:03.083008+00:00",
+  "input_data": "C:\\Users\\u857755\\OneDrive - BRB - Banco de Brasilia SA\\Documentos\\Projetos\\squad_IA\\PIX\\rebuild_pix\\dados\\base_treino_final.csv",
+  "n_rows": 100355,
+  "n_columns": 70,
+  "n_lgbm_features": 65,
+  "n_lgbm_missing_features": 0,
+  "n_if_features": 13,
+  "n_if_missing_features": 4,
+  "n_redundancy_candidates": 49,
+  "n_temporal_stability_rows": 65,
+  "output_dir": "C:\\Users\\u857755\\OneDrive - BRB - Banco de Brasilia SA\\Documentos\\Projetos\\squad_IA\\PIX\\rebuild_pix\\resultados\\experimentos\\EXP-014B-R5A2"
+}

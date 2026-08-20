@@ -1,0 +1,46 @@
+{
+  "experiment": "EXP-014B-R5B17-PIPELINE-HOMOLOGATION",
+  "status": "FAIL_R5B17_PIPELINE_HOMOLOGATION",
+  "mode": "full",
+  "sample": null,
+  "frauds_only": true,
+  "input_file": "dados\\hmo_ml_tb_pix_dataset_v3_features_180d_v1.csv",
+  "n_rows": 1465,
+  "n_frauds": 1465,
+  "workers": 1,
+  "elapsed_seconds": 201.6,
+  "runtime_flags": {
+    "ENABLE_R5B14_POLICY": "1",
+    "USE_PRECOMPUTED_FEATURES": "1"
+  },
+  "error_count": 0,
+  "remaining_approve_frauds": 711,
+  "remaining_confirm_frauds": 0,
+  "global_intervention_metrics": {
+    "tp": 754,
+    "fp": 0,
+    "fn": 711,
+    "tn": 0,
+    "precision": 1.0,
+    "recall": 0.51467577,
+    "f1": 0.6795854,
+    "fpr": 0.0
+  },
+  "block_metrics": {
+    "tp": 754,
+    "fp": 0,
+    "fn": 711,
+    "tn": 0,
+    "precision": 1.0,
+    "recall": 0.51467577,
+    "f1": 0.6795854,
+    "fpr": 0.0
+  },
+  "target_gates": {
+    "no_pipeline_errors": true,
+    "fpr_lt_1pct": true,
+    "fn_lte_5_outside_block": false,
+    "approve_frauds_eq_0": false,
+    "confirm_frauds_eq_0": true
+  }
+}

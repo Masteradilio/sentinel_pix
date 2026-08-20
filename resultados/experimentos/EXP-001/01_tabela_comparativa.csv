@@ -1,5 +1,0 @@
-variante_id,threshold_confirmar,threshold_bloquear,label,TP,FP,FN,TN,Precision,Recall,F1,FPR,delta_F1,delta_Recall,delta_Precision
-BASELINE,77,90,"BASELINE (atual, threshold=77)",332,8,23,5637,0.976471,0.935211,0.955396,0.00141718,0.0,0.0,0.0
-V1,62,90,"V1 (threshold=62, F1 ótimo)",346,17,9,5628,0.953168,0.974648,0.963788,0.00301151,0.008392,0.039437,-0.023303
-V2,65,90,"V2 (threshold=65, conservador)",346,17,9,5628,0.953168,0.974648,0.963788,0.00301151,0.008392,0.039437,-0.023303
-V3,70,90,"V3 (threshold=70, intermediario)",338,12,17,5633,0.965714,0.952113,0.958865,0.00212578,0.003469,0.016902,-0.010757
