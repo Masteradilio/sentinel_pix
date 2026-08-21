@@ -196,7 +196,27 @@ def _enrich_transaction(req: PixTransactionRequest) -> Dict[str, Any]:
         "recebedor_qtd_entradas_24h": online_feats.get("receiver_inflow_count_24h", 1),
         "recebedor_vl_entradas_24h": online_feats.get("receiver_inflow_sum_24h", amount),
         "recebedor_mule_score": online_feats.get("receiver_suspected_mule_score", 0.0),
-        "recebedor_idade_conta_dias": online_feats.get("receiver_account_age_days", 180)
+        "recebedor_idade_conta_dias": online_feats.get("receiver_account_age_days", 180),
+        
+        "cd_pix": req.transaction_id,
+        "dt_pix": ts,
+        "cd_cpf_pagador": req.account_id,
+        "cd_cpf_cnpj_recebedor": req.receiver_pix_key,
+        "ds_chave_pix": req.receiver_pix_key,
+        "ds_tipo_chave": req.receiver_key_type,
+        "vl_pix": amount,
+        "device_name": req.device_id or offline_feats.get("primary_device_id", "iPhone14,2"),
+        "vl_renda_cliente": float(offline_feats.get("monthly_income", 4500.0)),
+        "first_receiver_flag_real": float(online_feats.get("receiver_is_new", 0)),
+        "qtd_pix_pagador_7d": float(online_feats.get("pix_count_1h", 1)),
+        "qtd_pix_pagador_30d": float(online_feats.get("pix_count_24h", 2)),
+        "qtd_pix_pagador_90d": float(online_feats.get("pix_count_24h", 2) * 3),
+        "qtd_pix_pagador_180d": float(online_feats.get("pix_count_24h", 2) * 6),
+        "valor_total_pagador_7d": float(online_feats.get("pix_sum_1h", amount)),
+        "valor_total_pagador_30d": float(online_feats.get("pix_sum_24h", amount * 2)),
+        "valor_total_pagador_90d": float(online_feats.get("pix_sum_24h", amount * 2) * 3),
+        "valor_total_pagador_180d": float(online_feats.get("pix_sum_24h", amount * 2) * 6),
+        "topaz_risk_score": 0.85 if online_feats.get("receiver_suspected_mule_score", 0.0) > 0.5 or (is_night and amount > 900) else 0.05
     }
 
     if req.extra_features:

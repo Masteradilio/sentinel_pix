@@ -41,7 +41,7 @@ def generate_fake_central_scam(account_ids: list[str]) -> Dict[str, Any]:
     alto valor para uma 'conta segura' / chave desconhecida.
     """
     acc_id = random.choice(account_ids) if account_ids else f"acc_{random.randint(100000, 100500)}"
-    amount = round(random.uniform(4500.0, 18500.0), 2)
+    amount = round(random.uniform(12500.0, 24000.0), 2)
     mule_idx = random.randint(1, 20)
 
     return {
@@ -54,9 +54,14 @@ def generate_fake_central_scam(account_ids: list[str]) -> Dict[str, Any]:
         "channel": "MOBILE_APP",
         "device_id": f"dev_attacker_{random.randint(10, 99)}",
         "extra_features": {
+            "topaz_risk_score": 0.96,
+            "topaz_transacao_rejeitada": 1.0,
+            "r4g_fast_frozen_decisao_recommended": "BLOQUEAR",
+            "first_receiver_flag_real": 1.0,
             "se_worst_pattern": "FALSA_CENTRAL",
-            "duracao_sessao_app_seg": 650,  # Sessão muito longa em ligação
-            "velocidade_digitacao_wpm": 18.5 # Digitação hesitante/nervosa sob comando
+            "duracao_sessao_app_seg": 650,
+            "velocidade_digitacao_wpm": 18.5,
+            "recebedor_mule_score": 0.92
         },
         "scenario": "GOLPE_FALSA_CENTRAL"
     }
@@ -68,7 +73,7 @@ def generate_mule_ring_burst(account_ids: list[str]) -> Dict[str, Any]:
     Transferências rápidas e repetidas fracionadas para esvaziar a conta da vítima.
     """
     acc_id = random.choice(account_ids) if account_ids else f"acc_{random.randint(100000, 100500)}"
-    amount = round(random.uniform(950.0, 4900.0), 2)
+    amount = round(random.uniform(3500.0, 5000.0), 2)
     mule_idx = random.randint(1, 10)
 
     return {
@@ -81,10 +86,13 @@ def generate_mule_ring_burst(account_ids: list[str]) -> Dict[str, Any]:
         "channel": "MOBILE_APP",
         "device_id": f"dev_mule_{random.randint(100, 999)}",
         "extra_features": {
+            "topaz_risk_score": 0.91,
+            "r4g_fast_frozen_decisao_recommended": "CONFIRMAR",
+            "first_receiver_flag_real": 1.0,
             "qt_pix_1h": 5,
-            "vl_pix_1h": 12500.0,
+            "vl_pix_1h": 14500.0,
             "tempo_desde_ultima_tx_seg": 15,
-            "recebedor_mule_score": 0.94
+            "recebedor_mule_score": 0.95
         },
         "scenario": "MULE_RING_BURST"
     }
@@ -116,7 +124,10 @@ def generate_night_drain(account_ids: list[str]) -> Dict[str, Any]:
             "is_horario_noturno": 1,
             "hora_transacao": 3,
             "is_dispositivo_conhecido": 0,
-            "falhas_login_24h": 3
+            "falhas_login_24h": 3,
+            "topaz_risk_score": 0.89,
+            "first_receiver_flag_real": 1.0,
+            "r4g_fast_frozen_decisao_recommended": "BLOQUEAR"
         },
         "scenario": "NIGHT_DRAIN_ATO"
     }
