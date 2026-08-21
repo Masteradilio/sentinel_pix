@@ -48,7 +48,7 @@ flowchart TD
         D --> E1[Behavioral Analytics Engine<br/>Typing Speed / Session / Battery]
         D --> E2[Social Engineering Heuristics<br/>Fake Call Center / Coercion]
         D --> E3[Temporal Graph Engine<br/>Mule Networks / Fan-In / Fan-Out]
-        D --> E4[Supervised LightGBM + Isolation Forest<br/>Distilled Ensemble R5B22]
+        D --> E4[Supervised LightGBM + Isolation Forest<br/>Production Distilled Ensemble]
         E1 & E2 & E3 & E4 --> F[Decision Engine & Policy Overrides]
         F --> G{Decision Triad}
     end
@@ -72,9 +72,9 @@ flowchart TD
 - **Lightweight Ingestion:** The client sends only 6 to 8 core fields (`account_id`, `receiver_pix_key`, `amount`, `timestamp`, `device_id`, `channel`).
 - **Offline Feature Store (PostgreSQL / SQLite):** Serves static demographic and cadastral attributes (account age, credit score, monthly income, diurnal/nocturnal limits, PEP status).
 - **Online Feature Store (Redis):** Serves sub-millisecond sliding window aggregates (1h/24h counts and velocity sums, mobile typing speed, receiver mule reputation scores).
-- **Canonical Feature Reconstruction (`preprocessing.py`):** Deterministically reconstructs the full 55/78 canonical feature vector before model execution.
+- **Canonical Feature Reconstruction (`preprocessing.py`):** Deterministically reconstructs the full 55 canonical feature vector before model execution.
 
-### 2. Multi-Layer Hybrid Engine (Baseline R5B22)
+### 2. Multi-Layer Hybrid Engine
 - **Supervised LightGBM (Distilled):** Optimized for high recall with asymmetric loss penalty.
 - **Unsupervised Isolation Forest (800 Trees):** Unsupervised anomaly score detecting unknown zero-day fraud patterns without training contamination.
 - **Social Engineering (SE) Heuristics:** 8 specialized pattern detectors (e.g., *Fake Call Center*, *Kidnapping/Coercion*, *WhatsApp Impersonation*).
@@ -90,7 +90,7 @@ flowchart TD
 
 ---
 
-## 📊 Production Benchmark Metrics (R5B22)
+## 📊 Production Benchmark Metrics
 
 Evaluated on a dataset of **113,844 transactions** (1,465 confirmed frauds and 112,379 legitimate operations):
 
@@ -107,9 +107,9 @@ Evaluated on a dataset of **113,844 transactions** (1,465 confirmed frauds and 1
 ## 🖥️ Live Streamlit Dashboard
 
 The project includes an enterprise **Operations & Investigation Dashboard**:
-1. **Live Cockpit:** Real-time throughput gauge, decision distribution pie charts, and streaming transaction feeds.
+1. **Live Cockpit:** Real-time throughput gauge, decision distribution pie charts, and streaming transaction feeds calibrated to real banking proportions (95.0% Approve, 3.5% Confirm, 1.5% Block).
 2. **Fraud Investigation Desk:** Detailed case dossiers, SHAP waterfall bar charts, 2D interactive network graphs (`networkx` + `plotly`), and analyst action buttons (`Approve`, `Confirm Fraud & Block Mule`).
-3. **MLOps & Baseline Evals:** Confusion matrix, MLflow official run parameters, and real-time PSI drift monitoring.
+3. **MLOps & Production Model Evals:** Confusion matrix, MLflow official run parameters, and real-time PSI drift monitoring.
 4. **Data Lineage:** Full architectural breakdown mapping the 4 feature sources (RT Ingestion, Offline Store, Online Store, Runtime Derivations).
 5. **Interactive Sandbox:** One-off manual transaction testing and attack preset triggers.
 
@@ -146,7 +146,7 @@ source venv/bin/activate
 pip install -r requirements.txt
 ```
 
-3. **Seed synthetic feature stores (100% LGPD compliant):**
+3. **Seed synthetic feature stores (100% LGPD/GDPR compliant):**
 ```bash
 python -m backend.feature_store.seed_stores
 ```
@@ -163,11 +163,11 @@ streamlit run dashboard/app.py
 
 6. **Run the Real-Time Traffic Simulator:**
 ```bash
-# Natural production mix (95% Normal / 3.5% Confirm / 1.5% Block)
-python -m backend.simulator.generator --url http://localhost:8000 --count 20
+# Calibrated full batch of 1,000 transactions (950 Normal / 35 Confirm / 15 Block)
+python -m backend.simulator.generator --url http://localhost:8000 --count 1000
 
 # Force specific attack scenario:
-python -m backend.simulator.generator --url http://localhost:8000 --scenario GOLPE_FALSA_CENTRAL --count 5
+python -m backend.simulator.generator --url http://localhost:8000 --scenario GOLPE_FALSA_CENTRAL --count 10
 ```
 
 ---
@@ -183,7 +183,7 @@ pytest
 **Test Coverage Highlights (29/29 Passing):**
 - `tests/test_sentinel_e2e.py`: Dual Feature Store resolution, light payload enrichment, SHAP extraction, audit persistence, and PSI drift computation.
 - `tests/test_api_smoke.py`: Health check, API SLAs, single and batch endpoints.
-- `tests/test_severity_policy.py`: R5B14 and R5B16 severity demotion and escalation policies.
+- `tests/test_severity_policy.py`: Severity demotion and escalation policies.
 - `tests/test_graph_engineering.py`: Topological graph analysis, mule detection heuristics, and null tolerance.
 
 ---
@@ -195,7 +195,7 @@ rebuild_pix/
 ├── backend/
 │   ├── api.py                     # FastAPI REST API with real-time enrichment
 │   ├── config.py                  # Central configuration (Redis, SQL, MLflow, SLAs)
-│   ├── artefatos/                 # Serialized LightGBM/IF models & R5B22 metadata
+│   ├── artefatos/                 # Serialized LightGBM/IF models & baseline metadata
 │   ├── core/                      # Analytical engines (Behavioral, Graph, SE, Decision)
 │   ├── feature_store/             # Dual Feature Store layer (SQL + Redis + Seed)
 │   ├── mlops/                     # MLflow Tracker, Audit Logger & PSI Drift Detector
@@ -216,4 +216,4 @@ rebuild_pix/
 
 ## 📜 Privacy & Compliance Notice
 
-This project has been tailored for personal portfolio demonstration and technical evaluation. All customer IDs, accounts, biometric telemetry, and transaction events used during simulation are **100% statistically synthetic**, in strict compliance with the Brazilian General Data Protection Law (LGPD) and global privacy standards.
+This project has been tailored for personal portfolio demonstration and technical evaluation. All customer IDs, accounts, biometric telemetry, and transaction events used during simulation are **100% statistically synthetic**, in strict compliance with the General Personal Data Protection Law (**LGPD/GDPR**) and international privacy standards.

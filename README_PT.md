@@ -48,7 +48,7 @@ flowchart TD
         D --> E1[Behavioral Analytics Mobile<br/>Velocidade Digitação / Sessão]
         D --> E2[Social Engineering Heuristics<br/>Falsa Central / Coação]
         D --> E3[Temporal Graph Engine<br/>Contas Mula / Fan-In / Fan-Out]
-        D --> E4[Supervised LightGBM + Isolation Forest<br/>Distilled Ensemble R5B22]
+        D --> E4[Supervised LightGBM + Isolation Forest<br/>Distilled Ensemble de Produção]
         E1 & E2 & E3 & E4 --> F[Decision Engine & Policy Overrides]
         F --> G{Decisão Triad}
     end
@@ -74,7 +74,7 @@ flowchart TD
 - **Online Feature Store (Redis):** Serve em sub-milissegundos agregados de alta frequência (contadores e volumes em janelas de 1h/24h, velocidade de digitação mobile, score de reputação de contas mulas).
 - **Reconstrução Canônica (`preprocessing.py`):** Reconstrói deterministamente o vetor completo de 55 features canônicas antes da inferência nos modelos.
 
-### 2. Motor Híbrido Multi-Camadas (Baseline R5B22)
+### 2. Motor Híbrido Multi-Camadas
 - **LightGBM Supervisionado Destilado:** Treinado com foco em alto recall e função de perda balanceada.
 - **Isolation Forest Não-Supervisionado (800 Árvores):** Detecta anomalias e novos padrões de ataque desconhecidos (*zero-day*).
 - **Engenharia Social (SE):** 8 heurísticas especializadas (ex: *Golpe da Falsa Central*, *Golpe do Falso Motoboy*, *Coação/Sequestro*).
@@ -90,7 +90,7 @@ flowchart TD
 
 ---
 
-## 📊 Métricas Oficiais de Produção (R5B22)
+## 📊 Métricas Oficiais de Produção
 
 Validado sobre **113.844 transações** (1.465 fraudes confirmadas e 112.379 legítimas):
 
@@ -107,9 +107,9 @@ Validado sobre **113.844 transações** (1.465 fraudes confirmadas e 112.379 leg
 ## 🖥️ Live Dashboard em Streamlit
 
 O projeto inclui um **Cockpit Operacional completo**:
-1. **Live Cockpit:** Acompanhamento em tempo real da vazão (TPS), proporção de decisões e distribuição de latência.
+1. **Live Cockpit:** Acompanhamento em tempo real da vazão (TPS), proporção de decisões calibrada com as taxas reais de mercado (95,0% Aprovação, 3,5% Confirmação, 1,5% Bloqueio) e distribuição de latência.
 2. **Mesa de Investigação:** Dossiê de casos suspeitos (`CONFIRMAR` e `BLOQUEAR`) com gráfico de barras SHAP, grafo interativo de contas mulas em 2D (`networkx` + `plotly`) e parecer do analista.
-3. **MLOps & Baseline R5B22:** Matriz de confusão operacional, métricas consolidadas do MLflow e monitor de PSI em tempo real.
+3. **MLOps & Modelo de Produção:** Matriz de confusão operacional, métricas consolidadas do MLflow e monitor de PSI em tempo real.
 4. **Linhagem de Dados (Data Lineage):** Mapa visual dos 4 blocos de features (Ingestão RT, Offline SQL, Online Redis e Runtime).
 5. **Simulador Interativo:** Disparo de transações manuais e presets de cenários de ataque.
 
@@ -146,7 +146,7 @@ source venv/bin/activate
 pip install -r requirements.txt
 ```
 
-3. **Popular as Feature Stores com dados sintéticos (100% LGPD):**
+3. **Popular as Feature Stores com dados sintéticos (100% LGPD/GDPR):**
 ```bash
 python -m backend.feature_store.seed_stores
 ```
@@ -163,11 +163,11 @@ streamlit run dashboard/app.py
 
 6. **Executar o Simulador de Tráfego em Tempo Real:**
 ```bash
-# Mix natural de produção (95% Normal / 3.5% Confirm / 1.5% Block)
-python -m backend.simulator.generator --url http://localhost:8000 --count 20
+# Lote completo calibrado de 1.000 transações (950 Normal / 35 Confirm / 15 Block)
+python -m backend.simulator.generator --url http://localhost:8000 --count 1000
 
 # Forçar cenário de ataque específico:
-python -m backend.simulator.generator --url http://localhost:8000 --scenario GOLPE_FALSA_CENTRAL --count 5
+python -m backend.simulator.generator --url http://localhost:8000 --scenario GOLPE_FALSA_CENTRAL --count 10
 ```
 
 ---
@@ -183,7 +183,7 @@ pytest
 **Cobertura de Testes (29/29 Passando):**
 - `tests/test_sentinel_e2e.py`: Resolução da Dual Feature Store, enriquecimento com payload leve, explicabilidade SHAP, auditoria de casos e cálculo de drift PSI.
 - `tests/test_api_smoke.py`: Health check, SLAs de API e endpoints `/api/v1/analyze` e `/api/v1/batch`.
-- `tests/test_severity_policy.py`: Políticas de severidade R5B14 e R5B16.
+- `tests/test_severity_policy.py`: Políticas de severidade de produção.
 - `tests/test_graph_engineering.py`: Análise topológica de grafos, heurísticas de contas mulas e tolerância a nulos.
 
 ---
@@ -195,7 +195,7 @@ rebuild_pix/
 ├── backend/
 │   ├── api.py                     # API FastAPI REST com enriquecimento em tempo real
 │   ├── config.py                  # Configurações globais (Redis, SQL, MLflow, SLA)
-│   ├── artefatos/                 # Modelos serializados (LGBM, IF) e metadados R5B22
+│   ├── artefatos/                 # Modelos serializados (LGBM, IF) e metadados de produção
 │   ├── core/                      # Motores analíticos (Behavioral, Graph, SE, Engine)
 │   ├── feature_store/             # Camada Dual Feature Store (SQL + Redis + Seed)
 │   ├── mlops/                     # Tracking MLflow, Audit Logger e Drift Detector
@@ -216,4 +216,4 @@ rebuild_pix/
 
 ## 📜 Conformidade e Privacidade de Dados
 
-Este projeto foi reestruturado para fins de portfólio pessoal e demonstração técnica. Todos os dados demográficos, contas, telemetrias e eventos transacionais utilizados na simulação são **100% sintéticos e modelados estatisticamente**, em estrita conformidade com a LGPD e boas práticas globais de segurança da informação.
+Este projeto foi reestruturado para fins de portfólio pessoal e demonstração técnica. Todos os dados demográficos, contas, telemetrias e eventos transacionais utilizados na simulação são **100% sintéticos e modelados estatisticamente**, em estrita conformidade com a Lei Geral de Proteção de Dados e o Regulamento Geral sobre a Proteção de Dados (**LGPD/GDPR**).

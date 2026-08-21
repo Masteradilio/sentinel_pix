@@ -1,7 +1,7 @@
-﻿"""
+"""
 seed_stores.py — Popula o Offline e Online Feature Store com Dados Sintéticos
 Gera perfis de clientes, limites e agregados comportamentais 100% sintéticos e realistas,
-garantindo conformidade LGPD e fornecendo um ambiente model-ready para testes e demonstrações.
+garantindo conformidade LGPD/GDPR e fornecendo um ambiente model-ready para testes e demonstrações.
 """
 
 from __future__ import annotations

@@ -261,7 +261,7 @@ with st.sidebar:
                 res = send_single_transaction(tx)
                 if res:
                     st.session_state.tx_history.insert(0, {**tx, **res})
-            st.session_state.tx_history = st.session_state.tx_history[:300]
+            st.session_state.tx_history = st.session_state.tx_history[:1000]
             st.rerun()
 
     with col_btn2:
@@ -273,8 +273,20 @@ with st.sidebar:
                 res = send_single_transaction(tx)
                 if res:
                     st.session_state.tx_history.insert(0, {**tx, **res})
-            st.session_state.tx_history = st.session_state.tx_history[:300]
+            st.session_state.tx_history = st.session_state.tx_history[:1000]
             st.rerun()
+
+    if st.button("🚀 Simular Lote Completo (1.000 TX)", use_container_width=True):
+        from backend.simulator.generator import generator
+        with st.spinner("Processando lote de 1.000 transações (950 legítimas, 35 step-up, 15 bloqueios)..."):
+            batch = generator.generate_batch_1000()
+            for tx in batch:
+                res = send_single_transaction(tx)
+                if res:
+                    st.session_state.tx_history.insert(0, {**tx, **res})
+            st.session_state.tx_history = st.session_state.tx_history[:1000]
+        st.success("Lote de 1.000 transações processado com sucesso!")
+        st.rerun()
 
     st.divider()
     if st.button("🗑️ Limpar Buffer de Tela", use_container_width=True):
@@ -293,7 +305,7 @@ st.markdown("Monitoramento de transações em tempo real, enriquecimento via **D
 tab_live, tab_investigation, tab_mlops, tab_lineage, tab_sandbox = st.tabs([
     "📊 Live Cockpit",
     "🔍 Mesa de Investigação (Audit)",
-    "📈 MLOps & Baseline R5B22",
+    "📈 MLOps & Modelo de Produção",
     "🧬 Data Lineage & Stores",
     "🧪 Simulador Interativo"
 ])
@@ -485,11 +497,11 @@ with tab_investigation:
 
 
 # =========================================================
-# TAB 3: MLOPS & BASELINE R5B22 EVALS
+# TAB 3: MLOPS & MODELO DE PRODUÇÃO EVALS
 # =========================================================
 
 with tab_mlops:
-    st.subheader("Métricas Oficiais de Treinamento e Homologação (MLflow Baseline R5B22)")
+    st.subheader("Métricas Oficiais de Treinamento e Homologação (MLflow Production Baseline)")
     st.markdown("Resultados consolidados da avaliação do modelo sobre o dataset de **113.844 transações PIX** (1.465 fraudes confirmadas e 112.379 legítimas).")
 
     col_m1, col_m2, col_m3, col_m4 = st.columns(4)
@@ -500,7 +512,7 @@ with tab_mlops:
     with col_m3:
         st.metric("Precision em BLOQUEAR", "65.65%", "+1.453 bloqueios assertivos")
     with col_m4:
-        st.metric("F1-Score Oficial", "0.7307", "Baseline R5B22")
+        st.metric("F1-Score Oficial", "0.7307", "Modelo de Produção")
 
     st.divider()
 
@@ -594,8 +606,7 @@ with tab_lineage:
     st.markdown("""
     O pipeline unifica os 3 blocos acima e calcula em tempo de execução:
     - **`tx_utilizacao_limite`:** Proporção do valor transferido em relação ao limite diurno/noturno do cliente.
-    - **`ratio_valor_media_pagador_90d`:** Desvio em relação ao ticket médio histórico.
-    - **`value_band`:** Segmentação de faixa de valor (A a F) para as regras de severidade R5B14/R5B22.
+    - **`value_band`:** Segmentação de faixa de valor (A a F) para as regras de severidade de produção.
     - **`hour`, `minute`, `periodo_dia`:** Atributos temporais para modelos e vetos noturnos.
     - **Ensemble Features:** Alimentação das 55 features canônicas para o LightGBM e 800 estimadores do Isolation Forest.
     """)
