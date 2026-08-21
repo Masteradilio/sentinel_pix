@@ -1,27 +1,33 @@
 # ==============================================================
-# rebuild_pix — Requirements (pinned from venv, 2026-04-12)
+# Sentinel-PIX — Production & Portfolio Requirements
 # ==============================================================
 
-# --- Core ML ---
+# --- Core ML & Analytics ---
 lightgbm==4.6.0
 scikit-learn==1.8.0
-numpy==2.4.3
+numpy>=1.26.0
 scipy==1.17.1
-pandas==3.0.1
+pandas>=2.2.0
 joblib==1.5.3
-
-# --- Visualização ---
-matplotlib==3.10.8
-
-# --- API (instalar antes de rodar uvicorn) ---
-fastapi>=0.115,<1.0
-uvicorn>=0.34,<1.0
-pydantic>=2.0,<3.0
-
-# --- Utilitários ---
-tabulate==0.10.0
+shap>=0.44.0
 networkx==3.6.1
+
+# --- API & Feature Store ---
+fastapi>=0.115.0
+uvicorn>=0.34.0
+pydantic>=2.0.0
+redis>=5.0.0
+requests>=2.31.0
+httpx>=0.28.0
+
+# --- MLOps & Observability ---
+mlflow>=2.10.0
+
+# --- Dashboard & Visualização ---
+streamlit>=1.30.0
+plotly>=5.18.0
+matplotlib==3.10.8
+tabulate==0.10.0
 
 # --- Testes ---
 pytest==8.4.1
-httpx>=0.28.0

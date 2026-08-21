@@ -366,8 +366,8 @@ def map_topaz_rule(score):
 def normalize_transaction_key(series: pd.Series) -> pd.Series:
     """Normaliza chave de transação (cd_pix)."""
     s = series.astype(str).str.strip()
-    s = s.replace({"nan": np.nan, "None": np.nan, "": np.nan})
     s = s.str.replace(r"\s+", "", regex=True)
+    s = s.replace({"nan": np.nan, "None": np.nan, "": np.nan})
     return s
 
 

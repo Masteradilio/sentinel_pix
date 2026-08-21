@@ -1,936 +1,354 @@
 """
-api.py v1.2 — API REST para Detecção de Fraude PIX
-
-Mudanças v1.0 → v1.1:
-  1. AnalyzeResponse atualizado para pipeline v1.2 (sem score_raw, com SHAP)
-  2. Endpoint /analyze preserva bloco explicabilidade SHAP do orquestrador
-  3. Adicionado campo cx (mensagem cliente + motivo) sem sobrescrever SHAP
-  4. peso_maximo removido do response (está no metadata.faixas)
-  5. faixas removido do response (está no metadata)
-  6. Campos opcionais alinhados com _build_response condicional
-
-Camada HTTP fina sobre o PipelineOrquestrador.
-Responsabilidades:
-  - Endpoints REST (analyze, batch, health)
-  - Validação de input (Pydantic)
-  - Serialização de output
-  - CORS, logging, error handling
-  - Métricas básicas (contadores, latência)
-
-O que NÃO faz:
-  - Feature engineering (→ orquestrador)
-  - Scoring (→ decision_engine)
-  - Detecção de padrões (→ social_engineering / behavioral)
-
-Uso:
-  # Desenvolvimento
-  uvicorn api:app --reload --host 0.0.0.0 --port 8000
-
-  # Produção
-  gunicorn api:app -w 4 -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:8000
-
-  # Docker
-  CMD ["uvicorn", "api:app", "--host", "0.0.0.0", "--port", "8000"]
-
-Endpoints:
-  POST /api/v1/analyze       → Analisa 1 transação (tempo real)
-  POST /api/v1/batch         → Analisa N transações (lote)
-  GET  /api/v1/health        → Health check completo
-  GET  /api/v1/status        → Status detalhado dos componentes
-  GET  /api/v1/metrics       → Métricas da API
-  POST /api/v1/cache/reset   → Reseta cache de histórico
-  GET  /                     → Info básica da API
+api.py v2.0 — API REST Sentinel-PIX (Real-Time Ingestion, Dual Feature Store & MLOps)
+Suporta payload leve (6-8 features) com enriquecimento automatico via
+Offline Feature Store (SQL) e Online Feature Store (Redis),
+calculo de explicabilidade SHAP, logging de auditoria e monitoramento de Drift.
 """
 
 from __future__ import annotations
 
 import logging
 import os
+import sys
 import time
+import uuid
 from contextlib import asynccontextmanager
 from datetime import datetime
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field
 
-# =========================================================
-# LOGGING
-# =========================================================
-LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(PROJECT_ROOT))
+sys.path.insert(0, str(PROJECT_ROOT / "backend"))
+
+from backend.config import settings
+from backend.feature_store.offline_store import offline_store
+from backend.feature_store.online_store import online_store
+from backend.mlops.audit_logger import audit_logger
+from backend.mlops.drift_detector import drift_detector
+from backend.mlops.mlflow_tracker import mlflow_tracker
+
 logging.basicConfig(
-    level=getattr(logging, LOG_LEVEL, logging.INFO),
+    level=getattr(logging, settings.log_level, logging.INFO),
     format="%(asctime)s | %(levelname)-7s | %(name)s | %(message)s",
     datefmt="%Y-%m-%d %H:%M:%S",
 )
 logger = logging.getLogger("api")
 
 
-# =========================================================
-# FUNÇÕES DE EXPLICABILIDADE (CX — mensagem ao cliente)
-# =========================================================
-def _identificar_fator_predominante(result: Dict[str, Any]) -> str:
-    """Identifica qual foi a principal dimensão que motivou o bloqueio/confirmação."""
-    if result.get("veto_aplicado"):
-        return "Regra de Veto de Negócio"
-
-    if result.get("cascade", {}).get("triggered"):
-        return "Padrão Crítico de Movimentação (Cascade)"
-
-    se_score = result.get("social_engineering", {}).get("se_score", 0)
-    beh_score = result.get("behavioral", {}).get("behavioral_score", 0)
-
-    if se_score >= 60:
-        return "Engenharia Social / Golpe"
-    if beh_score >= 60:
-        return "Anomalia Comportamental / Dispositivo"
-
-    lgbm_mapped = result.get("componentes", {}).get("lgbm_mapped", 0)
-    if lgbm_mapped >= 85:
-        return "Modelo Preditivo (Machine Learning)"
-
-    return "Múltiplos Fatores de Risco Combinados"
+class PixTransactionRequest(BaseModel):
+    transaction_id: str = Field(default_factory=lambda: f"tx_{uuid.uuid4().hex[:12]}", description="ID unico da transacao")
+    account_id: str = Field(..., description="Identificador da conta de origem (pagador)")
+    receiver_pix_key: str = Field(..., description="Chave PIX de destino (recebedor)")
+    receiver_key_type: str = Field(default="CPF", description="Tipo da chave PIX (CPF, CNPJ, EMAIL, PHONE, EVP)")
+    amount: float = Field(..., gt=0.0, description="Valor da transferencia em R$")
+    timestamp: Optional[str] = Field(default_factory=lambda: datetime.utcnow().isoformat() + "Z", description="Timestamp ISO 8601")
+    device_id: Optional[str] = Field(default=None, description="ID do dispositivo mobile")
+    channel: str = Field(default="MOBILE_APP", description="Canal de origem (MOBILE_APP, INTERNET_BANKING, API)")
+    explain: bool = Field(default=True, description="Se True, calcula SHAP")
+    extra_features: Optional[Dict[str, Any]] = Field(default=None, description="Features adicionais para override")
 
 
-def _gerar_mensagem_cliente(decisao: str, result: Dict[str, Any]) -> str:
-    """Gera mensagem amigável (CX) que o app/front pode mostrar ao usuário."""
-    fator = _identificar_fator_predominante(result)
-
-    if decisao == "CONFIRMAR":
-        if fator == "Engenharia Social / Golpe":
-            return (
-                "Para sua segurança, notamos um padrão incomum nesta transferência. "
-                "Por favor, confirme a identidade do recebedor antes de prosseguir "
-                "usando sua biometria facial."
-            )
-        if fator == "Anomalia Comportamental / Dispositivo":
-            return (
-                "Identificamos um acesso a partir de um novo dispositivo ou local. "
-                "Confirme que é você mesmo(a) realizando esta transação."
-            )
-        return (
-            "Transação em análise de segurança. Por favor, valide sua identidade "
-            "para aprovação imediata."
-        )
-
-    if decisao == "BLOQUEAR":
-        if fator == "Engenharia Social / Golpe":
-            return (
-                "Transação bloqueada preventivamente. Este padrão é associado a "
-                "possíveis golpes. Se você não conhece o recebedor, não prossiga. "
-                "Nossa central de atendimento foi acionada."
-            )
-        if fator == "Anomalia Comportamental / Dispositivo":
-            return (
-                "Bloqueio preventivo de segurança: Suspeita de acesso não autorizado "
-                "à sua conta. Por favor, entre em contato com nossa central telefônica."
-            )
-        return (
-            "Transação retida pelo nosso sistema de prevenção a fraudes para "
-            "análise humana. Entraremos em contato em breve."
-        )
-
-    return "Transação processada com sucesso."
+class UpdateCaseStatusRequest(BaseModel):
+    status: str = Field(..., description="Novo status (APPROVED_BY_ANALYST, CONFIRMED_FRAUD, ARCHIVED)")
+    notes: Optional[str] = Field(default="", description="Parecer tecnico do analista de fraude")
 
 
-def _build_motivos(result: Dict[str, Any]) -> List[str]:
-    """Extrai motivos estruturados da resposta do pipeline."""
-    motivos = []
+class PipelineStatus:
+    def __init__(self):
+        self.started_at: str = datetime.utcnow().isoformat() + "Z"
+        self.total_requests: int = 0
+        self.total_aprovados: int = 0
+        self.total_confirmados: int = 0
+        self.total_bloqueados: int = 0
+        self.total_errors: int = 0
+        self.latency_samples: List[float] = []
 
-    # 1. Veto
-    veto = result.get("veto_aplicado")
-    if veto:
-        motivos.append(veto)
-
-    # 2. Cascade
-    cascade = result.get("cascade", {})
-    if cascade.get("triggered"):
-        regras = ", ".join(cascade.get("rules", []))
-        motivos.append(f"Regra de bloqueio em cascata acionada: {regras}")
-
-    # 3. Engenharia Social
-    se = result.get("social_engineering", {})
-    se_patterns = se.get("patterns", [])
-    if se_patterns:
-        padroes_str = ", ".join([
-            p if isinstance(p, str) else p.get("pattern_name", "")
-            for p in se_patterns
-        ])
-        motivos.append(f"Padrão de Engenharia Social detectado: {padroes_str}")
-
-    # 4. Behavioral
-    beh = result.get("behavioral", {})
-    beh_factors = beh.get("risk_factors", [])
-    if beh_factors:
-        fatores = [
-            f.get("descricao", f.get("codigo", ""))
-            for f in beh_factors[:3]
-        ]
-        motivos.append(f"Anomalia comportamental: {'; '.join(fatores)}")
-
-    # 5. Fallback — principais agravantes
-    if not motivos:
-        agravantes = result.get("agravantes", [])
-        agravantes_sorted = sorted(
-            agravantes, key=lambda x: x.get("peso", 0), reverse=True
-        )
-        if agravantes_sorted:
-            top = agravantes_sorted[0]
-            motivos.append(
-                f"Alto risco detectado: {top.get('descricao', top.get('codigo'))}"
-            )
-
-    return motivos
+    def record(self, decision: str, latency_ms: float):
+        self.total_requests += 1
+        d = decision.upper()
+        if d == "APROVAR":
+            self.total_aprovados += 1
+        elif d == "CONFIRMAR":
+            self.total_confirmados += 1
+        elif d == "BLOQUEAR":
+            self.total_bloqueados += 1
+        
+        self.latency_samples.append(latency_ms)
+        if len(self.latency_samples) > 2000:
+            self.latency_samples = self.latency_samples[-1000:]
 
 
-# =========================================================
-# PIPELINE IMPORT (lazy — carrega no startup)
-# =========================================================
+api_metrics = PipelineStatus()
 pipeline = None
 
 
 def _load_pipeline():
-    """Carrega o pipeline orquestrador."""
     global pipeline
-    import sys
-    from pathlib import Path
+    from backend.core.pipeline_orquestrador import PipelineOrquestrador
+    from backend.core.decision_engine import EngineConfig
 
-    # Detectar onde a api.py está
-    api_file = Path(__file__).resolve()
-    api_dir = api_file.parent
-
-    # Se api.py está em backend/core/, o backend_dir é o pai
-    if api_dir.name == "core":
-        backend_dir = api_dir.parent
-    else:
-        backend_dir = api_dir
-
-    core_dir = backend_dir / "core"
-    project_root = backend_dir.parent
-
-    # Garantir TODOS os diretórios necessários no sys.path
-    for p in [str(backend_dir), str(core_dir), str(project_root)]:
-        if p not in sys.path:
-            sys.path.insert(0, p)
-
-    from core.pipeline_orquestrador import PipelineOrquestrador
-    from core.decision_engine import EngineConfig
-
-    # Artefatos — detectar automaticamente
-    artefatos_dir = os.getenv("ARTEFATOS_DIR", "")
-    if not artefatos_dir:
-        artefatos_path = backend_dir / "artefatos"
-        if artefatos_path.exists():
-            artefatos_dir = str(artefatos_path)
-        else:
-            artefatos_dir = "backend/artefatos"
-
-    config_overrides = {}
-    _env_confirmar = os.getenv("THRESHOLD_CONFIRMAR")
-    if _env_confirmar:
-        config_overrides["threshold_confirmar"] = float(_env_confirmar)
-
-    _env_bloquear = os.getenv("THRESHOLD_BLOQUEAR")
-    if _env_bloquear:
-        config_overrides["threshold_bloquear"] = float(_env_bloquear)
-
-    _env_veto = os.getenv("VETO_THRESHOLD")
-    if _env_veto:
-        config_overrides["veto_threshold"] = float(_env_veto)
-
-    engine_config = EngineConfig(artefatos_dir=artefatos_dir, **config_overrides)
+    engine_config = EngineConfig(
+        artefatos_dir=str(settings.artefatos_dir),
+        threshold_confirmar=settings.threshold_confirmar,
+        threshold_bloquear=settings.threshold_bloquear,
+        veto_threshold=settings.veto_threshold,
+    )
     pipeline = PipelineOrquestrador(
-        artefatos_dir=artefatos_dir,
+        artefatos_dir=str(settings.artefatos_dir),
         engine_config=engine_config,
     )
     return pipeline
 
 
-
-
-# =========================================================
-# MÉTRICAS SIMPLES (in-memory)
-# =========================================================
-class Metrics:
-    """Contadores simples de métricas da API."""
-
-    def __init__(self):
-        self.total_requests: int = 0
-        self.total_errors: int = 0
-        self.total_transactions: int = 0
-        self.decisions: Dict[str, int] = {
-            "APROVAR": 0,
-            "CONFIRMAR": 0,
-            "BLOQUEAR": 0,
-            "ERRO": 0,
-        }
-        self.latency_sum_ms: float = 0.0
-        self.latency_max_ms: float = 0.0
-        self.started_at: str = datetime.utcnow().isoformat() + "Z"
-
-    def record_request(self, decisao: str, latency_ms: float):
-        self.total_requests += 1
-        self.total_transactions += 1
-        self.decisions[decisao] = self.decisions.get(decisao, 0) + 1
-        self.latency_sum_ms += latency_ms
-        self.latency_max_ms = max(self.latency_max_ms, latency_ms)
-
-    def record_error(self):
-        self.total_requests += 1
-        self.total_errors += 1
-        self.decisions["ERRO"] += 1
-
-    def record_batch(self, results: List[Dict], latency_ms: float):
-        self.total_requests += 1
-        self.total_transactions += len(results)
-        self.latency_sum_ms += latency_ms
-        self.latency_max_ms = max(self.latency_max_ms, latency_ms)
-        for r in results:
-            d = r.get("decisao", "ERRO")
-            self.decisions[d] = self.decisions.get(d, 0) + 1
-
-    @property
-    def avg_latency_ms(self) -> float:
-        if self.total_transactions == 0:
-            return 0.0
-        return self.latency_sum_ms / self.total_transactions
-
-    def to_dict(self) -> Dict[str, Any]:
-        return {
-            "total_requests": self.total_requests,
-            "total_transactions": self.total_transactions,
-            "total_errors": self.total_errors,
-            "decisions": self.decisions,
-            "latency_avg_ms": round(self.avg_latency_ms, 1),
-            "latency_max_ms": round(self.latency_max_ms, 1),
-            "started_at": self.started_at,
-            "uptime_seconds": round(
-                (
-                    datetime.utcnow()
-                    - datetime.fromisoformat(self.started_at.replace("Z", ""))
-                ).total_seconds()
-            ),
-        }
-
-
-metrics = Metrics()
-
-
-# =========================================================
-# PYDANTIC MODELS — Input Validation
-# =========================================================
-class TransactionInput(BaseModel):
-    """Dados brutos de uma transação PIX para análise."""
-
-    # Obrigatórios
-    cd_pix: str = Field(
-        ..., description="Identificador único da transação PIX", min_length=1
-    )
-    dt_pix: str = Field(
-        ..., description="Data/hora da transação (ISO 8601)", min_length=10
-    )
-    cd_cpf_pagador: str = Field(
-        ..., description="CPF do pagador", min_length=11
-    )
-    vl_pix: float = Field(..., description="Valor do PIX em reais", gt=0)
-
-    # Recebedor
-    cd_cpf_cnpj_recebedor: Optional[str] = Field(
-        None, description="CPF/CNPJ do recebedor"
-    )
-    ds_chave_pix: Optional[str] = Field(None, description="Chave PIX utilizada")
-    ds_tipo_chave: Optional[str] = Field(None, description="Tipo da chave PIX")
-
-    # Histórico trimestral
-    qt_total_pix_trimestre: Optional[float] = Field(None, ge=0)
-    vl_mediana_pix_trimestre: Optional[float] = Field(None, ge=0)
-    vl_desvio_padrao_pix_trimestre: Optional[float] = Field(None, ge=0)
-    qt_intervalo_transacao_minuto: Optional[float] = Field(None)
-    qt_intervalo_mediana_trimestre: Optional[float] = Field(None, ge=0)
-    qt_intervalo_desvio_padrao_trimestre: Optional[float] = Field(None, ge=0)
-    qt_pix_dia_maximo_trimestre: Optional[float] = Field(None, ge=0)
-
-    # Device / App
-    device_name: Optional[str] = None
-    app_version: Optional[str] = None
-    ip_address: Optional[str] = None
-
-    # Latência / Interação
-    latencia_rede_ms: Optional[float] = None
-    vl_latencia_rede_media_trimestre: Optional[float] = None
-    tempo_interacao_ms: Optional[float] = None
-    vl_tempo_interacao_medio_trimestre: Optional[float] = None
-    tempo_processamento_host_ms: Optional[float] = None
-
-    # Autenticação / Sessão
-    metodo_autenticacao: Optional[str] = None
-    session_id: Optional[str] = None
-
-    # Topaz
-    cd_retorno: Optional[str] = None
-    topaz_risk_score: Optional[float] = None
-    topaz_transacao_rejeitada: Optional[float] = None
-
-    # Agendamento
-    is_agendamento_recorrente: Optional[str] = None
-
-    # Perfil do cliente
-    qt_aparelhos_distintos_trimestre: Optional[float] = None
-    nr_idade: Optional[float] = Field(None, ge=0, le=150)
-    qt_tempo_relacionamento_mes: Optional[float] = Field(None, ge=0)
-
-    # v2.1b — Big Data
-    vl_renda_cliente: Optional[float] = Field(None, ge=0)
-    ds_sexo: Optional[str] = None
-    ds_estado_civil: Optional[str] = None
-    ds_segmento: Optional[str] = None
-    qt_dependentes: Optional[float] = Field(None, ge=0)
-
-    @field_validator("vl_pix")
-    @classmethod
-    def validate_vl_pix(cls, v):
-        if v <= 0:
-            raise ValueError("vl_pix deve ser maior que zero")
-        if v > 1_000_000:
-            logger.warning(f"PIX com valor muito alto: R${v:,.2f}")
-        return v
-
-    def to_dict(self) -> Dict[str, Any]:
-        """Converte para dict, excluindo campos None."""
-        return {k: v for k, v in self.model_dump().items() if v is not None}
-
-
-class BatchInput(BaseModel):
-    """Input para análise em lote."""
-
-    transactions: List[TransactionInput] = Field(
-        ...,
-        description="Lista de transações para análise",
-        min_length=1,
-        max_length=1000,
-    )
-
-
-class AnalyzeResponse(BaseModel):
-    """
-    Response padronizado da análise — alinhado com pipeline v1.5.0-r5b22.
-
-    Campos condicionais (só presentes quando relevantes):
-      - cascade: só quando triggered
-      - agravantes/peso_total: só quando há agravantes
-      - explicabilidade: SHAP (só CONFIRMAR/BLOQUEAR)
-      - social_engineering: só quando se_score > 0
-      - behavioral: só quando behavioral_score > 0
-      - veto_aplicado: só quando há veto
-      - atenuantes: só quando presentes
-      - cx: mensagem ao cliente (só CONFIRMAR/BLOQUEAR)
-      - r5b22_policy_applied: indica a política R5B22 aplicada
-      - r5b22_rule_applied: indica a regra específica R5B22 aplicada
-      - decisao_original_r5b22: decisão antes da intervenção R5B22
-    """
-
-    # Sempre presentes
-    decisao: str
-    score_final: float
-    transaction_id: Optional[str] = None
-    customer_id: Optional[str] = None
-    timestamp: Optional[str] = None
-    vl_pix: Optional[float] = None
-
-    # Componentes de score (sempre presente)
-    componentes: Dict[str, Any] = {}
-
-    # Condicionais — pipeline v1.2 omite quando vazios
-    cascade: Optional[Dict[str, Any]] = None
-    agravantes: Optional[List[Dict[str, Any]]] = None
-    peso_total: Optional[int] = None
-    explicabilidade: Optional[Dict[str, Any]] = None
-    social_engineering: Optional[Dict[str, Any]] = None
-    behavioral: Optional[Dict[str, Any]] = None
-    veto_aplicado: Optional[str] = None
-    atenuantes: Optional[List[str]] = None
-    
-    # R5B22
-    r5b22_policy_applied: Optional[str] = None
-    r5b22_rule_applied: Optional[str] = None
-    decisao_original_r5b22: Optional[str] = None
-
-    # CX — adicionado pela API (não vem do pipeline)
-    cx: Optional[Dict[str, Any]] = None
-
-    # Metadata (sempre presente)
-    metadata: Dict[str, Any] = {}
-
-    model_config = {"extra": "allow"}
-
-
-class BatchResponse(BaseModel):
-    """Response do batch."""
-
-    total: int
-    resultados: List[Dict[str, Any]]
-    resumo: Dict[str, Any]
-    metadata: Dict[str, Any]
-
-
-class HealthResponse(BaseModel):
-    """Response do health check."""
-
-    status: str
-    pipeline_version: str
-    components: Dict[str, Any]
-    cache: Dict[str, Any]
-    thresholds: Dict[str, Any]
-    metrics: Dict[str, Any]
-
-
-class ErrorResponse(BaseModel):
-    """Response de erro padronizado."""
-
-    error: str
-    detail: Optional[str] = None
-    status_code: int
-
-
-# =========================================================
-# LIFESPAN (startup / shutdown)
-# =========================================================
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Gerencia ciclo de vida da aplicação."""
-    # --- Startup ---
-    logger.info("=" * 60)
-    logger.info("  API Antifraude PIX v1.2 — Iniciando...")
-    logger.info("=" * 60)
-
-    t0 = time.perf_counter()
-    try:
-        _load_pipeline()
-        elapsed = (time.perf_counter() - t0) * 1000
-        logger.info(f"  Pipeline carregado em {elapsed:.0f}ms")
-        logger.info(
-            f"  Status: {'✅ HEALTHY' if pipeline.available else '⚠️ DEGRADED'}"
-        )
-    except Exception as e:
-        logger.error(f"  ❌ Falha ao carregar pipeline: {e}")
-        raise
-
-    logger.info("=" * 60)
-    logger.info("  API pronta para receber requisições")
-    logger.info("=" * 60)
-
+    logger.info(f"Iniciando {settings.app_name} v{settings.app_version}...")
+    _load_pipeline()
+    mlflow_tracker.log_baseline_r5b22()
+    logger.info("Motor e MLOps inicializados com sucesso!")
     yield
-
-    # --- Shutdown ---
-    logger.info("API encerrando...")
+    logger.info("Encerrando Sentinel-PIX API...")
 
 
-# =========================================================
-# FASTAPI APP
-# =========================================================
 app = FastAPI(
-    title="API Antifraude PIX",
-    description=(
-        "API REST para detecção de fraude em transações PIX em tempo real.\n\n"
-        "**Pipeline v1.5.0-r5b22:**\n"
-        "Baseline Oficial R5B22 com regras R5B14 e contrato congelado R5B16/R5B18.\n\n"
-        "**Faixas de decisão:**\n"
-        "- 🟢 **APROVAR** — Liberar automaticamente\n"
-        "- 🟡 **CONFIRMAR** — Autenticação adicional\n"
-        "- 🔴 **BLOQUEAR** — Bloqueio automático\n"
-    ),
-    version="1.5.0-r5b22",
+    title=settings.app_name,
+    version=settings.app_version,
+    description="Motor Hibrido de Deteccao de Fraude em Pagamentos PIX em Tempo Real",
     lifespan=lifespan,
-    docs_url="/docs",
-    redoc_url="/redoc",
 )
 
-# CORS
-ALLOWED_ORIGINS = os.getenv("CORS_ORIGINS", "*").split(",")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=ALLOWED_ORIGINS,
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 
-# =========================================================
-# MIDDLEWARE — Logging de requisições
-# =========================================================
-@app.middleware("http")
-async def log_requests(request: Request, call_next):
-    """Loga todas as requisições com latência."""
+def _enrich_transaction(req: PixTransactionRequest) -> Dict[str, Any]:
     t0 = time.perf_counter()
-    response = await call_next(request)
-    elapsed = (time.perf_counter() - t0) * 1000
 
-    # Não logar health checks repetidos
-    if request.url.path not in ("/api/v1/health", "/favicon.ico"):
-        logger.info(
-            f"{request.method} {request.url.path} → "
-            f"{response.status_code} ({elapsed:.0f}ms)"
-        )
+    offline_feats = offline_store.get_customer_profile(req.account_id)
+    online_feats = online_store.get_online_features(req.account_id, req.receiver_pix_key)
 
-    response.headers["X-Process-Time-Ms"] = f"{elapsed:.1f}"
-    return response
+    ts = req.timestamp or datetime.utcnow().isoformat() + "Z"
+    hour = 12
+    minute = 0
+    try:
+        dt = datetime.fromisoformat(ts.replace("Z", "+00:00"))
+        hour = dt.hour
+        minute = dt.minute
+    except Exception:
+        pass
+
+    is_night = 1 if (hour >= 20 or hour < 6) else 0
+    amount = float(req.amount)
+    
+    day_limit = float(offline_feats.get("pix_day_limit", 5000.0))
+    night_limit = float(offline_feats.get("pix_night_limit", 1000.0))
+    current_limit = night_limit if is_night else day_limit
+    limit_utilization = round(amount / max(current_limit, 1.0), 4)
+
+    enriched = {
+        "id_transacao": req.transaction_id,
+        "id_cliente": req.account_id,
+        "chave_pix": req.receiver_pix_key,
+        "tipo_chave": req.receiver_key_type,
+        "vl_transacao": amount,
+        "dt_transacao": ts,
+        "hora_transacao": hour,
+        "minuto_transacao": minute,
+        "is_horario_noturno": is_night,
+        "canal_transacao": req.channel,
+        "dispositivo_id": req.device_id or offline_feats.get("primary_device_id", "dev_unknown"),
+        
+        "idade_conta_dias": offline_feats.get("account_creation_days", 365),
+        "score_credito": offline_feats.get("credit_score", 650),
+        "renda_mensal": offline_feats.get("monthly_income", 4500.0),
+        "limite_pix_diurno": day_limit,
+        "limite_pix_noturno": night_limit,
+        "tx_utilizacao_limite": limit_utilization,
+        "historico_contestações": offline_feats.get("historical_disputes_count", 0),
+        "is_pep": offline_feats.get("is_pep", 0),
+        "qtd_dispositivos_confiaveis": offline_feats.get("trusted_devices_count", 1),
+        
+        "qt_pix_1h": online_feats.get("pix_count_1h", 0),
+        "vl_pix_1h": online_feats.get("pix_sum_1h", 0.0),
+        "qt_pix_24h": online_feats.get("pix_count_24h", 1),
+        "vl_pix_24h": online_feats.get("pix_sum_24h", amount),
+        "qt_recebedores_distintos_24h": online_feats.get("distinct_receivers_24h", 1),
+        "tempo_desde_ultima_tx_seg": online_feats.get("last_tx_time_diff_sec", 3600),
+        "vl_medio_30d": online_feats.get("recent_avg_amount_30d", 300.0),
+        "duracao_sessao_app_seg": online_feats.get("mobile_session_duration_sec", 60),
+        "velocidade_digitacao_wpm": online_feats.get("mobile_typing_speed_wpm", 40.0),
+        "nivel_bateria_aparelho": online_feats.get("mobile_battery_level", 80),
+        "is_dispositivo_conhecido": online_feats.get("is_device_known", 1),
+        "falhas_login_24h": online_feats.get("failed_login_attempts_24h", 0),
+
+        "recebedor_is_novo": online_feats.get("receiver_is_new", 0),
+        "recebedor_qtd_entradas_24h": online_feats.get("receiver_inflow_count_24h", 1),
+        "recebedor_vl_entradas_24h": online_feats.get("receiver_inflow_sum_24h", amount),
+        "recebedor_mule_score": online_feats.get("receiver_suspected_mule_score", 0.0),
+        "recebedor_idade_conta_dias": online_feats.get("receiver_account_age_days", 180)
+    }
+
+    if req.extra_features:
+        enriched.update(req.extra_features)
+
+    elapsed_ms = (time.perf_counter() - t0) * 1000.0
+    enriched["_feature_enrichment_time_ms"] = round(elapsed_ms, 2)
+    return enriched
 
 
-# =========================================================
-# EXCEPTION HANDLERS
-# =========================================================
-@app.exception_handler(HTTPException)
-async def http_exception_handler(request: Request, exc: HTTPException):
-    metrics.record_error()
-    return JSONResponse(
-        status_code=exc.status_code,
-        content={
-            "error": exc.detail,
-            "status_code": exc.status_code,
-        },
-    )
-
-
-@app.exception_handler(Exception)
-async def generic_exception_handler(request: Request, exc: Exception):
-    metrics.record_error()
-    logger.error(f"Erro não tratado: {exc}", exc_info=True)
-    return JSONResponse(
-        status_code=500,
-        content={
-            "error": "Erro interno do servidor",
-            "detail": (
-                str(exc)
-                if os.getenv("DEBUG", "").lower() in ("1", "true")
-                else None
-            ),
-            "status_code": 500,
-        },
-    )
-
-
-# =========================================================
-# ENDPOINTS
-# =========================================================
-
-# ─── Root ───────────────────────────────────────────────
 @app.get("/", tags=["Info"])
-async def root():
-    """Informações básicas da API."""
+def root():
     return {
-        "name": "API Antifraude PIX",
-        "version": "1.2.0",
-        "pipeline": "v1.4 + Engine v3.0.5",
+        "service": settings.app_name,
+        "version": settings.app_version,
+        "status": "online",
         "docs": "/docs",
-        "health": "/api/v1/health",
-        "endpoints": {
-            "analyze": "POST /api/v1/analyze",
-            "batch": "POST /api/v1/batch",
-            "health": "GET /api/v1/health",
-            "status": "GET /api/v1/status",
-            "metrics": "GET /api/v1/metrics",
-            "cache_reset": "POST /api/v1/cache/reset",
-        },
+        "timestamp": datetime.utcnow().isoformat() + "Z"
     }
 
 
-# ─── Analyze (1 transação — tempo real) ─────────────────
-@app.post(
-    "/api/v1/analyze",
-    response_model=AnalyzeResponse,
-    response_model_exclude_none=True,
-    tags=["Análise"],
-    summary="Analisa uma transação PIX",
-    description=(
-        "Recebe dados brutos de uma transação PIX e retorna decisão, "
-        "score (0-100), explicabilidade SHAP, agravantes, padrões de "
-        "engenharia social e análise comportamental."
-    ),
-)
-async def analyze_transaction(
-    transaction: TransactionInput,
-    explain: bool = False,
-    debug: bool = False
-):
-    """
-    Analisa uma transação PIX em tempo real.
-
-    **Latência esperada:** < 100ms (p95)
-
-    **Campos obrigatórios:** cd_pix, dt_pix, cd_cpf_pagador, vl_pix
-
-    **Retorna:**
-    - `decisao`: APROVAR, CONFIRMAR ou BLOQUEAR
-    - `score_final`: 0-100
-    - `explicabilidade`: Opcional SHAP top features
-    - `cx`: Mensagem amigável ao cliente (CONFIRMAR/BLOQUEAR)
-    - `agravantes`: Lista de fatores de risco detectados
-    - `social_engineering`: Padrões de golpe detectados
-    - `behavioral`: Análise comportamental
-    """
-    if pipeline is None:
-        raise HTTPException(status_code=503, detail="Pipeline não inicializado")
-
+@app.post("/api/v1/analyze", tags=["Inferencia"])
+def analyze_transaction(req: PixTransactionRequest, background_tasks: BackgroundTasks):
     t0 = time.perf_counter()
 
-    try:
-        # Pipeline retorna dict completo (com SHAP, SE, Behavioral, etc.)
-        result = pipeline.analisar(transaction.to_dict())
-
-        # Enriquecer com CX (mensagem ao cliente) — NÃO sobrescreve SHAP
-        decisao = result.get("decisao")
-        if decisao in ("CONFIRMAR", "BLOQUEAR"):
-            motivos = _build_motivos(result)
-            result["cx"] = {
-                "mensagem_cliente": _gerar_mensagem_cliente(decisao, result),
-                "motivo_principal": motivos[0] if motivos else (
-                    "Transação classificada como alto risco pelo modelo preditivo."
-                ),
-                "detalhes": motivos,
-                "fator_predominante": _identificar_fator_predominante(result),
-            }
-
-        # Filtrar explicabilidade e debug
-        if not explain and not debug:
-            result.pop("explicabilidade", None)
-        
-        if not debug:
-            result.pop("metadata", None)
-            result.pop("componentes", None)
-            result.pop("agravantes", None)
-            result.pop("social_engineering", None)
-            result.pop("behavioral", None)
-
-        elapsed = (time.perf_counter() - t0) * 1000
-        metrics.record_request(result.get("decisao", "ERRO"), elapsed)
-        return result
-
-    except Exception as e:
-        elapsed = (time.perf_counter() - t0) * 1000
-        metrics.record_error()
-        logger.error(
-            f"Erro ao analisar transação {transaction.cd_pix}: {e}",
-            exc_info=True,
-        )
-        raise HTTPException(
-            status_code=500,
-            detail=f"Erro ao processar transação: {str(e)}",
-        )
-
-
-# ─── Batch (N transações) ──────────────────────────────
-@app.post(
-    "/api/v1/batch",
-    response_model=BatchResponse,
-    tags=["Análise"],
-    summary="Analisa múltiplas transações PIX",
-    description="Processa até 1000 transações em um único request.",
-)
-async def analyze_batch(batch: BatchInput):
-    """
-    Analisa múltiplas transações PIX em lote.
-
-    **Limite:** 1000 transações por request.
-    **Processamento:** Sequencial (cada tx ~50-100ms).
-    """
     if pipeline is None:
-        raise HTTPException(status_code=503, detail="Pipeline não inicializado")
-
-    t0 = time.perf_counter()
+        _load_pipeline()
 
     try:
-        tx_dicts = [tx.to_dict() for tx in batch.transactions]
-        results = pipeline.analisar_batch(tx_dicts)
-        elapsed = (time.perf_counter() - t0) * 1000
+        enriched_data = _enrich_transaction(req)
+        res = pipeline.analisar(enriched_data)
 
-        metrics.record_batch(results, elapsed)
+        decisao = res.get("decisao", "APROVAR")
+        score_final = float(res.get("score_final", 0.0))
+        confianca = res.get("confianca", "MEDIA")
 
-        # Resumo
-        decisoes = {}
-        scores = []
-        for r in results:
-            d = r.get("decisao", "ERRO")
-            decisoes[d] = decisoes.get(d, 0) + 1
-            if r.get("score_final") is not None and r["score_final"] >= 0:
-                scores.append(r["score_final"])
+        explicabilidade = res.get("explicabilidade", {})
+        if "shap" in res and res["shap"]:
+            explicabilidade["shap_top_features"] = res["shap"].get("top_features", {})
 
-        import numpy as np
-
-        scores_arr = np.array(scores) if scores else np.array([0])
-
-        return {
-            "total": len(results),
-            "resultados": results,
-            "resumo": {
-                "decisoes": decisoes,
-                "score_medio": round(float(scores_arr.mean()), 2),
-                "score_mediano": round(float(np.median(scores_arr)), 2),
-                "score_max": round(float(scores_arr.max()), 2),
-                "score_min": round(float(scores_arr.min()), 2),
-            },
+        response_payload = {
+            "transaction_id": req.transaction_id,
+            "account_id": req.account_id,
+            "receiver_pix_key": req.receiver_pix_key,
+            "amount": req.amount,
+            "decisao": decisao,
+            "score_final": score_final,
+            "confianca": confianca,
+            "explicabilidade": explicabilidade,
             "metadata": {
-                "total_transactions": len(results),
-                "latency_total_ms": round(elapsed, 1),
-                "latency_avg_ms": round(elapsed / max(len(results), 1), 1),
-                "timestamp": datetime.utcnow().isoformat() + "Z",
+                "engine_version": settings.app_version,
+                "enrichment_latency_ms": enriched_data.get("_feature_enrichment_time_ms", 0.0),
+                "r5b22_policy_applied": res.get("r5b22_policy_applied"),
+                "r5b22_rule_applied": res.get("r5b22_rule_applied"),
+                "veto_aplicado": res.get("veto_aplicado")
             },
+            "timestamp": datetime.utcnow().isoformat() + "Z"
         }
 
+        background_tasks.add_task(audit_logger.log_decision, response_payload, req.model_dump())
+        background_tasks.add_task(drift_detector.add_observation, req.model_dump(), response_payload)
+        background_tasks.add_task(
+            online_store.update_after_transaction,
+            req.account_id,
+            req.receiver_pix_key,
+            req.amount,
+            req.timestamp or ""
+        )
+
+        elapsed_ms = (time.perf_counter() - t0) * 1000.0
+        response_payload["metadata"]["total_latency_ms"] = round(elapsed_ms, 2)
+        api_metrics.record(decisao, elapsed_ms)
+
+        return response_payload
+
     except Exception as e:
-        metrics.record_error()
-        logger.error(
-            f"Erro no batch ({len(batch.transactions)} tx): {e}",
-            exc_info=True,
-        )
-        raise HTTPException(
-            status_code=500,
-            detail=f"Erro ao processar batch: {str(e)}",
-        )
+        logger.exception(f"Erro ao processar transacao {req.transaction_id}: {e}")
+        api_metrics.total_errors += 1
+        raise HTTPException(status_code=500, detail=f"Erro interno no motor: {str(e)}")
 
 
-# ─── Health Check ───────────────────────────────────────
-@app.get(
-    "/api/v1/health",
-    response_model=HealthResponse,
-    tags=["Operacional"],
-    summary="Health check do sistema",
-    description="Retorna status de todos os componentes e métricas.",
-)
-async def health_check():
-    """
-    Health check completo.
-
-    Retorna `status: healthy` se o pipeline está operacional,
-    ou `status: degraded` se algum componente falhou.
-
-    **Uso:** Kubernetes liveness/readiness probes, load balancers.
-    """
-    if pipeline is None:
-        return JSONResponse(
-            status_code=503,
-            content={
-                "status": "unavailable",
-                "pipeline_version": "N/A",
-                "components": {},
-                "cache": {},
-                "thresholds": {},
-                "metrics": metrics.to_dict(),
-            },
-        )
-
-    pipeline_status = pipeline.get_status()
-    status_str = "healthy" if pipeline_status.get("available", False) else "degraded"
-    
-    cache_info = {
-        "customers_cached": len(pipeline._customer_history) if hasattr(pipeline, "_customer_history") else 0
-    }
-
-    return {
-        "status": status_str,
-        "pipeline_version": pipeline_status.get("pipeline_version", "N/A"),
-        "components": pipeline_status.get("modules", {}),
-        "cache": cache_info,
-        "thresholds": pipeline_status.get("thresholds", {}),
-        "metrics": metrics.to_dict(),
-    }
+@app.post("/api/v1/batch", tags=["Inferencia"])
+def batch_analyze(transactions: List[PixTransactionRequest]):
+    results = []
+    for tx in transactions:
+        enriched = _enrich_transaction(tx)
+        res = pipeline.analisar(enriched)
+        results.append({
+            "transaction_id": tx.transaction_id,
+            "decisao": res.get("decisao"),
+            "score_final": res.get("score_final"),
+            "confianca": res.get("confianca"),
+            "motivo_principal": res.get("explicabilidade", {}).get("motivo_principal", "")
+        })
+    return {"total": len(results), "results": results}
 
 
-# ─── Status Detalhado ───────────────────────────────────
-@app.get(
-    "/api/v1/status",
-    tags=["Operacional"],
-    summary="Status detalhado dos componentes",
-)
-async def detailed_status():
-    """Status detalhado incluindo versões de modelos e configuração."""
-    if pipeline is None:
-        raise HTTPException(status_code=503, detail="Pipeline não inicializado")
+@app.get("/api/v1/cases", tags=["Mesa de Fraude & Auditoria"])
+def list_investigation_cases(limit: int = 50, status: Optional[str] = None):
+    cases = audit_logger.list_cases(limit=limit, status=status)
+    return {"total": len(cases), "cases": cases}
 
-    pipeline_status = pipeline.get_status()
-    engine_status = pipeline.engine.get_status()
+
+@app.post("/api/v1/cases/{case_id}/action", tags=["Mesa de Fraude & Auditoria"])
+def update_case_action(case_id: str, payload: UpdateCaseStatusRequest):
+    success = audit_logger.update_case_status(case_id, payload.status, payload.notes or "")
+    if not success:
+        raise HTTPException(status_code=404, detail="Caso nao encontrado")
+    return {"status": "success", "case_id": case_id, "new_status": payload.status}
+
+
+@app.get("/api/v1/drift", tags=["MLOps & Observabilidade"])
+def get_drift_metrics():
+    return drift_detector.get_drift_report()
+
+
+@app.get("/api/v1/metrics", tags=["MLOps & Observabilidade"])
+def get_api_metrics():
+    latencies = api_metrics.latency_samples
+    p50 = round(float(sorted(latencies)[len(latencies)//2]), 2) if latencies else 0.0
+    p95 = round(float(sorted(latencies)[int(len(latencies)*0.95)]), 2) if latencies else 0.0
+    p99 = round(float(sorted(latencies)[int(len(latencies)*0.99)]), 2) if latencies else 0.0
 
     return {
-        "pipeline": pipeline_status,
-        "engine": engine_status,
-        "config": {
-            "threshold_confirmar": pipeline.engine.config.threshold_confirmar,
-            "threshold_bloquear": pipeline.engine.config.threshold_bloquear,
-            "veto_threshold": pipeline.engine.config.veto_threshold,
-            "peso_maximo": pipeline.engine.config.peso_maximo,
-            "cascade_enabled": pipeline.engine.config.cascade_enabled,
-            "shap_enabled": pipeline.shap_enabled,
+        "started_at": api_metrics.started_at,
+        "total_requests": api_metrics.total_requests,
+        "decisions": {
+            "aprovados": api_metrics.total_aprovados,
+            "confirmados": api_metrics.total_confirmados,
+            "bloqueados": api_metrics.total_bloqueados
         },
-        "metrics": metrics.to_dict(),
-        "environment": {
-            "log_level": LOG_LEVEL,
-            "cors_origins": ALLOWED_ORIGINS,
-            "debug": os.getenv("DEBUG", "false"),
+        "rates": {
+            "approval_rate": round(api_metrics.total_aprovados / max(api_metrics.total_requests, 1) * 100, 2),
+            "confirm_rate": round(api_metrics.total_confirmados / max(api_metrics.total_requests, 1) * 100, 2),
+            "block_rate": round(api_metrics.total_bloqueados / max(api_metrics.total_requests, 1) * 100, 2),
         },
+        "errors": api_metrics.total_errors,
+        "latency_ms": {
+            "p50": p50,
+            "p95": p95,
+            "p99": p99
+        }
     }
 
 
-# ─── Métricas ──────────────────────────────────────────
-@app.get(
-    "/api/v1/metrics",
-    tags=["Operacional"],
-    summary="Métricas da API",
-)
-async def get_metrics():
-    """Métricas de uso da API (contadores, latência, distribuição de decisões)."""
-    return metrics.to_dict()
-
-
-# ─── Reset Cache (operacional) ─────────────────────────
-@app.post(
-    "/api/v1/cache/reset",
-    tags=["Operacional"],
-    summary="Reseta cache de histórico de clientes",
-)
-async def reset_cache():
-    """
-    Reseta o cache de histórico de clientes.
-
-    **Cuidado:** Isso afeta features sequenciais (first_receiver_flag,
-    burst_30m_flag, etc.) até que o cache seja reconstruído.
-    """
-    if pipeline is None:
-        raise HTTPException(status_code=503, detail="Pipeline não inicializado")
-
-    customers_before = len(pipeline._customer_history)
-    pipeline.reset_cache()
-
+@app.get("/api/v1/health", tags=["Health"])
+def health_check():
     return {
-        "message": "Cache resetado com sucesso",
-        "customers_removed": customers_before,
+        "status": "healthy",
+        "engine": "ready" if pipeline is not None else "initializing",
+        "offline_store": "sqlite_connected",
+        "online_store": "redis_connected" if online_store.use_redis else "memory_fallback_active",
+        "mlflow": "tracking_active" if mlflow_tracker.enabled else "stub_mode",
+        "timestamp": datetime.utcnow().isoformat() + "Z"
     }
-
-
-# =========================================================
-# ENTRYPOINT
-# =========================================================
-if __name__ == "__main__":
-    import uvicorn
-
-    host = os.getenv("API_HOST", "0.0.0.0")
-    port = int(os.getenv("API_PORT", "8000"))
-    reload = os.getenv("API_RELOAD", "false").lower() in ("1", "true")
-    workers = int(os.getenv("API_WORKERS", "1"))
-
-    print(f"\n🚀 Iniciando API Antifraude PIX v1.2")
-    print(f"   Host: {host}:{port}")
-    print(f"   Workers: {workers}")
-    print(f"   Reload: {reload}")
-    print(f"   Docs: http://{host}:{port}/docs")
-    print()
-
-    uvicorn.run(
-        "api:app",
-        host=host,
-        port=port,
-        reload=reload,
-        workers=workers,
-        log_level=LOG_LEVEL.lower(),
-    )

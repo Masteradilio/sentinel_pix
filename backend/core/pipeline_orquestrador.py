@@ -114,6 +114,7 @@ BACKEND_DIR = PROJECT_ROOT / "backend"
 ARTEFATOS_DIR = BACKEND_DIR / "artefatos"
 
 # Garantir imports
+sys.path.insert(0, str(BACKEND_DIR / 'core'))
 sys.path.insert(0, str(BACKEND_DIR))
 sys.path.insert(0, str(PROJECT_ROOT))
 

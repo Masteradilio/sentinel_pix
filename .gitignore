@@ -7,6 +7,11 @@ resultados/experimentos/**/*.csv
 resultados/simulacao_*/**/*.csv
 *.joblib
 *.pkl
+*.db
+*.sqlite
+*.sqlite3
+mlruns/
+data_storage/
 .env
 venv/
 env/

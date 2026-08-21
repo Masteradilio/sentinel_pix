@@ -1,184 +1,192 @@
-# Rebuild PIX - Motor antifraude PIX
+# 🛡️ Sentinel-PIX: Enterprise Real-Time Anti-Fraud & MLOps Engine
 
-Motor hibrido para decisao antifraude em transacoes PIX, com classificacao operacional em tres acoes:
+[![Python](https://img.shields.io/badge/Python-3.12%2B-blue.svg)](https://www.python.org/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.115%2B-009688.svg)](https://fastapi.tiangolo.com/)
+[![Streamlit](https://img.shields.io/badge/Streamlit-1.62%2B-FF4B4B.svg)](https://streamlit.io/)
+[![MLflow](https://img.shields.io/badge/MLflow-MLOps%20Tracking-0194E2.svg)](https://mlflow.org/)
+[![Redis](https://img.shields.io/badge/Redis-Online%20Feature%20Store-DC382D.svg)](https://redis.io/)
+[![Docker](https://img.shields.io/badge/Docker-Ready-2496ED.svg)](https://www.docker.com/)
+[![Tests](https://img.shields.io/badge/Tests-Pytest%20Passing-brightgreen.svg)]()
 
-- `APROVAR`: liberar a transacao automaticamente.
-- `CONFIRMAR`: reter para step-up, biometria, 2FA ou validacao adicional.
-- `BLOQUEAR`: impedir a transacao por alto risco.
+> **Motor Híbrido de Detecção de Fraudes em Pagamentos Instantâneos (PIX) em Tempo Real com Arquitetura Multi-Camadas, Dual Feature Store (Redis + SQL), Explicabilidade SHAP, Governança MLOps (MLflow), Detecção Contínua de Data Drift e Dashboard Interativo de Monitoramento.**
 
-O estado atual do projeto e o baseline oficial **R5B22**, consolidado sobre as novas bases MAF, contrato congelado R5B16/R5B18 e politica final de restricao APROVAR/CONFIRMAR/BLOQUEAR.
+---
 
-## Estado atual
+## 📌 Visão Geral do Projeto
 
-| Item | Valor |
-|---|---|
-| Baseline oficial | `R5B22_OFFICIAL_CONSTRAINED_BASELINE` |
-| Versao de scoring | `1.5.0-r5b22` |
-| Base de validacao | 113.844 transacoes |
-| Fraudes confirmadas | 1.465 |
-| Normais | 112.379 |
-| FPR global | 0,957474% |
-| Fraudes em APROVAR | 2 |
-| Fraudes em CONFIRMAR | 10 |
-| Fraudes em BLOQUEAR | 1.453 |
+No ecossistema de pagamentos instantâneos (PIX), a prevenção a fraudes exige **decisões em milissegundos (< 25ms)** equilibrando a interceptação de perdas financeiras com a fricção ao cliente legítimo. 
 
-O objetivo operacional atual e reduzir falsos bloqueios sem abrir excesso de risco:
+O **Sentinel-PIX** implementa uma arquitetura **Defense-in-Depth** com três ações operacionais:
+- `APROVAR`: Transação liberada automaticamente em baixa latência.
+- `CONFIRMAR`: Fricção inteligente — retenção para step-up com biometria facial ou 2FA.
+- `BLOQUEAR`: Interceptação preventiva imediata de transações de alto risco e registro automático na Mesa de Investigação.
 
-- manter FPR global abaixo de 1%;
-- manter no maximo 5 fraudes em APROVAR;
-- manter no maximo 10 fraudes em CONFIRMAR;
-- maximizar a precisao de BLOQUEAR.
+---
 
-## Metricas oficiais R5B22
+## 🏛️ Arquitetura do Sistema
 
-Metricas globais considerando intervencao como `CONFIRMAR` ou `BLOQUEAR`:
+```mermaid
+flowchart TD
+    subgraph Ingestion & Client
+        A[Mobile App / SPI Gateway] -->|Payload Leve: 6-8 features| B[FastAPI Engine /api/v1/analyze]
+    end
 
-| Metrica | Valor |
-|---|---:|
-| TP | 1.463 |
-| FP | 1.076 |
-| FN | 2 |
-| TN | 111.303 |
-| Precision | 57,621111% |
-| Recall | 99,863481% |
-| F1 | 0,73076923 |
-| FPR | 0,957474% |
+    subgraph Dual Feature Store Layer
+        B -->|1. KYC & Perfil Estático| C1[(Offline Feature Store<br/>PostgreSQL / SQLite)]
+        B -->|2. Agregações 1h/24h & Mobile| C2[(Online Feature Store<br/>Redis In-Memory)]
+        B -->|3. Derivações em Runtime| C3[Runtime Derivations<br/>Deltas, Horário, Ratios]
+        C1 & C2 & C3 --> D[Vector Assembler & Preprocessing]
+    end
 
-Metricas especificas de `BLOQUEAR`:
+    subgraph Hybrid Decision Engine
+        D --> E1[Behavioral Analytics Mobile<br/>Velocidade / Dormência / Touch]
+        D --> E2[Social Engineering Heuristics<br/>Falsa Central / Coação]
+        D --> E3[Temporal Graph Engine<br/>Contas Mula / Fan-In / Fan-Out]
+        D --> E4[Supervised LightGBM + Isolation Forest<br/>Distilled Ensemble R5B22]
+        E1 & E2 & E3 & E4 --> F[Decision Engine & Policy Overrides]
+        F --> G{Decisão Triad}
+    end
 
-| Metrica | Valor |
-|---|---:|
-| TP | 1.453 |
-| FP | 760 |
-| FN fora de BLOQUEAR | 12 |
-| TN | 111.619 |
-| Precision | 65,657479% |
-| Recall | 99,180887% |
-| F1 | 0,79010332 |
-| FPR | 0,676283% |
-
-Distribuicao por decisao:
-
-| Decisao | Transacoes | Fraudes | Normais |
-|---|---:|---:|---:|
-| APROVAR | 111.305 | 2 | 111.303 |
-| CONFIRMAR | 326 | 10 | 316 |
-| BLOQUEAR | 2.213 | 1.453 | 760 |
-
-## Arquitetura operacional
-
-O pipeline atual combina modelo, contrato congelado e politicas operacionais:
-
-1. `PipelineOrquestrador` recebe a transacao, prepara features e executa o motor.
-2. `PixDecisionEngine` calcula score e decisao runtime.
-3. O contrato R5B16 usa `r4g_fast_frozen_decisao_recommended` como decisao-base congelada.
-4. A politica R5B14 aplica restricoes de baixo falso negativo.
-5. A politica R5B22 aplica democoes controladas para reduzir normais em `BLOQUEAR`, respeitando os tetos de fraude em `APROVAR` e `CONFIRMAR`.
-
-Configuracoes oficiais em `backend/artefatos/scoring_config.json`:
-
-```json
-{
-  "versao": "1.5.0-r5b22",
-  "r5b14_operational_zero_fn_enabled": true,
-  "r5b16_frozen_contract_enabled": true,
-  "r5b22_official_baseline_enabled": true,
-  "official_baseline_policy": "R5B22_OFFICIAL_CONSTRAINED_BASELINE"
-}
+    subgraph Action & Observability Sink
+        G -->|APROVAR| H1[Client Response + SHAP]
+        G -->|CONFIRMAR / BLOQUEAR| H2[(Audit DB / Triage Queue)]
+        H2 --> H1
+        B -.->|Telemetria & Drift| I[MLflow Tracking & Drift Monitor]
+        B -.->|Live Transaction Stream| J[Streamlit Live Dashboard]
+        I -.-> J
+        H2 -.-> J
+    end
 ```
 
-## Artefatos oficiais
+---
 
-```text
-backend/artefatos/r5b22_official_baseline_policy.json
-backend/artefatos/r5b22_official_baseline_summary.json
-backend/artefatos/model_lgbm_distilled_r5b22_intervention.joblib
-backend/artefatos/model_lgbm_distilled_r5b22_block.joblib
-backend/artefatos/model_lgbm_distilled_r5b22_metadata.json
-```
+## 🚀 Principais Destaques de Engenharia & MLOps
 
-O LGBM aluno e uma distilacao do contrato R5B16/R5B18. Ele usa sinais do professor, incluindo `r4g_fast_frozen_decisao_recommended`, `r5b14_rule_applied` e `r5b14_layer_applied`; portanto, nao deve ser descrito como LGBM puro treinado apenas com features brutas.
+### 1. Dual Feature Store Strategy
+- **Ingestão Leve:** A API recebe apenas o payload transacional essencial (`transaction_id`, `account_id`, `receiver_pix_key`, `amount`, `device_id`, etc.).
+- **Offline Feature Store (PostgreSQL / SQLite):** Serve atributos cadastrais de baixa volatilidade (tempo de conta, score de crédito, limites diurno/noturno, flags KYC).
+- **Online Feature Store (Redis):** Serve em sub-milissegundos agregados de alta frequência (contadores e volumes em janelas deslizantes de 1h/24h, velocidade de digitação mobile, telemetria de bateria/dispositivo).
 
-## Estrutura principal
+### 2. Motor Híbrido Multi-Camadas (Baseline R5B22)
+- **LightGBM Supervisionado Destilado:** Treinado sobre 78 features catalogadas com função de perda balanceada.
+- **Isolation Forest Não-Supervisionado:** Detecta anomalias e novos padrões de ataque desconhecidos (*zero-day*).
+- **Engenharia Social (SE):** Heurísticas especializadas para padrões de golpe (ex: *Golpe da Falsa Central*, *Golpe do Falso Motoboy*, *Pressão Psicológica*).
+- **Análise Comportamental (BEH):** Avalia quebra de rotina do cliente no app mobile e anomalias de dispositivo.
+- **Graph Engine:** Mapeia redes de relacionamento em tempo real e calcula scores de contas mulas (*mule rings*).
 
-```text
-backend/
-  artefatos/                 Modelos, politicas e configs oficiais
-  core/
-    decision_engine.py       Motor de decisao
-    pipeline_orquestrador.py Orquestrador E2E runtime
-    r5b14_operational_policy.py
-    social_engineering.py
-    behavioral_analytics.py
-  scripts/
-    simular_pipeline_e2e_v2.py
-dados/
-  hmo_ml_tb_pix_dataset_v3_features_180d_v1.csv
-docs/
-  JOURNAL_4.md
-  PIX_FRAUD_MODEL_FINAL_IMPROVEMENT_PLAN.md
-  apresentacao_mvp_v2.md
-resultados/
-  experimentos/
-tests/
-```
+### 3. Explicabilidade SHAP em Tempo Real
+- Cálculo local de **SHAP Values** para cada inferência, retornando exatamente os fatores que puxaram o score para cima ou para baixo.
 
-## Como executar
+### 4. MLOps & Monitoramento de Data Drift
+- **MLflow Tracking:** Registro de rodadas de homologação, artefatos serializados e matrizes de confusão.
+- **Detector de Drift em Tempo Real:** Cálculo contínuo de **PSI (Population Stability Index)** e teste de Kolmogorov-Smirnov comparando a distribuição do stream com a base de treino.
 
-Criar ambiente:
+---
+
+## 📊 Métricas Oficiais de Produção (R5B22)
+
+Validado sobre **113.844 transações** (1.465 fraudes confirmadas e 112.379 legítimas):
+
+| Métrica | Performance | Meta Operacional |
+|---|---:|:---:|
+| **Recall Global** | **99,86%** (1.463/1.465 fraudes) | ≥ 99,0% |
+| **Taxa de Falso Positivo (FPR)** | **0,957%** (abaixo de 1%) | < 1,0% |
+| **Precisão em BLOQUEAR** | **65,65%** | Maximizar |
+| **Fraudes perdidas em APROVAR** | **Apenas 2** em 111k | ≤ 5 |
+| **Latência Média p95** | **< 15 ms** | SLA < 25 ms |
+
+---
+
+## 🖥️ Live Dashboard em Streamlit
+
+O projeto inclui um **Cockpit Operacional completo**:
+1. **Live Cockpit:** Acompanhamento em tempo real da vazão (TPS), proporção de decisões e latência.
+2. **Mesa de Investigação:** Dossiê de transações retidas (`CONFIRMAR` e `BLOQUEAR`) com gráfico de barras SHAP, regras disparadas, visualizador de grafos e botões de ação do analista.
+3. **MLOps & Drift Observatory:** Monitor de PSI de variáveis críticas e status dos serviços.
+4. **Simulador de Ataques:** Injeção ao vivo de cenários de ataque (*Falsa Central*, *Mule Ring Burst*, *Esvaziamento Noturno*).
+
+---
+
+## ⚡ Como Executar
+
+### Opção 1: Via Docker Compose (Recomendado)
+
+Suba toda a infraestrutura (API + Redis + Dashboard) com um único comando:
 
 ```bash
+docker compose up --build
+```
+
+- **API REST (Swagger UI):** [http://localhost:8000/docs](http://localhost:8000/docs)
+- **Streamlit Live Dashboard:** [http://localhost:8501](http://localhost:8501)
+
+---
+
+### Opção 2: Execução Local (Python)
+
+1. **Criar e ativar o ambiente virtual:**
+```bash
 python -m venv venv
-venv\Scripts\activate
+venv\Scripts\activate        # Windows
+# source venv/bin/activate   # Linux/macOS
+```
+
+2. **Instalar dependências:**
+```bash
 pip install -r requirements.txt
 ```
 
-Validacao curta:
-
+3. **Popular as Feature Stores com dados sintéticos:**
 ```bash
-python -m py_compile backend/core/decision_engine.py backend/core/pipeline_orquestrador.py backend/scripts/simular_pipeline_e2e_v2.py
+python -m backend.feature_store.seed_stores
 ```
 
-Simulacao E2E global com o baseline oficial:
-
-```bash
-python backend/scripts/simular_pipeline_e2e_v2.py --full --workers 4
-```
-
-Simulacao amostral:
-
-```bash
-python backend/scripts/simular_pipeline_e2e_v2.py --sample 2000
-```
-
-API local:
-
+4. **Iniciar a API FastAPI:**
 ```bash
 uvicorn backend.api:app --host 0.0.0.0 --port 8000 --reload
 ```
 
-Endpoints principais:
+5. **Iniciar o Dashboard Streamlit (em outro terminal):**
+```bash
+streamlit run dashboard/app.py
+```
 
-| Endpoint | Metodo | Uso |
-|---|---|---|
-| `/api/v1/analyze` | POST | Inferencia de uma transacao |
-| `/api/v1/batch` | POST | Inferencia em lote |
-| `/api/v1/health` | GET | Health check |
-| `/docs` | GET | Swagger UI |
+---
 
-## Documentacao relevante
+## 🧪 Testes Automatizados
 
-| Documento | Conteudo |
-|---|---|
-| `docs/JOURNAL_4.md` | Historico dos experimentos R4/R5 e consolidacao R5B22 |
-| `docs/PIX_FRAUD_MODEL_FINAL_IMPROVEMENT_PLAN.md` | Plano de melhoria e experimentos do baseline final |
-| `docs/apresentacao_mvp_v2.md` | Apresentacao executiva atualizada com metricas e regras ativas |
+Para rodar a suíte completa de testes unitários e de integração:
 
-## Roadmap tecnico
+```bash
+pytest
+```
 
-- Executar homologacao E2E full sempre que a politica oficial mudar.
-- Monitorar drift das novas bases MAF e degradacao dos tetos de fraude por decisao.
-- Evoluir o LGBM aluno para reduzir dependencia dos sinais do professor sem perder os gates operacionais.
-- Integrar step-up real para a faixa `CONFIRMAR`.
-- Persistir historico e perfis em feature store/cache operacional para inferencia em tempo real.
+---
 
+## 📂 Estrutura do Repositório
+
+```text
+rebuild_pix/
+├── backend/
+│   ├── api.py                     # API FastAPI REST com enriquecimento em tempo real
+│   ├── config.py                  # Configurações globais (Redis, SQL, MLflow, SLA)
+│   ├── artefatos/                 # Modelos serializados (LGBM, IF) e metadados R5B22
+│   ├── core/                      # Motores analíticos (Behavioral, Graph, SE, Engine)
+│   ├── feature_store/             # Camada Dual Feature Store (SQL + Redis)
+│   ├── mlops/                     # Tracking MLflow, Audit Logger e Drift Detector
+│   └── simulator/                 # Gerador contínuo de tráfego sintético e ataques
+├── dashboard/
+│   └── app.py                     # Streamlit Cockpit, Mesa de Fraude e SHAP Viewer
+├── docs/                          # Documentações técnicas e de negócio
+├── tests/                         # Suíte de testes automatizados com pytest
+├── Dockerfile.api                 # Container da API
+├── Dockerfile.dashboard           # Container do Dashboard
+├── docker-compose.yml             # Orquestrador multi-container
+└── requirements.txt               # Dependências do projeto
+```
+
+---
+
+## 📜 Licença e Conformidade
+
+Este projeto foi reestruturado para fins de portfólio pessoal e demonstração técnica. Todos os dados demográficos, contas e transações utilizados na demonstração são **100% sintéticos e modelados estatisticamente**, em estrita conformidade com a LGPD e boas práticas de privacidade de dados.

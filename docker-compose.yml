@@ -1,0 +1,74 @@
+version: '3.8'
+
+services:
+  # 1. Online Feature Store (Redis In-Memory)
+  redis:
+    image: redis:7-alpine
+    container_name: sentinel-redis
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - sentinel-net
+
+  # 2. Sentinel Anti-Fraud API Engine
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    container_name: sentinel-api
+    ports:
+      - "8000:8000"
+    environment:
+      - ENV=production
+      - LOG_LEVEL=INFO
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_ENABLED=true
+      - MLFLOW_TRACKING_URI=sqlite:////app/backend/mlops/mlflow.db
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./data_storage:/app/backend/feature_store
+    networks:
+      - sentinel-net
+
+  # 3. Streamlit Real-Time Live Dashboard
+  dashboard:
+    build:
+      context: .
+      dockerfile: Dockerfile.dashboard
+    container_name: sentinel-dashboard
+    ports:
+      - "8501:8501"
+    environment:
+      - API_URL=http://api:8000
+    depends_on:
+      - api
+    networks:
+      - sentinel-net
+
+  # 4. Optional Traffic Simulator Worker
+  simulator:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    container_name: sentinel-simulator
+    command: ["python", "-m", "backend.simulator.generator", "--url", "http://api:8000", "--tps", "1.5"]
+    environment:
+      - API_URL=http://api:8000
+    depends_on:
+      - api
+    profiles:
+      - autostream
+    networks:
+      - sentinel-net
+
+networks:
+  sentinel-net:
+    driver: bridge
