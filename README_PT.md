@@ -8,6 +8,7 @@
 [![MLflow](https://img.shields.io/badge/MLflow-MLOps%20Tracking-0194E2.svg)](https://mlflow.org/)
 [![Redis](https://img.shields.io/badge/Redis-Online%20Feature%20Store-DC382D.svg)](https://redis.io/)
 [![Docker](https://img.shields.io/badge/Docker-Ready-2496ED.svg)](https://www.docker.com/)
+[![License: AGPL-3.0](https://img.shields.io/badge/License-GNU%20AGPLv3-orange.svg)](LICENSE)
 [![Tests](https://img.shields.io/badge/Tests-29%2F29%20Passing-brightgreen.svg)]()
 
 **[🇺🇸 English Version](README.md)** | **[🇧🇷 Versão em Português](README_PT.md)**
