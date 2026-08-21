@@ -1,7 +1,9 @@
 """
 generator.py — Gerador Contínuo de Tráfego de Transações PIX em Tempo Real
-Gera fluxo contínuo de transações sintéticas (legítimas e ataques)
-e envia para a API Sentinel-PIX para demonstrações ao vivo e testes de estresse.
+Gera fluxo contínuo de transações sintéticas com calibração estatística realista de produção:
+- ~95.0% Transações Legítimas (APROVAR)
+- ~3.5% Transações com Fricção Inteligente (CONFIRMAR - 2FA / Biometria)
+- ~1.5% Transações com Bloqueio Preventivo Imediato (BLOQUEAR)
 """
 
 from __future__ import annotations
@@ -28,7 +30,7 @@ class PixTrafficGenerator:
         self.api_url = api_url.rstrip("/")
         self.running = False
         self.tps = 1.0  # Transações por segundo
-        self.attack_mode: Optional[str] = None  # None = mix natural, ou nome do ataque
+        self.attack_mode: Optional[str] = None  # None = mix natural de produção
         self.account_pool = [f"acc_{100000 + i}" for i in range(1, 501)]
 
     def generate_single(self, force_scenario: Optional[str] = None) -> Dict[str, Any]:
@@ -44,14 +46,17 @@ class PixTrafficGenerator:
         elif scenario == "NORMAL_LEGITIMATE":
             return generate_normal_transaction(self.account_pool)
         else:
-            # Mix natural: 94% normal, 2% falsa central, 2% mule ring, 2% night drain
+            # Mix Realista de Produção Bancária:
+            # 95.0% Legítimo (APROVAR)
+            # 3.5% Step-up / 2FA (CONFIRMAR)
+            # 1.5% Bloqueio Preventivo (BLOQUEAR)
             r = random.random()
-            if r < 0.94:
+            if r < 0.950:
                 return generate_normal_transaction(self.account_pool)
-            elif r < 0.96:
-                return generate_fake_central_scam(self.account_pool)
-            elif r < 0.98:
+            elif r < 0.985:
                 return generate_mule_ring_burst(self.account_pool)
+            elif r < 0.995:
+                return generate_fake_central_scam(self.account_pool)
             else:
                 return generate_night_drain(self.account_pool)
 
